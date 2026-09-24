@@ -102,7 +102,9 @@ export class Traffic {
     this.shadowIM.renderOrder = 1;
     scene.add(this.shadowIM);
     // glow sprites for every lamp in the scene (traffic, cruisers, player)
-    const maxGlow = (count + cruisers + 2) * 4;
+    // up to 8 per car (2 head, 2 tail, 4 blinkers) + the player's; at 4 per car the buffer filled up
+    // and whichever cars came last in the list lost their lights
+    const maxGlow = (count + cruisers + 2) * 8 + 16;
     const gg = new THREE.BufferGeometry();
     this.gPos = new Float32Array(maxGlow * 3);
     this.gCol = new Float32Array(maxGlow * 3);

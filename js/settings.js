@@ -39,10 +39,37 @@ export function load() {
       }
       for (const a of Object.keys(DEFAULT_BINDINGS)) if (!Array.isArray(d.bindings[a])) d.bindings[a] = DEFAULT_BINDINGS[a].slice();
       for (const a of Object.keys(d.bindings)) if (!DEFAULT_BINDINGS[a]) delete d.bindings[a]; // actions that no longer exist
+      sanitize(d);
       d._loaded = true;
     }
   } catch (e) { /* storage unavailable */ }
   return d;
+}
+
+// Saved settings come from older versions or a hand-edited browser: anything out of range or no longer
+// offered falls back to its default (a render distance of 99999 m spread the traffic over 80 km, etc.)
+const PAINT_COUNT = 7; // colours offered per car (PAINTS in jdmspecs.js)
+function sanitize(s) {
+  const d = defaults();
+  const num = (obj, def, key, lo, hi) => { const v = Number(obj[key]); obj[key] = Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def[key]; };
+  const bool = (obj, def, key) => { if (typeof obj[key] !== 'boolean') obj[key] = def[key]; };
+  const G = s.graphics, g = d.graphics;
+  for (const [k, allowed] of [['preset', ['auto', 'low', 'medium', 'high', 'ultra', 'custom']], ['quality', ['low', 'medium', 'high', 'ultra']], ['shadows', ['off', 'low', 'high']], ['textures', ['low', 'medium', 'high']], ['effects', ['off', 'low', 'high']], ['traffic', ['low', 'medium', 'high', 'max']], ['resScale', [0.5, 0.75, 1, 'native']], ['fpsCap', [30, 60, 120, 0]]]) {
+    if (!allowed.includes(G[k])) G[k] = g[k];
+  }
+  num(G, g, 'renderDist', 400, 1600);
+  if (!['window', 'fullscreen'].includes(s.display.mode)) s.display.mode = d.display.mode;
+  for (const k of ['master', 'engine', 'sfx', 'ambient']) num(s.audio, d.audio, k, 0, 1);
+  const P = s.gameplay, p = d.gameplay;
+  if (!['kmh', 'mph'].includes(P.units)) P.units = p.units;
+  for (const k of ['minimap', 'hud', 'mirror', 'vibration']) bool(P, p, k);
+  num(P, p, 'camDist', 0.7, 1.5);
+  num(P, p, 'camSmooth', 0, 1);
+  for (const k of Object.keys(P)) if (!(k in p)) delete P[k]; // options that no longer exist (e.g. rain)
+  for (const a of Object.keys(s.bindings)) s.bindings[a] = s.bindings[a].filter(c => typeof c === 'string');
+  if (typeof s.lastCar !== 'string') s.lastCar = d.lastCar;
+  if (!s.paintIdx || typeof s.paintIdx !== 'object' || Array.isArray(s.paintIdx)) s.paintIdx = {};
+  for (const [id, i] of Object.entries(s.paintIdx)) if (!Number.isInteger(i) || i < 0 || i >= PAINT_COUNT) delete s.paintIdx[id];
 }
 
 export function save(s) {

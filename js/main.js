@@ -620,7 +620,7 @@ const SCHEMA = {
     { path: 'audio.master', label: 'Volume geral', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct },
     { path: 'audio.engine', label: 'Motor', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct },
     { path: 'audio.sfx', label: 'Efeitos', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => 'Pneus, buzina, impactos, setas e passagens.' },
-    { path: 'audio.ambient', label: 'Ambiente', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => 'Vento, chuva, tráfego e cidade.' },
+    { path: 'audio.ambient', label: 'Ambiente', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => 'Vento, tráfego e cidade.' },
   ],
   gameplay: [
     { path: 'gameplay.units', label: 'Unidade de velocidade', type: 'seg', opts: [['kmh', 'km/h'], ['mph', 'mph']] },
