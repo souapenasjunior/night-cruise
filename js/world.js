@@ -426,6 +426,8 @@ export class World {
     // open edges
     const res = [];
     const openL = new Uint8Array(r.n), openR = new Uint8Array(r.n);
+    // open only because a parking bay lies beyond (the bay's end wall closes the corner there)
+    const bayL = new Uint8Array(r.n), bayR = new Uint8Array(r.n);
     for (let i = 0; i < r.n; i++) {
       for (const sg of [-1, 1]) {
         // same test as the car's wall check (probe ~0.5 m past the edge, 1.5 m height tolerance),
@@ -435,9 +437,24 @@ export class World {
         net.surfacesAt(x, z, r.py[i], 1.5, 0, res);
         const other = res.some(q => q.r !== r);
         if (other) (sg < 0 ? openL : openR)[i] = 1;
+        if (other && res.every(q => q.r === r || q.r.kind === 'lot')) (sg < 0 ? bayL : bayR)[i] = 1;
       }
     }
     r.openL = openL; r.openR = openR;
+    // where a ramp's edge runs along the edge of the road it leaves or joins (the first/last metres of
+    // a taper), both would draw a parapet in the same place: two walls inside each other, flickering.
+    // The earlier road draws it; the ramp leaves it out there (the physics wall is the same either way)
+    const dupL = new Uint8Array(r.n), dupR = new Uint8Array(r.n);
+    if (!isRing && r.kind !== 'lot') for (let i = 0; i < r.n; i++) {
+      for (const sg of [-1, 1]) {
+        const off = sg * (r.hw - 0.2);
+        net.surfacesAt(r.px[i] - r.tz[i] * off, r.pz[i] + r.tx[i] * off, r.py[i], 1.5, 0, res);
+        const q = res.find(q2 => q2.r !== r && q2.r.id < r.id && q2.r.kind !== 'lot' && Math.abs(q2.off) > q2.r.hw - 0.7 &&
+          !(q2.off < 0 ? q2.r.openL : q2.r.openR)[q2.i]);
+        if (q) (sg < 0 ? dupL : dupR)[i] = 1;
+      }
+    }
+    r.dupL = dupL; r.dupR = dupR;
     // distance from each edge to the nearest other deck at the same level (Infinity: none within 2.6 m)
     const gapL = new Float32Array(r.n).fill(Infinity), gapR = new Float32Array(r.n).fill(Infinity);
     for (let i = 0; i < r.n; i++) {
@@ -457,11 +474,15 @@ export class World {
     // where a ramp lies on the loop, keep its surface just under the loop's: the two splines differ by
     // a few cm, which showed as a lip and the ramp's lane lines printed over the loop's
     const sink = new Float32Array(r.n);
-    if (!isRing && net.ring) for (let i = 0; i < r.n; i++) {
+    // (the same under any road it branches from or joins: a link, the PA's access road)
+    if (!isRing && r.kind !== 'lot') for (let i = 0; i < r.n; i++) {
       for (const o of [-hw + 0.3, 0, hw - 0.3]) {
         net.surfacesAt(r.px[i] - r.tz[i] * o, r.pz[i] + r.tx[i] * o, r.py[i], 1.0, 0, res);
-        const q = res.find(q2 => q2.r === net.ring);
-        if (q) sink[i] = Math.max(-0.12, Math.min(sink[i], q.y - r.py[i] - 0.02));
+        for (const q of res) {
+          if (q.r === r || q.r.id > r.id || q.r.kind === 'lot') continue;
+          const top = q.y + (q.r.sink ? lerp(q.r.sink[q.i], q.r.sink[q.r.next(q.i)], clamp(q.t, 0, 1)) : 0);
+          sink[i] = Math.max(-0.12, Math.min(sink[i], top - r.py[i] - 0.02));
+        }
       }
     }
     r.sink = sink; // road markings sit on the surface actually drawn
@@ -487,12 +508,22 @@ export class World {
     if (deck) this.root.add(new THREE.Mesh(deck, this.mats.deck));
     // parapets
     for (const sg of [-1, 1]) {
-      const open = sg < 0 ? openL : openR;
+      const open = sg < 0 ? openL : openR, dup = sg < 0 ? dupL : dupR;
       const gap = sg < 0 ? gapL : gapR;
       // where another deck continues past this edge (a ramp peeling off or joining), the parapet
       // ramps down to the deck over one sample, like the sloped end of a concrete barrier
-      const h = i => (open[i] ? 0 : 1);
-      const rg = grow(rangesWhere(r, i => !open[i] && !tunnelPred(i)));
+      const h = i => (open[i] || dup[i] ? 0 : 1);
+      const bay = sg < 0 ? bayL : bayR;
+      // next to a parking bay the parapet does not slope down into the bay: it runs on, full height,
+      // exactly to where the bay (and its end wall) begins
+      const bayEnds = [];
+      const rg = grow(rangesWhere(r, i => !open[i] && !dup[i] && !tunnelPred(i))).map(([i0, c]) => {
+        const first = i0 % r.n, last = (i0 + c - 1) % r.n;
+        if (c > 2 && bay[first]) { bayEnds.push([(first + 1) % r.n, first]); i0++; c--; }
+        if (c > 2 && bay[last]) { bayEnds.push([(last - 1 + r.n) % r.n, last]); c--; }
+        return [i0, c];
+      });
+      for (const [iIn, iOut] of bayEnds) this._parapetTo(r, sg, iIn, iOut);
       const o0 = sg * (hw - 0.4), o1 = sg * hw;
       const g = sweep(r, [[o0, 0], [o0, i => 1.05 * h(i)], [o1, i => 1.05 * h(i)], [o1, 0]], rg, { uScale: 6, vScale: 3 });
       if (g) this.root.add(new THREE.Mesh(g, this.mats.concrete));
@@ -505,7 +536,7 @@ export class World {
       const fill = sweep(r, [[sg * hw, -0.03], [i => sg * (hw + fw(i)), -0.03], [i => sg * (hw + fw(i)), bottom], [sg * hw, bottom]], fr, { uScale: 8, vScale: 8 });
       if (fill) this.root.add(new THREE.Mesh(fill, this.mats.gore));
       // sound walls downtown
-      const swPred = i => !open[i] && !tunnelPred(i) && this._soundWallAt(r, i);
+      const swPred = i => !open[i] && !dup[i] && !tunnelPred(i) && this._soundWallAt(r, i);
       // (drop the trailing sample rangesWhere adds, so the glass stops square instead of leaning over the opening)
       const sw = rangesWhere(r, swPred).map(([i0, c]) => (c > 2 && c < r.n ? [i0, c - 1] : [i0, c]));
       const wg = sweep(r, [[sg * (hw - 0.15), 1.3], [sg * (hw - 0.15), 4.2], [sg * (hw - 0.9), 5.0]], sw, { uScale: 6, vScale: 3 });
@@ -554,6 +585,32 @@ export class World {
     }
     // (no crash cushions: links blend straight into the loop, so their ends are live lanes)
     if (r.kind === 'lot') this._lotDressing(r);
+  }
+
+  // A straight parapet piece from sample iIn (walled) toward sample iOut (a parking bay beyond the
+  // edge), ending exactly where the bay starts: found by bisection with the same probe as the physics.
+  _parapetTo(r, sg, iIn, iOut) {
+    const res = [];
+    let a = iIn * r.ds, b = iOut * r.ds;
+    if (r.closed && Math.abs(b - a) > r.len / 2) b += b < a ? r.len : -r.len;
+    const bayAt = s => {
+      const P = r.pointAt(s, sg * (r.hw + 0.5));
+      return this.net.surfacesAt(P.x, P.z, P.y, 1.5, 0, res).some(q => q.r !== r);
+    };
+    for (let k = 0; k < 12; k++) { const m = (a + b) / 2; if (bayAt(m)) b = m; else a = m; }
+    const s0 = iIn * r.ds, s1 = b;
+    const A = r.pointAt(s0, sg * (r.hw - 0.2)), B = r.pointAt(s1, sg * (r.hw - 0.2));
+    const len = Math.hypot(B.x - A.x, B.z - A.z);
+    if (len < 0.05) return;
+    const yaw = Math.atan2(B.x - A.x, B.z - A.z), y0 = (A.y + B.y) / 2;
+    const put = (w, h, yc, mat) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, len), mat);
+      m.position.set((A.x + B.x) / 2, y0 + yc, (A.z + B.z) / 2);
+      m.rotation.y = yaw;
+      this.root.add(m);
+    };
+    put(0.4, 1.05, 0.525, this.mats.concrete);
+    put(0.2, 0.25, 1.175, this.mats.rail);
   }
 
   // parking bay: stall lines and the walls closing both ends (the aisle side stays open)

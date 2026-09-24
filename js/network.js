@@ -386,6 +386,13 @@ export function buildNetwork() {
   // outside and joins dir- with an acceleration lane on its two outer lanes.
   // Underpasses at y ~5.3: 4.7 m below the loop's deck (surface 11.9, 1.8 m deep).
   const pp = (d, off, y) => rp(S(sP + d), off, y);
+  // the same point at the access road's own height (+dy): where paIn/paOut overlap the access road
+  // their decks must lie exactly on it, or the join shows a step
+  const ppOn = (d, off, dy = 0) => {
+    const Q = pp(d, off), pr = paRoad.projectGlobal(Q.x, Q.z);
+    Q.y = paRoad.pointAt(pr.s, 0).y + dy;
+    return Q;
+  };
   const paIn = net.add(new Ribbon({
     name: 'paIn', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
     points: [
@@ -393,13 +400,16 @@ export function buildNetwork() {
       pp(700, 50, 9.6), pp(640, 80, 7.9), pp(580, 95, 6.7), pp(480, 97, 6.0), pp(380, 97, 5.8),
       pp(280, 97, 5.7), pp(180, 95, 5.6), pp(100, 85, 5.5), pp(40, 60, 5.4), pp(5, 30, 5.3),
       pp(-8, 0, 5.3), pp(-5, -30, 5.4), pp(15, -52, 5.9), pp(50, -66, 6.9), pp(95, -72, 8.3),
-      pp(140, -71, 9.7), pp(180, -66, 11.0), pp(210, -62, 11.7), pp(230, -59, 11.9), pp(246, -56, 11.9),
+      // climbs to the access road's level before the two decks touch, then blends in on top of it
+      pp(140, -71, 10.3), ppOn(175, -67.5, -0.25), ppOn(200, -63.5), ppOn(222, -60), ppOn(238, -57.5), ppOn(250, -56), ppOn(258, -56),
     ],
   }));
   const paOut = net.add(new Ribbon({
     name: 'paOut', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
     points: [
-      pp(312, -56, 11.9), pp(330, -58.5, 11.9), pp(348, -63, 11.8), pp(370, -70, 11.5), pp(400, -76, 10.6),
+      // leaves on top of the access road, and only drops once the two decks have parted
+      // (both overlap the bays by a few metres, so no stub of access-road parapet is left between)
+      ppOn(302, -56), ppOn(310, -56.3), ppOn(322, -57.5), ppOn(338, -60.5), ppOn(354, -65), ppOn(372, -70, -0.3), pp(400, -75, 10.8),
       pp(440, -76, 9.3), pp(478, -72, 8.1), pp(515, -60, 6.8), pp(550, -40, 5.7), pp(578, -12, 5.2),
       pp(590, 18, 5.2), pp(582, 46, 5.6), pp(558, 64, 6.4), pp(520, 70, 7.5), pp(482, 62, 8.7),
       pp(450, 46, 9.9), pp(422, 32, 10.9), pp(396, 22, 11.6),
