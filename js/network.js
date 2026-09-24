@@ -379,21 +379,138 @@ export function buildNetwork() {
       slots.push({ rib: p.lot, s: p.s0 + (k + 0.5) * STALL_W, off: p.back - p.lot.outer * STALL_D / 2, face: -p.lot.outer });
     }
   }
-  net.pa = { road: paRoad, lots, slots, bays: perLot, stallW: STALL_W, stallD: STALL_D, sExit: sP };
+  // Access from the other direction (dir -1, outside the loop), so everyone meets in the same bays.
+  // paIn: leaves dir- well ahead, runs as a collector outside the loop, hairpins under the loop behind
+  // the PA's entry end and climbs to join the access road before the bays.
+  // paOut: leaves the access road after the bays, dips under the PA exit road and the loop, turns back
+  // outside and joins dir- with an acceleration lane on its two outer lanes.
+  // Underpasses at y ~5.3: 4.7 m below the loop's deck (surface 11.9, 1.8 m deep).
+  const pp = (d, off, y) => rp(S(sP + d), off, y);
+  const paIn = net.add(new Ribbon({
+    name: 'paIn', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
+    points: [
+      ...par(S(sP + 900), -1, side, 5, 30, null, merged),
+      pp(700, 50, 9.6), pp(640, 80, 7.9), pp(580, 95, 6.7), pp(480, 97, 6.0), pp(380, 97, 5.8),
+      pp(280, 97, 5.7), pp(180, 95, 5.6), pp(100, 85, 5.5), pp(40, 60, 5.4), pp(5, 30, 5.3),
+      pp(-8, 0, 5.3), pp(-5, -30, 5.4), pp(15, -52, 5.9), pp(50, -66, 6.9), pp(95, -72, 8.3),
+      pp(140, -71, 9.7), pp(180, -66, 11.0), pp(210, -62, 11.7), pp(230, -59, 11.9), pp(246, -56, 11.9),
+    ],
+  }));
+  const paOut = net.add(new Ribbon({
+    name: 'paOut', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
+    points: [
+      pp(312, -56, 11.9), pp(330, -58.5, 11.9), pp(348, -63, 11.8), pp(370, -70, 11.5), pp(400, -76, 10.6),
+      pp(440, -76, 9.3), pp(478, -72, 8.1), pp(515, -60, 6.8), pp(550, -40, 5.7), pp(578, -12, 5.2),
+      pp(590, 18, 5.2), pp(582, 46, 5.6), pp(558, 64, 6.4), pp(520, 70, 7.5), pp(482, 62, 8.7),
+      pp(450, 46, 9.9), pp(422, 32, 10.9), pp(396, 22, 11.6),
+      ...par(S(sP + 370), -1, side, 7, 30, merged),
+    ],
+  }));
+  paIn.pa = paOut.pa = true;
+  net.pa = { road: paRoad, lots, slots, bays: perLot, stallW: STALL_W, stallD: STALL_D, sExit: sP, paIn, paOut };
+
+  // ---- C2 from both directions of the loop -------------------------------------------------------
+  // Points along another ribbon between s0 and s1, the lateral offset easing off0 -> off1, at its height:
+  // how a ramp peels off (0 -> beside) or blends into (beside -> 0) a link, like par() does on the loop.
+  const along = (r, s0, s1, off0, off1, n = 5) => {
+    const out = [], Q = {};
+    for (let k = 0; k < n; k++) {
+      const t = k / (n - 1), e = t * t * (3 - 2 * t);
+      r.pointAt(s0 + (s1 - s0) * t, lerp(off0, off1, e), Q);
+      out.push(new THREE.Vector3(Q.x, Q.y, Q.z));
+    }
+    return out;
+  };
+  // which lateral side of r (at s) faces the point (x, z)
+  const sideToward = (r, s, p) => { const a = r.pointAt(s, 6), b = r.pointAt(s, -6); return Math.hypot(a.x - p.x, a.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? 1 : -1; };
+  // first s (scanning from `from` towards `to`) where r sits at loop offset <= offMax (the interior)
+  const sAtLoopOff = (r, from, to, offMax) => {
+    const st = from < to ? 4 : -4;
+    for (let s = from; st > 0 ? s <= to : s >= to; s += st) { const Q = r.pointAt(s, 0); if (ring.projectGlobal(Q.x, Q.z).off <= offMax) return s; }
+    return to;
+  };
+  const beside = 2 * RAMP_HW - 1; // ramp centre when it sits alongside a link, overlapping its edge by 1 m
+  const rampOpts = (name, points) => ({ name, label: 'C2', hw: RAMP_HW, kind: 'link', lanes: { 1: [1.8, -1.8] }, points });
+
+  // A1  loop dir- (outside) -> C2 east: leaves before sA, hairpins under the loop and c2e's own exit,
+  //     climbs inside and blends into c2e where it heads into the city
+  const a1Join = sAtLoopOff(cPlus, 300, 900, -150);
+  const a1Side = sideToward(cPlus, a1Join, rp(S(sA + 300), -240));
+  const rampA1 = net.add(new Ribbon(rampOpts('c2eIn', [
+    ...par(S(sA + 366), -1, side, 5, 30, null, merged),
+    rp(S(sA + 200), 38, ringY(S(sA + 200)) - 1.6), rp(S(sA + 135), 48, 9.2), rp(S(sA + 90), 36, 6.9),
+    rp(S(sA + 70), 8, 5.5), rp(S(sA + 76), -22, 5.4), rp(S(sA + 100), -50, 5.8), rp(S(sA + 145), -80, 7.0),
+    rp(S(sA + 215), -104, 8.7), rp(S(sA + 290), -124, 10.4),
+    ...along(cPlus, a1Join - 110, a1Join, a1Side * beside, 0, 5),
+  ])));
+
+  // A2  C2 west -> loop dir+ (inside): peels off c2w before it dives under the loop, stays up while
+  //     c2w drops beneath it, and joins dir+ with an acceleration lane before the PA's exit
+  // (it leaves while c2w is still on the city deck, and swings well clear before c2w starts to dive)
+  const a2Div = sAtLoopOff(cMinus, cMinus.len - 1500, cMinus.len - 200, -262) - 170;
+  // the side of c2w away from c2e (the two run side by side across the city)
+  const awayFrom = (r, s, other) => { const P = r.pointAt(s, 0), Q = other.pointAt(other.projectGlobal(P.x, P.z).s, 0); return -sideToward(r, s, Q); };
+  const a2Side = awayFrom(cMinus, a2Div + 60, cPlus);
+  const Qa = cMinus.pointAt(a2Div + 190, a2Side * 24);
+  const rampA2 = net.add(new Ribbon(rampOpts('c2wOut', [
+    ...along(cMinus, a2Div, a2Div + 120, 0, a2Side * beside, 5),
+    new THREE.Vector3(Qa.x, cMinus.pointAt(a2Div + 120, 0).y, Qa.z),
+    rp(S(sA + 870), -178, 13.6), rp(S(sA + 905), -128, 12.8), rp(S(sA + 935), -76, 12.3), rp(S(sA + 960), -44, 12.1),
+    rp(S(sA + 980), -26, 12.0),
+    ...par(S(sA + 996), 1, -side, 4, 24, -merged),
+  ])));
+
+  // B1  loop dir+ (inside) -> C2 west: both inside the loop, no crossing; blends into c2w as it climbs away
+  // (it meets c2w once c2w has climbed back onto the city deck, not on its dive under the loop)
+  const b1Join = sAtLoopOff(cMinus, 600, 1600, -262) + 150;
+  const b1Side = sideToward(cMinus, b1Join - 60, rp(S(sB - 900), -30));
+  const Qb = cMinus.pointAt(b1Join - 190, b1Side * 24);
+  const rampB1 = net.add(new Ribbon(rampOpts('c2wIn', [
+    ...par(S(sB - 1100), 1, -side, 5, 30, null, -merged),
+    rp(S(sB - 930), -36, ringY(S(sB - 930)) + 0.3), rp(S(sB - 880), -80, ringY(S(sB - 880)) + 1.2),
+    new THREE.Vector3(Qb.x, cMinus.pointAt(b1Join - 120, 0).y, Qb.z),
+    ...along(cMinus, b1Join - 120, b1Join, b1Side * beside, 0, 5),
+  ])));
+
+  // B2  U-turn dir+ -> dir- just after C2 east joins the loop (c2e -> dir- directly would have to cross
+  //     c2w at its own height): peels off inside, hairpins under the loop, joins dir- outside
+  const sU = S(sB + 150), yU = ringY(sU);
+  const uy = d => ringY(S(sU + d));
+  const rampB2 = net.add(new Ribbon(rampOpts('uTurnB', [
+    ...par(sU, 1, -side, 5, 30, null, -merged),
+    rp(S(sU + 170), -34, uy(170) - 0.8), rp(S(sU + 225), -55, uy(225) - 2.6), rp(S(sU + 275), -58, uy(275) - 4.6),
+    rp(S(sU + 315), -40, uy(315) - 6.4), rp(S(sU + 335), -10, uy(335) - 7.0), rp(S(sU + 335), 20, uy(335) - 7.0),
+    rp(S(sU + 315), 45, uy(315) - 6.4), rp(S(sU + 275), 58, uy(275) - 4.8), rp(S(sU + 225), 52, uy(225) - 2.8),
+    rp(S(sU + 180), 36, uy(180) - 1.1),
+    ...par(S(sU + 150), -1, side, 7, 30, merged),
+  ])));
+  rampB2.label = 'K1';
+  for (const r of [rampA1, rampA2, rampB1, rampB2]) r.ramp = true;
+  net.ramps = { a1: rampA1, a2: rampA2, b1: rampB1, b2: rampB2 };
+  void yU;
 
   // median U-turn gaps
   const g1 = nearestS(1350, -985), g2 = nearestS(-1150, 1130);
   ring.medianGaps = [[g1 - 25, g1 + 25], [g2 - 25, g2 + 25]];
 
-  // links for AI
+  // links for AI (li: the lane a car must be in to take a diverge / lands in after a merge; default the outer one)
+  const laneOn = sgn => (sgn > 0 ? 0 : 1); // links' lanes are [+1.8, -1.8]
   net.links = {
     diverge: [
       { from: ring, dir: 1, s0: S(sA + 10), s1: S(sA + 110), to: cPlus, sideSign: -1 },
       { from: ring, dir: -1, s0: S(sB - 360), s1: S(sB - 460), to: cMinus, sideSign: 1 },
+      { from: ring, dir: -1, s0: S(sA + 356), s1: S(sA + 256), to: rampA1, sideSign: 1 },
+      { from: cMinus, dir: 1, s0: a2Div + 10, s1: a2Div + 100, to: rampA2, li: laneOn(a2Side) },
+      { from: ring, dir: 1, s0: S(sB - 1090), s1: S(sB - 990), to: rampB1, sideSign: -1 },
+      { from: ring, dir: 1, s0: S(sU + 10), s1: S(sU + 110), to: rampB2, sideSign: -1 },
     ],
     merge: [
       { from: cPlus, to: ring, dir: 1, sFrom: cPlus.len - 140 },
       { from: cMinus, to: ring, dir: -1, sFrom: cMinus.len - 140 },
+      { from: rampA1, to: cPlus, dir: 1, sFrom: rampA1.len - 100, li: laneOn(a1Side) },
+      { from: rampA2, to: ring, dir: 1, sFrom: rampA2.len - 90 },
+      { from: rampB1, to: cMinus, dir: 1, sFrom: rampB1.len - 100, li: laneOn(b1Side) },
+      { from: rampB2, to: ring, dir: -1, sFrom: rampB2.len - 140 },
     ],
   };
   net.sA = sA; net.sB = sB;

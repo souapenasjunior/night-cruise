@@ -144,51 +144,6 @@ export function flowerTexture(col = '#3fa9f5') {
   return tex(c);
 }
 
-// Expressway direction sign (green, white text).
-export function signTexture(lines, { bg = '#1c7a4b', w = 512, h = 192, border = '#e8f0ea' } = {}) {
-  const c = makeCanvas(w, h), g = c.getContext('2d');
-  g.fillStyle = bg;
-  g.fillRect(0, 0, w, h);
-  g.strokeStyle = border;
-  g.lineWidth = 6;
-  g.strokeRect(8, 8, w - 16, h - 16);
-  g.fillStyle = '#f4f7f2';
-  g.textBaseline = 'middle';
-  let y = h * 0.3;
-  for (const L of lines) {
-    g.font = `${L.weight || 700} ${L.size || 48}px ${L.font || '"IBM Plex Sans", "Segoe UI", sans-serif'}`;
-    g.textAlign = L.align || 'left';
-    g.fillText(L.text, L.align === 'right' ? w - 32 : L.align === 'center' ? w / 2 : 32, y);
-    y += (L.size || 48) * 1.25;
-  }
-  return tex(c);
-}
-
-// LED variable message sign: amber dot-matrix text on black.
-export function vmsTexture(text) {
-  const w = 1024, h = 128;
-  const src = makeCanvas(w / 4, h / 4), s = src.getContext('2d');
-  s.fillStyle = '#000';
-  s.fillRect(0, 0, w / 4, h / 4);
-  s.fillStyle = '#fff';
-  s.font = `700 ${h / 4 - 8}px "IBM Plex Sans", "Yu Gothic", "Meiryo", sans-serif`;
-  s.textAlign = 'center';
-  s.textBaseline = 'middle';
-  s.fillText(text, w / 8, h / 8 + 1);
-  const px = s.getImageData(0, 0, w / 4, h / 4).data;
-  const c = makeCanvas(w, h), g = c.getContext('2d');
-  g.fillStyle = '#050403';
-  g.fillRect(0, 0, w, h);
-  for (let y = 0; y < h / 4; y++) for (let x = 0; x < w / 4; x++) {
-    const on = px[(y * (w / 4) + x) * 4] > 90;
-    g.fillStyle = on ? '#ffb030' : '#1a1206';
-    g.beginPath();
-    g.arc(x * 4 + 2, y * 4 + 2, 1.5, 0, Math.PI * 2);
-    g.fill();
-  }
-  return tex(c);
-}
-
 // Neon billboard.
 export function neonTexture(text, sub, hue, r = Math.random) {
   const w = 512, h = 256;

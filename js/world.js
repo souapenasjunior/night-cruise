@@ -1,9 +1,11 @@
 // World construction: road geometry, structures, city, sky and ambient lighting.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { rng, clamp, lerp, wrap } from './util.js';
+import { rng, clamp, lerp } from './util.js';
 import * as TX from './textures.js';
 import { RING_HW, RAMP_HW } from './network.js';
+import { buildSignage } from './signage.js';
+import { buildMarkings } from './markings.js';
 
 const SODIUM = new THREE.Color('#ffb05a');
 const LED = new THREE.Color('#dfe8ff');
@@ -462,6 +464,7 @@ export class World {
         if (q) sink[i] = Math.max(-0.12, Math.min(sink[i], q.y - r.py[i] - 0.02));
       }
     }
+    r.sink = sink; // road markings sit on the surface actually drawn
     const road = sweep(r, [[-hw, i => sink[i]], [hw, i => sink[i]]], all, { uScale: 20, vScale: 1 });
     // fix UVs: u across road
     const uvs = road.attributes.uv;
@@ -768,6 +771,7 @@ export class World {
         this._pool(r, i, sg * (r.hw - 4.5), col, white ? 0.14 : 0.17, 18);
       }
     }
+    this.poles = poles; // signs keep clear of them
     // pole geometry: vertical + arm (merged), instanced
     const pv = new THREE.CylinderGeometry(0.13, 0.18, 9.6, 6);
     pv.translate(0, 4.8, 0);
@@ -834,99 +838,8 @@ export class World {
 
   // ---------------------------------------------------------------- signs
   _signs() {
-    const net = this.net, ring = net.ring;
-    const steel = [];
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-    const box = (x, y, z, sx, sy, sz, yaw) => {
-      const g = new THREE.BoxGeometry(sx, sy, sz);
-      e.set(0, yaw, 0); q.setFromEuler(e);
-      m4.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(1, 1, 1));
-      g.applyMatrix4(m4);
-      steel.push(g.toNonIndexed());
-    };
-    const gantry = (r, s, dir, tex, vms) => {
-      // the median leg stands on the median wall: move the gantry clear of the U-turn gaps where the wall stops
-      if (r.median) for (const [g0, g1] of r.medianGaps) if (s > g0 - 15 && s < g1 + 15) s = g1 + 25;
-      const P = r.pointAt(s, 0);
-      const i = P.i;
-      if ((dir > 0 ? r.openL : r.openR)[i]) return;
-      if (r.kind === 'ring' && P.y < 4.2) return;
-      const sg = r.kind === 'ring' ? -dir : 0;
-      const yaw = Math.atan2(P.tx, P.tz);
-      // ring: inner leg on the median wall centre (the fast lane starts 1.1 m out), never in the lane
-      const inner = r.kind === 'ring' ? 0 : -r.hw + 0.3;
-      const outer = r.kind === 'ring' ? sg * (r.hw - 0.3) : r.hw - 0.3;
-      for (const off of [inner, outer]) {
-        const Q = r.pointAt(s, off);
-        box(Q.x, Q.y + 3.9, Q.z, 0.35, 7.8, 0.35, yaw);
-      }
-      const mid = (inner + outer) / 2, span = Math.abs(outer - inner);
-      const M = r.pointAt(s, mid);
-      const beamYaw = yaw;
-      box(M.x, M.y + 7.7, M.z, span, 0.35, 0.35, beamYaw);
-      box(M.x, M.y + 6.9, M.z, span, 0.2, 0.2, beamYaw);
-      panel(M, P, yaw, dir, Math.min(span - 1.2, 9), tex, vms);
-    };
-    // sign face hung from the beam at M, facing the drivers of `dir`, with a steel back
-    const panel = (M, P, yaw, dir, w, tex, vms) => {
-      const h = vms ? 1.5 : 2.8;
-      const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: true });
-      mat.color.setScalar(vms ? 1.8 : 0.85);
-      const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-      // faces drivers: normal = -travel direction
-      pl.rotation.y = yaw + (dir > 0 ? Math.PI : 0);
-      const back = pl.clone();
-      back.material = this.mats.steel;
-      pl.position.set(M.x - P.tx * dir * 0.25, M.y + 7.4 + h / 2 - (vms ? 0.6 : 0.9), M.z - P.tz * dir * 0.25);
-      back.position.set(M.x, pl.position.y, M.z);
-      // set the whole Euler: clone() re-derives it from the quaternion (as x = z = ±π for yaws past ±90°),
-      // so changing only .y would mirror the back and turn it askew toward the drivers
-      back.rotation.set(0, pl.rotation.y + Math.PI, 0);
-      this.root.add(pl, back);
-    };
-    // loop gantry: legs on both parapets and on the median wall, one beam across both carriageways,
-    // each direction's sign over its own lanes (dir +1 drives on the negative offsets), backs to each other
-    const ringGantry = (s, faces) => {
-      for (const [g0, g1] of ring.medianGaps) if (s > g0 - 15 && s < g1 + 15) s = g1 + 25;
-      const P = ring.pointAt(s, 0);
-      if (ring.openL[P.i] || ring.openR[P.i] || P.y < 4.2) return false;
-      const yaw = Math.atan2(P.tx, P.tz), ext = ring.hw - 0.3;
-      for (const off of [-ext, 0, ext]) { const Q = ring.pointAt(s, off); box(Q.x, Q.y + 3.9, Q.z, 0.35, 7.8, 0.35, yaw); }
-      box(P.x, P.y + 7.7, P.z, ext * 2, 0.35, 0.35, yaw);
-      box(P.x, P.y + 6.9, P.z, ext * 2, 0.2, 0.2, yaw);
-      for (const f of faces) panel(ring.pointAt(s, -f.dir * ext / 2), P, yaw, f.dir, Math.min(ext - 1.2, 9), f.tex, f.vms);
-      return true;
-    };
-    const signs = [
-      TX.signTexture([{ text: 'K1  環状線', size: 56 }, { text: 'Loop  ↑', size: 44 }]),
-      TX.signTexture([{ text: 'C2  中央連絡線', size: 48 }, { text: 'Central Link  ↖  1 km', size: 38 }]),
-      TX.signTexture([{ text: '湾岸  Bayshore', size: 50 }, { text: 'Kaigan Bridge  ↑', size: 40 }]),
-      TX.signTexture([{ text: '北トンネル', size: 54 }, { text: 'Kita Tunnel  2 km', size: 40 }]),
-      TX.signTexture([{ text: '汐留  Shiodome', size: 50 }, { text: 'Downtown  ↑', size: 40 }]),
-    ];
-    const vms = [TX.vmsTexture('夜間走行注意  ·  DRIVE SAFE'), TX.vmsTexture('K1 LOOP  10.5 km  ·  流れは順調'), TX.vmsTexture('ライト点灯  ·  LIGHTS ON')];
-    const L = ring.len;
-    const dist = (a, b) => { const d = Math.abs(wrap(a - b, L)); return Math.min(d, L - d); };
-    // special signs (exits, parking area): each gets its own gantry, the other direction a regular sign
-    const specials = [];
-    for (const d of net.links.diverge) if (d.from === ring) specials.push({ s: wrap(d.s0 - d.dir * 700, L), dir: d.dir, tex: signs[1] });
-    if (net.pa) specials.push({ s: wrap(net.pa.sExit - 380, L), dir: 1, tex: TX.signTexture([{ text: '西PA  Nishi PA', size: 52 }, { text: 'P  Parking  ↗  400 m', size: 40 }]) });
-    let k = 0;
-    const regular = dir => {
-      const c = k++;
-      const isVms = c % 3 === (dir > 0 ? 1 : 2);
-      return { dir, tex: isVms ? vms[c % vms.length] : signs[(c + (dir > 0 ? 0 : 2)) % signs.length], vms: isVms };
-    };
-    // regular sites every 700 m, dropped where a special sign stands within 250 m (no stacked signs)
-    for (let s = 150; s < L - 100; s += 700) {
-      if (specials.some(sp => dist(sp.s, s) < 250)) continue;
-      ringGantry(s, [regular(1), regular(-1)]);
-    }
-    for (const sp of specials) ringGantry(sp.s, [{ dir: sp.dir, tex: sp.tex, vms: false }, regular(-sp.dir)]);
-    // exit signs on other roads (none today: every diverge leaves the loop)
-    for (const d of net.links.diverge) if (d.from !== ring) gantry(d.from, wrap(d.s0 - d.dir * 700, d.from.len), d.dir, signs[1], false);
-    for (const r of net.ribbons) if (r.kind === 'link') { gantry(r, 400, 1, signs[4], false); gantry(r, r.len * 0.5, 1, vms[0], true); gantry(r, r.len - 500, 1, signs[0], false); }
-    if (steel.length) this.root.add(new THREE.Mesh(mergeGeometries(steel), this.mats.steel));
+    const sg = buildSignage(this);
+    buildMarkings(this, sg.topo);
   }
 
   // ---------------------------------------------------------------- bridge

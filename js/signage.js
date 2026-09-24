@@ -1,0 +1,607 @@
+// Road signs computed from the network itself. Every exit gets advance boards at its real distance
+// (2 km / 1 km / 500 m), an EXIT board over the exit lane and a sign on the gore showing both ways;
+// every merge a warning (VMS) over the road it joins and a MERGE board on the ramp; region names stand
+// by the roadside. Green = directions, blue = services (PA), amber VMS = warnings only. Boards on one
+// road (and direction) keep >= 250 m apart. All faces share canvas atlases; all steel is one mesh.
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { wrap, makeCanvas } from './util.js';
+
+export const SIGN_GAP = 250;
+const GREEN = '#13704a', BLUE = '#1d4b98', WHITE = '#f2f5f1';
+const JP = '"Yu Gothic UI", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif';
+const EN = '"IBM Plex Sans", "Segoe UI", Arial, sans-serif';
+const K1 = d => (d > 0 ? { shield: 'K1', jp: '内回り', en: 'Inner Loop' } : { shield: 'K1', jp: '外回り', en: 'Outer Loop' });
+const C2 = { shield: 'C2', jp: '中央連絡線', en: 'Central Link' };
+const PA = { shield: 'P', jp: '西PA', en: 'Nishi Parking Area', blue: true };
+
+// ------------------------------------------------------------------ topology
+// Where each ribbon starts and ends on another one (its host), in which direction of the host, and
+// where the two decks part: `sep` (edges 0.5 m apart) and `gore` (1.5 m apart, the nose of the V).
+export function roadTopology(net) {
+  const find = (r, P) => {
+    for (const q of net.ribbons) {
+      if (q === r || q.kind === 'lot') continue;
+      const pr = q.projectGlobal(P.x, P.z);
+      if (Math.abs(pr.off) > q.hw + 0.1 || Math.abs(pr.y - P.y) > 1) continue;
+      if (!q.closed && ((pr.t < 0 && pr.i === 0) || (pr.t > 1 && pr.i >= q.n - 2))) continue;
+      return { q, pr };
+    }
+    return null;
+  };
+  const part = (r, q, fromEnd) => {
+    let hint = null, sep = null, gore = null;
+    for (let k = 0; k * 2 <= r.len; k++) {
+      const s = fromEnd ? r.len - k * 2 : k * 2;
+      const P = r.pointAt(s, 0);
+      const pr = hint === null ? q.projectGlobal(P.x, P.z) : q.projectLocal(P.x, P.z, hint, 8);
+      hint = pr.i;
+      const gap = Math.abs(pr.off) - q.hw - r.hw, dy = Math.abs(pr.y - P.y);
+      if (!sep && (gap >= 0.5 || dy > 2)) {
+        // which side of r the host lies on (+1: r's right)
+        const H = q.pointAt(pr.s, 0);
+        const rel = (H.x - P.x) * -P.tz + (H.z - P.z) * P.tx;
+        sep = { s, sHost: pr.s, side: Math.sign(pr.off), hostSide: Math.sign(rel) };
+      }
+      if (sep && !gore && gap >= 1.5 && dy < 0.4) gore = { s, sHost: pr.s };
+      if (sep && (gore || gap > 3 || dy > 0.4 || Math.abs(s - sep.s) > 300)) break;
+    }
+    return { sep, gore };
+  };
+  const exits = [], merges = [], att = new Map();
+  for (const r of net.ribbons) {
+    if (r.closed || r.kind === 'lot') continue;
+    const a = {};
+    for (const end of [0, 1]) {
+      const P = r.pointAt(end ? r.len : 0, 0);
+      const f = find(r, P);
+      if (!f) continue;
+      const d = Math.sign(P.tx * f.pr.tx + P.tz * f.pr.tz) || 1;
+      const { sep, gore } = part(r, f.q, end === 1);
+      if (!sep) continue;
+      // side: where r lies as seen by the host's drivers (-1 left, +1 right)
+      const e = { r, host: f.q, dir: d, sAt: f.pr.s, sep, gore, side: sep.side * d };
+      (end ? merges : exits).push(e);
+      a[end ? 'end' : 'start'] = e;
+    }
+    att.set(r, a);
+  }
+  return { exits, merges, att };
+}
+
+// what a ribbon leads to
+function destOf(topo, r) {
+  const a = topo.att.get(r) || {};
+  if (r.kind === 'pa' && a.start && a.start.host.kind === 'ring') return PA;
+  if (r.label === 'C2' && !r.ramp) return C2;
+  const e = a.end;
+  if (!e) return null;
+  if (e.host.kind === 'ring') {
+    const k = K1(e.dir);
+    // leaving one carriageway of the loop for the other
+    if (a.start && a.start.host.kind === 'ring' && a.start.dir !== e.dir) return { ...k, jp: 'Uターン', en: 'U-turn · ' + k.en };
+    return k;
+  }
+  if (e.host.kind === 'pa') return PA;
+  return C2;
+}
+// what staying on a road leads to
+function throughOf(topo, road, d) {
+  if (road.kind === 'ring') return K1(d);
+  const e = (topo.att.get(road) || {}).end;
+  if (!e) return C2;
+  return e.host.kind === 'ring' ? K1(e.dir) : e.host.kind === 'pa' ? PA : C2;
+}
+
+export function fmtDist(m) {
+  if (m < 950) return `${Math.max(50, Math.round(m / 50) * 50)} m`;
+  const k = Math.round(m / 100) / 10;
+  return `${Number.isInteger(k) ? k : k.toFixed(1)} km`;
+}
+
+// ------------------------------------------------------------------ drawing
+function rrect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+// arrow centred on (cx, cy), `deg` clockwise from straight up
+function arrow(g, cx, cy, size, deg, color = WHITE) {
+  g.save();
+  g.translate(cx, cy);
+  g.rotate((deg * Math.PI) / 180);
+  g.fillStyle = color;
+  const sw = size * 0.12, hw = size * 0.36, hl = size * 0.42, top = -size / 2, bot = size / 2;
+  g.beginPath();
+  g.moveTo(0, top); g.lineTo(hw, top + hl); g.lineTo(sw, top + hl); g.lineTo(sw, bot);
+  g.lineTo(-sw, bot); g.lineTo(-sw, top + hl); g.lineTo(-hw, top + hl);
+  g.closePath();
+  g.fill();
+  g.restore();
+}
+function fit(g, text, weight, px, family, maxW) {
+  let p = px;
+  do { g.font = `${weight} ${Math.round(p)}px ${family}`; p *= 0.92; } while (g.measureText(text).width > maxW && p > 6);
+}
+// route shield; returns its width
+function shield(g, x, cy, size, dest, bg) {
+  const w = dest.shield === 'P' ? size : size * 1.35;
+  g.fillStyle = WHITE;
+  rrect(g, x, cy - size / 2, w, size, size * 0.14);
+  g.fill();
+  g.fillStyle = dest.shield === 'P' ? BLUE : bg;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  fit(g, dest.shield, 800, size * 0.72, EN, w * 0.86);
+  g.fillText(dest.shield, x + w / 2, cy + size * 0.04);
+  return w;
+}
+function plate(g, x, y, w, h, bg) {
+  g.fillStyle = bg;
+  rrect(g, x, y, w, h, Math.min(w, h) * 0.06);
+  g.fill();
+  g.strokeStyle = WHITE;
+  g.lineWidth = Math.max(2, h * 0.025);
+  const i = Math.max(3, h * 0.035);
+  rrect(g, x + i, y + i, w - 2 * i, h - 2 * i, Math.min(w, h) * 0.05);
+  g.stroke();
+}
+// one destination line: [arrow] shield  名前 / English  ....  distance [arrow]
+function destRow(g, x, y, w, h, { dest, dist, arrowDeg = null, arrowSide = -1, bg }) {
+  const pad = h * 0.14;
+  let x0 = x + pad, x1 = x + w - pad;
+  if (arrowDeg !== null) {
+    const a = h * 0.78;
+    if (arrowSide < 0) { arrow(g, x0 + a / 2, y + h / 2, a, arrowDeg); x0 += a + pad * 0.6; } else { arrow(g, x1 - a / 2, y + h / 2, a, arrowDeg); x1 -= a + pad * 0.6; }
+  }
+  if (dest.shield) x0 += shield(g, x0, y + h / 2, h * 0.5, dest, bg) + pad * 0.8;
+  g.fillStyle = WHITE;
+  g.textBaseline = 'middle';
+  if (dist) {
+    g.textAlign = 'right';
+    fit(g, dist, 700, h * 0.4, EN, w * 0.3);
+    const dw = g.measureText(dist).width;
+    g.fillText(dist, x1, y + h * 0.5);
+    x1 -= dw + pad;
+  }
+  g.textAlign = 'left';
+  fit(g, dest.jp, 700, h * 0.42, JP, x1 - x0);
+  g.fillText(dest.jp, x0, y + h * 0.36);
+  fit(g, dest.en, 600, h * 0.2, EN, x1 - x0);
+  g.fillText(dest.en, x0, y + h * 0.76);
+}
+function vms(g, x, y, w, h, lines) {
+  const pitch = 3, cols = Math.floor(w / pitch), rows = Math.floor(h / pitch);
+  const src = makeCanvas(cols, rows), s = src.getContext('2d');
+  s.fillStyle = '#000'; s.fillRect(0, 0, cols, rows);
+  s.fillStyle = '#fff'; s.textAlign = 'center'; s.textBaseline = 'middle';
+  const lh = (rows - 4) / lines.length;
+  lines.forEach((t, k) => { fit(s, t, 700, lh * 0.9, `${EN.split(',')[0]}, ${JP}`, cols - 6); s.fillText(t, cols / 2, 2 + lh * (k + 0.5) + 0.5); });
+  const px = s.getImageData(0, 0, cols, rows).data;
+  g.fillStyle = '#16181b'; g.fillRect(x, y, w, h);
+  g.fillStyle = '#050403'; g.fillRect(x + 4, y + 4, w - 8, h - 8);
+  for (let j = 1; j < rows - 1; j++) for (let i = 1; i < cols - 1; i++) {
+    g.fillStyle = px[(j * cols + i) * 4] > 100 ? '#ffb030' : '#1a1206';
+    g.fillRect(x + i * pitch + 0.5, y + j * pitch + 0.5, pitch - 1, pitch - 1);
+  }
+}
+
+// ------------------------------------------------------------------ atlas
+class Atlas {
+  constructor() { this.pages = []; this.size = 2048; this.tiles = []; }
+  // reserve a tile; it is packed and drawn in finish()
+  add(wPx, hPx, draw) {
+    const t = { w: Math.ceil(wPx), h: Math.ceil(hPx), draw };
+    this.tiles.push(t);
+    return t;
+  }
+  // shelf-pack the tiles tallest first, draw them, crop the last page to the rows it uses, then the UVs
+  // (canvas textures are flipped: v = 1 at the top)
+  finish() {
+    const S = this.size, pad = 4;
+    let p = null;
+    for (const t of [...this.tiles].sort((a, b) => b.h - a.h || b.w - a.w)) {
+      if (!p) p = this._page();
+      if (p.x + t.w > S) { p.x = 0; p.y += p.rowH + pad; p.rowH = 0; }
+      if (p.y + t.h > S) p = this._page();
+      Object.assign(t, { page: this.pages.length - 1, x: p.x, y: p.y });
+      p.x += t.w + pad; p.rowH = Math.max(p.rowH, t.h);
+      p.g.save();
+      p.g.beginPath(); p.g.rect(t.x, t.y, t.w, t.h); p.g.clip();
+      t.draw(p.g, t.x, t.y, t.w, t.h);
+      p.g.restore();
+    }
+    if (p) {
+      const used = Math.ceil((p.y + p.rowH + pad) / 64) * 64;
+      if (used < S) {
+        const c = makeCanvas(S, used);
+        c.getContext('2d').drawImage(p.c, 0, 0);
+        p.c = c;
+      }
+    }
+    for (const t of this.tiles) {
+      const W = this.pages[t.page].c.width, H = this.pages[t.page].c.height;
+      Object.assign(t, { u0: t.x / W, u1: (t.x + t.w) / W, v0: 1 - (t.y + t.h) / H, v1: 1 - t.y / H });
+    }
+  }
+  _page() {
+    const c = makeCanvas(this.size, this.size), g = c.getContext('2d');
+    const p = { c, g, x: 0, y: 0, rowH: 0 };
+    this.pages.push(p);
+    return p;
+  }
+}
+
+// ------------------------------------------------------------------ build
+export function buildSignage(world) {
+  const net = world.net, ring = net.ring, L = ring.len;
+  const topo = roadTopology(net);
+  const res = [];
+  const poles = world.poles || [];
+  const nearPole = (x, z, rad) => poles.some(p => Math.abs(p.x - x) < rad && Math.abs(p.z - z) < rad && Math.hypot(p.x - x, p.z - z) < rad);
+  const clampI = (r, i) => (r.closed ? ((i % r.n) + r.n) % r.n : Math.max(0, Math.min(r.n - 1, i)));
+  const edgeClosed = (r, i, sides, k = 3) => {
+    for (let j = -k; j <= k; j++) { const m = clampI(r, i + j); for (const sg of sides) if ((sg < 0 ? r.openL : r.openR)[m]) return false; }
+    return true;
+  };
+  const others = (r, x, z, y, tol, extra) => net.surfacesAt(x, z, y, tol, extra, res).some(q => q.r !== r);
+  const tunnel = (r, y) => r.kind === 'ring' && y < 4.2;
+
+  // overhead gantry across the whole deck at s. Legs stand on the edges that have a parapet (and on the
+  // loop's median wall); where a ramp peels off one edge the beam overhangs it as a cantilever.
+  // Returns the leg offsets, or null.
+  const gantryLegs = (r, s) => {
+    const P = r.pointAt(s, 0);
+    if (tunnel(r, P.y)) return null;
+    if (r.median && r.medianGaps.some(([g0, g1]) => s > g0 - 20 && s < g1 + 20)) return null;
+    const ext = r.hw - 0.3;
+    const legs = r.median ? [0] : [];
+    for (const sg of [-1, 1]) if (edgeClosed(r, P.i, [sg])) legs.push(sg * ext);
+    if (legs.length < (r.median ? 2 : 1)) return null;
+    for (let o = -ext; o <= ext + 0.01; o += ext / 5) {
+      const Q = r.pointAt(s, o);
+      // nothing within 12 m above the deck (a crossing road); a ramp lying on the deck itself is fine
+      if (net.surfacesAt(Q.x, Q.z, Q.y + 6.5, 5.5, 0.3, res).some(q => q.r !== r && q.y > Q.y + 1)) return null;
+    }
+    for (const o of legs) {
+      const Q = r.pointAt(s, o);
+      // no other deck within 1.2 m of a leg, no lamp pole on it
+      if (others(r, Q.x, Q.z, Q.y + 5.75, 6.25, 1.2) || nearPole(Q.x, Q.z, 1.6)) return null;
+    }
+    return legs;
+  };
+  // post on the parapet at the drivers' left, the plate over the shoulder and the edge
+  const sideOk = (r, s, d) => {
+    const P = r.pointAt(s, 0);
+    if (tunnel(r, P.y)) return false;
+    const u = -1, sg = u * d; // offset sign of the left edge for drivers going d
+    if (!edgeClosed(r, P.i, [sg], 4)) return false;
+    for (const o of [r.hw - 0.2, r.hw + 1.9]) {
+      const Q = r.pointAt(s, sg * o);
+      if (others(r, Q.x, Q.z, Q.y + 1.5, 3.5, 0.3)) return false;
+    }
+    const Q = r.pointAt(s, sg * (r.hw - 0.2));
+    return !nearPole(Q.x, Q.z, 2.5);
+  };
+
+  // ---- wants
+  const roadKey = (r, d) => r.id + ':' + d;
+  const placed = new Map(); // roadKey -> [{s, kind}]
+  const sites = []; // ring gantry sites {s, faces: {1, -1}}
+  const items = []; // everything built later
+  const dist = (r, a, b) => { if (!r.closed) return Math.abs(a - b); const x = Math.abs(wrap(a - b, r.len)); return Math.min(x, r.len - x); };
+  const ahead = (r, d, from, to) => (r.closed ? wrap((to - from) * d, r.len) : (to - from) * d);
+  // 250 m between boards of a kind (overhead / roadside); a small roadside name plate and an overhead
+  // board never overlap in view, so between the two 150 m is enough
+  const SIDE = new Set(['region', 'routeName']);
+  const spaced = (r, d, s, kind) => !(placed.get(roadKey(r, d)) || []).some(b => dist(r, b.s, s) < (SIDE.has(kind) === SIDE.has(b.kind) ? SIGN_GAP : 150));
+  const wants = [];
+  const signRoad = r => r.kind === 'ring' || (r.kind === 'link' && !r.ramp);
+  const exitsOn = (r, d) => topo.exits.filter(e => e.host === r && e.dir === d);
+
+  for (const e of topo.exits) {
+    const r = e.host, d = e.dir;
+    if (!signRoad(r) && r.kind !== 'pa') continue;
+    if (e.gore) wants.push({ prio: 0, kind: 'gore', r, d, e });
+    if (!signRoad(r)) continue;
+    // before the taper starts (from there the edge is open), over the lane that becomes the exit
+    wants.push({ prio: 0, kind: 'exit', r, d, e, t: 10, lo: 2, hi: 70, type: 'gantry' });
+    wants.push({ prio: 2, kind: 'adv', r, d, e, t: 500, lo: 400, hi: 650, type: 'gantry' });
+    wants.push({ prio: 3, kind: 'adv', r, d, e, t: 1000, lo: 820, hi: 1300, type: 'gantry' });
+    // 2 km only when no other exit comes first (that one's boards already list this exit)
+    const prev = exitsOn(r, d).some(o => o !== e && ahead(r, d, o.sAt, e.sAt) > 0 && ahead(r, d, o.sAt, e.sAt) < 2000);
+    if (!prev) wants.push({ prio: 5, kind: 'adv', r, d, e, t: 2000, lo: 1750, hi: 2250, type: 'gantry' });
+  }
+  for (const e of topo.merges) {
+    const host = e.host;
+    if (!signRoad(host)) continue;
+    // warning over the road being joined, before the ramp's lane touches it
+    wants.push({ prio: 1, kind: 'warn', r: host, d: e.dir, e, t: 220, lo: 120, hi: 420, type: 'gantry', ref: e.sep.sHost });
+    // MERGE board on the ramp itself
+    wants.push({ prio: 1, kind: 'merge', r: e.r, d: 1, e, t: 160, lo: 60, hi: 380, type: 'gantry', ref: e.sep.s });
+  }
+  // region names where each stretch begins: between the previous zone and this one, nearer the boundary
+  const ringZones = net.zones.filter(z => z.r === ring);
+  for (const z of ringZones) for (const d of [1, -1]) {
+    const gap = Math.min(...ringZones.filter(o => o !== z).map(o => ahead(ring, d, o.s, z.s)));
+    wants.push({ prio: 6, kind: 'region', r: ring, d, z, t: gap * 0.4, lo: 0, hi: gap * 0.5, type: 'side', ref: z.s });
+  }
+  for (const r of net.ribbons) if (r.kind === 'link' && !r.ramp) {
+    const a = topo.att.get(r);
+    const s0 = a && a.start ? a.start.sep.s : 0;
+    wants.push({ prio: 6, kind: 'routeName', r, d: 1, t: -150, lo: -500, hi: -60, type: 'side', ref: s0 });
+  }
+  wants.sort((a, b) => a.prio - b.prio || b.d - a.d);
+
+  const put = (w, s) => {
+    const k = roadKey(w.r, w.d);
+    if (!placed.has(k)) placed.set(k, []);
+    placed.get(k).push({ s, kind: w.kind, e: w.e });
+  };
+  for (const w of wants) {
+    const r = w.r, d = w.d;
+    if (w.kind === 'gore') { items.push({ kind: 'gore', r, d, e: w.e }); continue; }
+    const ref = w.ref !== undefined ? w.ref : w.e.sAt;
+    // candidate positions: t metres before ref (travel distance), nearest to the ideal first;
+    // on the loop, an existing gantry of the other direction within the window comes first
+    // an EXIT board of an earlier exit in this window already announces this one on its through panel
+    if (w.kind === 'adv' && (placed.get(roadKey(r, d)) || []).some(b => b.kind === 'exit' && b.e !== w.e && (x => x >= w.lo && x <= w.hi)(ahead(r, d, b.s, ref)))) continue;
+    const cands = [];
+    for (let t = w.lo; t <= w.hi; t += 5) cands.push({ t, pref: Math.abs(t - w.t) });
+    if (r.kind === 'ring' && w.type === 'gantry') {
+      for (const site of sites) {
+        if (site.faces[d]) continue;
+        const t = ahead(r, d, site.s, ref);
+        if (t >= w.lo && t <= w.hi) cands.push({ t, pref: -1000 + Math.abs(t - w.t), site });
+      }
+    }
+    cands.sort((a, b) => a.pref - b.pref);
+    for (const c of cands) {
+      let s = ref - d * c.t;
+      if (r.closed) s = wrap(s, L); else if (s < 20 || s > r.len - 20) continue;
+      if (!spaced(r, d, s, w.kind)) continue;
+      const item = { kind: w.kind, r, d, s, e: w.e, z: w.z };
+      if (c.site) { c.site.faces[d] = item; put(w, s); break; }
+      const legs = w.type === 'gantry' ? gantryLegs(r, s) : null;
+      if (w.type === 'gantry' ? !legs : !sideOk(r, s, d)) continue;
+      if (r.kind === 'ring' && w.type === 'gantry') sites.push({ s, legs, faces: { [d]: item } });
+      else items.push({ ...item, type: w.type, legs });
+      put(w, s);
+      break;
+    }
+  }
+  // the empty face of a loop gantry: which way the loop goes and what comes next
+  for (const site of sites) for (const d of [1, -1]) {
+    if (site.faces[d] || !spaced(ring, d, site.s, 'route')) continue;
+    site.faces[d] = { kind: 'route', r: ring, d, s: site.s };
+    put({ r: ring, d, kind: 'route' }, site.s);
+  }
+
+  // ---- contents
+  const zonesAhead = (d, s, n) => net.zones.filter(z => z.r === ring).map(z => ({ z, t: ahead(ring, d, s, z.s) })).filter(o => o.t > 300).sort((a, b) => a.t - b.t).slice(0, n);
+  const exitsAhead = (r, d, s, n, maxT = 3200) => exitsOn(r, d).map(e => ({ e, t: ahead(r, d, s, e.sAt) })).filter(o => o.t > 0 && o.t <= maxT).sort((a, b) => a.t - b.t).slice(0, n);
+  const bgOf = dest => (dest && dest.blue ? BLUE : GREEN);
+  const arrowFor = side => (side < 0 ? -45 : 45);
+  const atlas = new Atlas();
+  // px per metre, by texture quality (all boards fit one or two 2048 atlases)
+  const tq = { low: 0.6, medium: 0.8, high: 1 }[world.q && world.q.textures] || 1;
+  const HI = Math.round(46 * tq), SMALL = Math.round(72 * tq);
+  const panels = []; // {r, d, s, u0, u1, y0, h, tile, bright}
+  const steel = [];
+  const addPanel = (r, d, s, u0, u1, y0, h, ppm, draw, bright = 0.85, forward = 0) => {
+    const w = u1 - u0;
+    const tile = atlas.add(w * ppm, h * ppm, draw);
+    panels.push({ r, d, s, u0, u1, y0, h, tile, bright, forward });
+  };
+
+  const faceBoards = (it, span) => {
+    const { r, d, s } = it;
+    // driver-lateral range of the deck this face covers (u: + = drivers' right)
+    const u0 = r.kind === 'ring' ? -(r.hw - 0.9) : -(r.hw - 0.6), u1 = r.kind === 'ring' ? -1.3 : r.hw - 0.6;
+    const mid = (u0 + u1) / 2;
+    const Y = 6.5;
+    if (it.kind === 'exit') {
+      const e = it.e, dest = destOf(topo, e.r), side = e.side;
+      const exW = r.kind === 'ring' ? 5.8 : 4.6;
+      const eu0 = side < 0 ? u0 : u1 - exW, eu1 = eu0 + exW;
+      addPanel(r, d, s, eu0, eu1, Y, 3.2, HI, (g, x, y, w, h) => {
+        const bg = bgOf(dest);
+        plate(g, x, y, w, h, bg);
+        const pad = h * 0.08, a = h * 0.44, ax = side < 0 ? x + pad * 1.5 + a / 2 : x + w - pad * 1.5 - a / 2;
+        arrow(g, ax, y + h * 0.64, a, 180);
+        const tx0 = side < 0 ? x + pad * 2.5 + a : x + pad * 1.5, tx1 = side < 0 ? x + w - pad * 1.5 : x + w - pad * 2.5 - a;
+        // 出口 EXIT tab
+        g.fillStyle = WHITE; rrect(g, x + pad * 1.5, y + pad * 1.2, w - pad * 3, h * 0.24, h * 0.04); g.fill();
+        g.fillStyle = bg; g.textAlign = 'center'; g.textBaseline = 'middle';
+        fit(g, '出口  EXIT', 800, h * 0.19, `${JP}`, w - pad * 5);
+        g.fillText('出口  EXIT', x + w / 2, y + pad * 1.2 + h * 0.125);
+        const sw = shield(g, tx0, y + h * 0.54, h * 0.24, dest, bg);
+        g.fillStyle = WHITE; g.textAlign = 'left';
+        fit(g, dest.jp, 700, h * 0.27, JP, tx1 - tx0 - sw - pad * 0.6);
+        g.fillText(dest.jp, tx0 + sw + pad * 0.6, y + h * 0.55);
+        fit(g, dest.en, 600, h * 0.14, EN, tx1 - tx0);
+        g.fillText(dest.en, tx0, y + h * 0.8);
+      });
+      // the lanes that carry on
+      const tu0 = side < 0 ? eu1 + 0.4 : u0, tu1 = side < 0 ? u1 : eu0 - 0.4;
+      // second line: the next exit if one comes soon, else the next region
+      const thr = throughOf(topo, r, d);
+      const nx = exitsAhead(r, d, s, 2, 2200).find(o => o.e !== e);
+      const nz = r.kind === 'ring' ? zonesAhead(d, s, 1)[0] : null;
+      addPanel(r, d, s, tu0, tu1, Y, 3.2, HI, (g, x, y, w, h) => {
+        plate(g, x, y, w, h, GREEN);
+        destRow(g, x, y + h * 0.06, w, h * 0.5, { dest: thr, arrowDeg: 0, arrowSide: 1, bg: GREEN });
+        if (nx) {
+          const dest = destOf(topo, nx.e.r), bg = bgOf(dest);
+          g.fillStyle = bg; rrect(g, x + h * 0.08, y + h * 0.55, w - h * 0.16, h * 0.38, h * 0.03); g.fill();
+          destRow(g, x + h * 0.08, y + h * 0.55, w - h * 0.16, h * 0.38, { dest, dist: fmtDist(nx.t), arrowDeg: arrowFor(nx.e.side), arrowSide: nx.e.side, bg });
+        } else if (nz) destRow(g, x + h * 0.1, y + h * 0.52, w - h * 0.1, h * 0.42, { dest: { shield: '', jp: nz.z.jp, en: nz.z.name }, dist: fmtDist(nz.t), bg: GREEN });
+      });
+    } else if (it.kind === 'adv') {
+      const list = exitsAhead(r, d, s, 2);
+      if (!list.length) return;
+      const w = Math.min(9, u1 - u0), h = list.length > 1 ? 3.4 : 2.4;
+      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, h, HI, (g, x, y, W, H) => {
+        const rh = (H - H * 0.08) / list.length;
+        g.fillStyle = WHITE; g.fillRect(x, y, W, H);
+        list.forEach((o, k) => {
+          const dest = destOf(topo, o.e.r), bg = bgOf(dest);
+          const yy = y + H * 0.04 + k * rh;
+          g.fillStyle = bg; rrect(g, x + H * 0.03, yy, W - H * 0.06, rh - H * 0.02, H * 0.03); g.fill();
+          destRow(g, x + H * 0.03, yy, W - H * 0.06, rh - H * 0.02, { dest, dist: fmtDist(o.t), arrowDeg: arrowFor(o.e.side), arrowSide: o.e.side, bg });
+        });
+      });
+    } else if (it.kind === 'warn') {
+      const w = Math.min(9, u1 - u0);
+      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, 2.2, HI, (g, x, y, W, H) => vms(g, x, y, W, H, ['合流注意', 'MERGING TRAFFIC']), 1.8);
+    } else if (it.kind === 'merge') {
+      const e = it.e, dest = e.host.kind === 'ring' ? K1(e.dir) : C2;
+      const w = Math.min(9, u1 - u0);
+      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, 3.0, HI, (g, x, y, W, H) => {
+        plate(g, x, y, W, H, GREEN);
+        g.fillStyle = WHITE; rrect(g, x + H * 0.1, y + H * 0.1, W * 0.42, H * 0.3, H * 0.05); g.fill();
+        g.fillStyle = GREEN; g.textAlign = 'center'; g.textBaseline = 'middle';
+        fit(g, '合流  MERGE', 800, H * 0.22, JP, W * 0.4);
+        g.fillText('合流  MERGE', x + H * 0.1 + W * 0.21, y + H * 0.25);
+        destRow(g, x, y + H * 0.42, W, H * 0.54, { dest, arrowDeg: arrowFor(e.sep.hostSide), arrowSide: e.sep.hostSide, bg: GREEN });
+      });
+    } else if (it.kind === 'route') {
+      const zs = zonesAhead(d, s, 2), w = Math.min(9, u1 - u0);
+      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, 3.4, HI, (g, x, y, W, H) => {
+        plate(g, x, y, W, H, GREEN);
+        destRow(g, x, y + H * 0.05, W, H * 0.4, { dest: K1(d), arrowDeg: 0, arrowSide: 1, bg: GREEN });
+        g.fillStyle = 'rgba(242,245,241,0.7)'; g.fillRect(x + H * 0.1, y + H * 0.47, W - H * 0.2, Math.max(2, H * 0.01));
+        zs.forEach((o, k) => {
+          const yy = y + H * (0.5 + k * 0.23), hh = H * 0.23;
+          g.fillStyle = WHITE; g.textBaseline = 'middle';
+          g.textAlign = 'right'; fit(g, fmtDist(o.t), 700, hh * 0.62, EN, W * 0.25); g.fillText(fmtDist(o.t), x + W - H * 0.14, yy + hh / 2);
+          g.textAlign = 'left'; fit(g, o.z.jp, 700, hh * 0.62, JP, W * 0.35); g.fillText(o.z.jp, x + H * 0.2, yy + hh / 2);
+          const jw = g.measureText(o.z.jp).width;
+          fit(g, o.z.name, 600, hh * 0.44, EN, W * 0.4); g.fillText(o.z.name, x + H * 0.2 + jw + H * 0.1, yy + hh / 2 + hh * 0.04);
+        });
+      });
+    }
+    void span;
+  };
+
+  // ---- steel + panels
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eu = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1), v = new THREE.Vector3();
+  const box = (x, y, z, sx, sy, sz, yaw) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    eu.set(0, yaw, 0); q.setFromEuler(eu);
+    m4.compose(v.set(x, y, z), q, one);
+    g.applyMatrix4(m4);
+    steel.push(g.toNonIndexed());
+  };
+  const gantrySteel = (r, s, legs) => {
+    const P = r.pointAt(s, 0), yaw = Math.atan2(P.tx, P.tz), ext = r.hw - 0.3;
+    for (const o of legs) {
+      const Q = r.pointAt(s, o);
+      // a cantilever's leg is heavier
+      const t = legs.length < (r.median ? 3 : 2) ? 0.55 : 0.35;
+      box(Q.x, Q.y + 3.9, Q.z, t, 7.8, t, yaw);
+    }
+    box(P.x, P.y + 7.7, P.z, ext * 2, 0.35, 0.35, yaw);
+    box(P.x, P.y + 6.9, P.z, ext * 2, 0.2, 0.2, yaw);
+  };
+  for (const site of sites) {
+    gantrySteel(ring, site.s, site.legs);
+    for (const d of [1, -1]) if (site.faces[d]) faceBoards(site.faces[d]);
+  }
+  for (const it of items) {
+    if (it.type === 'gantry') { gantrySteel(it.r, it.s, it.legs); faceBoards(it); continue; }
+    const { r, d, s } = it;
+    if (it.type === 'side') {
+      // post on the parapet, plate over the edge
+      const sg = -d, P = r.pointAt(s, sg * (r.hw - 0.2)), yaw = Math.atan2(P.tx, P.tz);
+      box(P.x, P.y + 1.8, P.z, 0.16, 3.6, 0.16, yaw);
+      const isRoute = it.kind === 'routeName';
+      const dest = isRoute ? C2 : null, z = it.z;
+      const w = 3.4, h = 1.3;
+      // u (drivers' right) of the plate: centred just past the edge
+      const uc = -(r.hw + 0.1);
+      addPanel(r, d, s, uc - w / 2, uc + w / 2, 2.3, h, SMALL, (g, x, y, W, H) => {
+        plate(g, x, y, W, H, GREEN);
+        g.fillStyle = WHITE; g.textBaseline = 'middle';
+        if (isRoute) { destRow(g, x, y + H * 0.08, W, H * 0.84, { dest, bg: GREEN }); return; }
+        g.textAlign = 'center';
+        fit(g, z.jp, 700, H * 0.44, JP, W * 0.9); g.fillText(z.jp, x + W / 2, y + H * 0.38);
+        fit(g, z.name.toUpperCase(), 600, H * 0.2, EN, W * 0.9); g.fillText(z.name.toUpperCase(), x + W / 2, y + H * 0.76);
+      }, 0.85, 0.12);
+    } else if (it.kind === 'gore') {
+      const e = it.e, host = e.host;
+      const hs = e.gore.sHost, P = e.r.pointAt(e.gore.s, 0);
+      const H = host.pointAt(hs, 0);
+      // post halfway between the two decks' edges
+      const rel = (P.x - H.x) * -H.tz + (P.z - H.z) * H.tx; // host offset of the ramp centre
+      const sg = Math.sign(rel), E1 = host.pointAt(hs, sg * host.hw);
+      const dx = E1.x - P.x, dz = E1.z - P.z, dl = Math.hypot(dx, dz) || 1;
+      const E2x = P.x + (dx / dl) * e.r.hw, E2z = P.z + (dz / dl) * e.r.hw;
+      const gx = (E1.x + E2x) / 2, gz = (E1.z + E2z) / 2, gy = Math.min(E1.y, P.y);
+      // nothing overhead, no pole in the way
+      if (net.surfacesAt(gx, gz, gy + 3.5, 3, 0.2, res).some(qq => qq.r !== host && qq.r !== e.r) || nearPole(gx, gz, 1.5)) continue;
+      const yaw = Math.atan2(H.tx, H.tz);
+      box(gx, gy + 1.45, gz, 0.14, 2.9, 0.14, yaw);
+      it.at = { x: gx, y: gy, z: gz };
+      // plate: left half = the left branch, right half = the right branch
+      const exitDest = destOf(topo, e.r), thr = throughOf(topo, host, e.dir);
+      const left = e.side < 0 ? exitDest : thr, right = e.side < 0 ? thr : exitDest;
+      // host-lateral of the post, in drivers' u
+      const uPost = ((gx - H.x) * -H.tz + (gz - H.z) * H.tx) * e.dir;
+      addPanel(host, e.dir, hs, uPost - 1.3, uPost + 1.3, 1.6, 1.3, SMALL, (g, x, y, W, Hh) => {
+        for (const [k, dest] of [[0, left], [1, right]]) {
+          const xx = x + (k * W) / 2;
+          plate(g, xx, y, W / 2, Hh, bgOf(dest));
+          arrow(g, xx + (k ? W / 2 - Hh * 0.28 : Hh * 0.28), y + Hh * 0.3, Hh * 0.42, k ? 45 : -45);
+          const sw = shield(g, xx + Hh * 0.12 + (k ? 0 : Hh * 0.45), y + Hh * 0.3, Hh * 0.26, dest, bgOf(dest));
+          void sw;
+          g.fillStyle = WHITE; g.textAlign = 'center'; g.textBaseline = 'middle';
+          fit(g, dest.jp, 700, Hh * 0.22, JP, W / 2 - Hh * 0.2); g.fillText(dest.jp, xx + W / 4, y + Hh * 0.62);
+          fit(g, dest.en, 600, Hh * 0.13, EN, W / 2 - Hh * 0.2); g.fillText(dest.en, xx + W / 4, y + Hh * 0.84);
+        }
+      }, 0.85, 0.1);
+    }
+  }
+
+  // ---- meshes
+  const out = new THREE.Group();
+  atlas.finish();
+  const byPage = atlas.pages.map(() => ({ pos: [], uv: [], col: [] }));
+  for (const p of panels) {
+    const { r, d, s, u0, u1, y0, h, tile } = p;
+    const P = r.pointAt(s, 0);
+    const fx = d * P.tx, fz = d * P.tz; // travel direction
+    const rx = -fz, rz = fx; // drivers' right
+    const back = p.forward ? p.forward : 0.32; // face stands this far toward the drivers from the post/beam
+    const baseX = P.x - fx * back, baseZ = P.z - fz * back;
+    const at = u => ({ x: baseX + rx * u, z: baseZ + rz * u });
+    const A = at(u0), C = at(u1), yb = P.y + y0, yt = yb + h;
+    const G = byPage[tile.page];
+    // TL, BL, BR / TL, BR, TR
+    const vs = [[A.x, yt, A.z, tile.u0, tile.v1], [A.x, yb, A.z, tile.u0, tile.v0], [C.x, yb, C.z, tile.u1, tile.v0], [A.x, yt, A.z, tile.u0, tile.v1], [C.x, yb, C.z, tile.u1, tile.v0], [C.x, yt, C.z, tile.u1, tile.v1]];
+    for (const [x, y, z, u, w] of vs) { G.pos.push(x, y, z); G.uv.push(u, w); G.col.push(p.bright, p.bright, p.bright); }
+    // steel back, just behind the face
+    const mx = (A.x + C.x) / 2 + fx * 0.09, mz = (A.z + C.z) / 2 + fz * 0.09;
+    box(mx, (yb + yt) / 2, mz, u1 - u0 + 0.08, h + 0.08, 0.14, Math.atan2(P.tx, P.tz));
+  }
+  byPage.forEach((G, k) => {
+    if (!G.pos.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(G.pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(G.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(G.col, 3));
+    const t = new THREE.CanvasTexture(atlas.pages[k].c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = world.aniso || 8;
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: t, vertexColors: true }));
+    out.add(m);
+  });
+  if (steel.length) out.add(new THREE.Mesh(mergeGeometries(steel), world.mats.steel));
+  world.root.add(out);
+  // for audits
+  world.signage = { topo, sites, items, panels, pages: atlas.pages.length };
+  return world.signage;
+}

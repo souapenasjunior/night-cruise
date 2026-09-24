@@ -676,7 +676,8 @@ export class Traffic {
     else if (a.s > rib.len - 2) { this._despawn(a); return; }
     for (const d of this.net.links.diverge) {
       if (d.from !== rib || d.dir !== a.dir || !a.wantExit) continue;
-      if (a.li !== rib.lanes[a.dir].length - 1) continue;
+      // the lane on the ramp's side (the outer one unless the link says otherwise)
+      if (a.li !== (d.li !== undefined ? d.li : rib.lanes[a.dir].length - 1)) continue;
       const lo = Math.min(d.s0, d.s1), hi = Math.max(d.s0, d.s1);
       if (a.s >= lo && a.s <= hi) this._switch(a, d.to, 1, 0);
     }
@@ -684,7 +685,7 @@ export class Traffic {
       if (m.from !== rib) continue;
       if (a.s > m.sFrom) {
         const lanes = m.to.lanes[m.dir];
-        this._switch(a, m.to, m.dir, lanes.length - 1);
+        this._switch(a, m.to, m.dir, m.li !== undefined ? m.li : lanes.length - 1);
         a.targetOff = a.off; // hold on the acceleration lane until the outer lane is clear
         a.merging = 6;
         a.wantExit = Math.random() < 0.2;
@@ -716,7 +717,8 @@ export class Traffic {
     a.blink = Math.sign((a.targetOff - a.off) * dir);
     a.pendingLane = -1;
     if (a.kind === 'cruiser' && a.mode === 'leave') a.wantExit = false;
-    else if (to.kind === 'link') a.wantExit = false;
+    // on a link some drivers take one of its own exits (the C2 now has ramps to both directions)
+    else if (to.kind === 'link') a.wantExit = !to.ramp && Math.random() < 0.3;
   }
 
   // --------------------------------------------------------------- player collisions
