@@ -86,7 +86,8 @@ export const TRAFFIC_GLB = [
   { id: 't_sedan', weight: 26, v: [80, 110], colors: ['orig', '#1d2740', '#27342a', '#2b2c31'],
     glb: { file: 'models/t_sedan.json', rotY: 0, length: 4.5, tint: /^body/, wheelMat: /^(tire|rims)/, headY: 0.64, tailY: 0.74, lampX: 0.6 } },
   { id: 't_wagon', weight: 22, v: [78, 106], colors: ['orig', '#243049', '#2e3a2c', '#3a3634'],
-    glb: { file: 'models/t_wagon.json', rotY: 0, length: 4.55, tint: /^body/, wheelMat: /^(tire|rims)/, headY: 0.64, tailY: 0.77, lampX: 0.6 } },
+    // (the wagon was modelled turned ~7° in its file: rotY straightens it, or it crabs and its wheels wobble)
+    glb: { file: 'models/t_wagon.json', rotY: 0.1215, length: 4.55, tint: /^body/, wheelMat: /^(tire|rims)/, headY: 0.64, tailY: 0.77, lampX: 0.6 } },
   // the bus keeps its livery: three darker tones of it rather than other hues
   // (low weight: the variety rule favours whatever is rare nearby, and a slow bus queues traffic)
   { id: 't_bus', weight: 3, v: [70, 85], heavy: true, shade: true, colors: ['orig', '#c2c6ce', '#a3abbb', '#b4aa9c'],

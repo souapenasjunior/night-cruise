@@ -395,7 +395,8 @@ export function trafficGeometry(spec) {
     head: [[hx, G.headY, hz], [-hx, G.headY, hz]],
     tail: [[hx, G.tailY, tz], [-hx, G.tailY, tz]],
     sign: null,
-    halfL: T.L / 2, halfW: T.W / 2,
+    // width from the tyres' outer faces (+ a little body): the bounding box can be widened by mirrors or stray parts
+    halfL: T.L / 2, halfW: axles.length ? Math.min(T.W / 2, Math.max(...axles.map(a => a.xOut)) + 0.12) : T.W / 2,
     tintBase: tintBase || new THREE.Color(1, 1, 1),
     axles: axles.map(a => ({ y: a.r, z: a.z })),
     wheelR: axles.length ? axles.reduce((s, a) => s + a.r, 0) / axles.length : 0.3,
