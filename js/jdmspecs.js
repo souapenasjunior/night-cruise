@@ -82,6 +82,11 @@ export const TRAFFIC_GLB = [
     glb: { file: 'models/t_conte.json', rotY: 0, length: 3.4, tint: /./, headY: 0.78, tailY: 0.95 } },
   { id: 't_van', weight: 26, v: [78, 105], shade: true, colors: ['orig', '#6f82a8', '#9a5f5a', '#72876c'],
     glb: { file: 'models/t_van.json', rotY: Math.PI, length: 4.7, tint: /^Body$/, headY: 0.78, tailY: 0.9 } },
+  // Lowpoly Sedan & Wagon (one Sketchfab scene, split into two models); flat-colour bodies like the E80
+  { id: 't_sedan', weight: 26, v: [80, 110], colors: ['orig', '#1d2740', '#27342a', '#2b2c31'],
+    glb: { file: 'models/t_sedan.json', rotY: 0, length: 4.5, tint: /^body/, wheelMat: /^(tire|rims)/, headY: 0.64, tailY: 0.74, lampX: 0.6 } },
+  { id: 't_wagon', weight: 22, v: [78, 106], colors: ['orig', '#243049', '#2e3a2c', '#3a3634'],
+    glb: { file: 'models/t_wagon.json', rotY: 0, length: 4.55, tint: /^body/, wheelMat: /^(tire|rims)/, headY: 0.64, tailY: 0.77, lampX: 0.6 } },
   // the bus keeps its livery: three darker tones of it rather than other hues
   // (low weight: the variety rule favours whatever is rare nearby, and a slow bus queues traffic)
   { id: 't_bus', weight: 3, v: [70, 85], heavy: true, shade: true, colors: ['orig', '#c2c6ce', '#a3abbb', '#b4aa9c'],
@@ -101,4 +106,5 @@ export const CREDITS = [
   { title: 'Daihatsu Move Conte (Low Poly)', author: 'NNXST', url: 'https://sketchfab.com/3d-models/daihatsu-move-conte-low-poly-eff914331c194de0abe20a33d2c3a2c3' },
   { title: 'Low Poly Car: Toyota ToyoAce Van', author: 'ROH3D', url: 'https://sketchfab.com/3d-models/low-poly-car-toyota-toyoace-van-b8abd3caa4864f41aaba6a583591155d' },
   { title: 'Isuzu Erga Mio bus', author: 'own.guest', url: 'https://sketchfab.com/3d-models/isuzu-erga-mio-bus-050e8acd0bbc4da0902a8a874ef10fca' },
+  { title: 'Lowpoly Sedan & Wagon', author: 'Han66st', url: 'https://sketchfab.com/3d-models/lowpoly-sedan-wagon-e11a46478c674b279fe9d299b2125c30' },
 ];

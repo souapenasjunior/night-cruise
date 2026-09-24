@@ -350,6 +350,17 @@ export function trafficGeometry(spec) {
     merged.push([src, geo]);
   }
   const axles = findAxles(all);
+  // named wheel materials (tyres, rims): the radius is half the tyres' height above the road (they
+  // touch it), which beats the tread fit on very low-poly tyres
+  if (G.wheelMat) for (const a of axles) {
+    let top = 0;
+    for (const [src, geo] of merged) {
+      if (!test(G.wheelMat, src.name)) continue;
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) if (Math.abs(p.getZ(i) - a.z) < 0.6) top = Math.max(top, p.getY(i));
+    }
+    if (top > 0.3) a.r = Math.max(a.r, top / 2);
+  }
   let tintBase = null; // the tinted material's own colour: the "original" traffic paint
   for (const [src, geo] of merged) {
     const mat = src.clone();
@@ -358,7 +369,7 @@ export function trafficGeometry(spec) {
     mat.roughness = Math.max(mat.roughness, 0.35);
     const tint = test(G.tint, src.name);
     if (tint) { if (!tintBase) tintBase = mat.color.clone(); mat.color.setRGB(1, 1, 1); }
-    const pieces = splitWheels(geo, axles);
+    const pieces = splitWheels(geo, axles, test(G.wheelMat, src.name));
     pieces.forEach((g, k) => { if (g) parts.push({ geo: g, mat, tint, axle: k - 1 }); });
   }
   // lamps: find the body surface at the lamp height (front- / rear-most vertices near x, y)
@@ -428,16 +439,26 @@ function findAxles(geos) {
 }
 
 // [body, axle 0, axle 1...]: triangles fully inside a tyre cylinder go to that axle, re-centred on it
-function splitWheels(geo, axles) {
+function splitWheels(geo, axles, wholeWheel = false) {
   if (!axles.length) return [geo];
   const pos = geo.attributes.position, nt = pos.count / 3;
   const owner = new Int8Array(nt).fill(-1);
+  // a wheel material: every triangle goes to the axle it sits on (by its centre), none stays on the body
+  if (wholeWheel) {
+    for (let t = 0; t < nt; t++) {
+      const z = (pos.getZ(t * 3) + pos.getZ(t * 3 + 1) + pos.getZ(t * 3 + 2)) / 3;
+      let best = -1, bd = Infinity;
+      axles.forEach((a, k) => { const d = Math.abs(z - a.z); if (d < bd) { bd = d; best = k; } });
+      if (bd < axles[best].r * 1.6) owner[t] = best;
+    }
+  }
   const inside = (i, a) => {
     const x = Math.abs(pos.getX(i)), y = pos.getY(i), z = pos.getZ(i);
     return x >= a.xIn && x <= a.xOut && Math.hypot(y - a.r, z - a.z) <= a.r + 0.015;
   };
-  let any = false;
+  let any = owner.some(o => o >= 0);
   for (let t = 0; t < nt; t++) {
+    if (owner[t] >= 0) continue;
     for (let k = 0; k < axles.length; k++) {
       const a = axles[k];
       if (inside(t * 3, a) && inside(t * 3 + 1, a) && inside(t * 3 + 2, a)) { owner[t] = k; any = true; break; }
