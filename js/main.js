@@ -531,6 +531,8 @@ $('p-reset').onclick = () => { player.reset(); rig.snapNext = true; resumeGame()
 $('p-settings').onclick = () => openSettings();
 $('p-title').onclick = () => goTitle();
 
+// offline drives start in the middle of the outer bay (slots alternate bays: even = outer)
+const OFFLINE_SLOT = 14;
 // Nishi PA: park the player in stall k, backed in and facing the aisle
 // (online: everyone who joins gets the next free stall, in the order of net.pa.slots)
 function parkAtSlot(k) {
@@ -567,7 +569,8 @@ function startDrive() {
     let best = lanes[0];
     for (const l of lanes) if (Math.abs(l - spawn.off) < Math.abs(best - spawn.off)) best = l;
     player.place(spawn.rib, spawn.s, best, spawn.dir);
-  } else {
+  } else if (!parkAtSlot(OFFLINE_SLOT)) {
+    // a fresh drive starts parked in Nishi PA (the fallback: on the loop)
     const z = net.zones[0];
     player.place(net.ring, z.s, net.ring.lanes[1][1], 1);
   }

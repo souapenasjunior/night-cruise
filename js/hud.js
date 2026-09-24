@@ -92,7 +92,8 @@ export class Hud {
       const d = player.rib.closed ? wrapDelta(player.s - zn.s, player.rib.len) : player.s - zn.s;
       if (Math.abs(d) < 60) { z = zn; break; }
     }
-    if (z && z !== this.lastZone) {
+    // (compared by name: the PA's road and bays are one place, no repeated banner between them)
+    if (z && (!this.lastZone || z.name !== this.lastZone.name)) {
       this.lastZone = z;
       this.zoneRoute.textContent = z.r.label;
       this.zoneName.textContent = z.name;

@@ -405,6 +405,7 @@ export function buildNetwork() {
     { r: cPlus, s: 250, name: 'C2 Central Link', jp: '中央連絡線' },
     { r: cMinus, s: 400, name: 'C2 Central Link', jp: '中央連絡線' },
     { r: paRoad, s: paRoad.len / 2, name: 'Nishi PA', jp: '西パーキング' },
+    ...lots.map(lot => ({ r: lot, s: lot.len / 2, name: 'Nishi PA', jp: '西パーキング' })),
   ];
 
   net.buildGrid();
