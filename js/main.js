@@ -62,7 +62,8 @@ const audio = new AudioSys();
 let net, world, traffic, hud, player = null, bigMap;
 let state = 'loading';
 let settingsOpen = false;
-let selIndex = Math.max(0, HERO_SPECS.findIndex(s => s.id === S.lastCar));
+// the car select always opens on the first car (the R32)
+let selIndex = 0;
 let camMode = 0;
 const lampLights = [];
 
@@ -412,6 +413,7 @@ function choosePaint(i) {
   audio.menuBlip(true);
 }
 function renderPaints() {
+  [...$('sel-chips').children].forEach((c, i) => { const sw = c.querySelector('.sw'); if (sw) sw.style.background = paintOf(HERO_SPECS[i]); });
   const s = HERO_SPECS[selIndex], el = $('sel-paints');
   el.innerHTML = '';
   const cur = paintIdx(s);
@@ -437,8 +439,8 @@ function buildChips() {
     b.className = 'chip';
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', `${s.name} (${s.cls})`);
-    const lum = new THREE.Color(s.colors.main).getHSL({}).l;
-    b.innerHTML = `<span class="n" style="color:${lum < 0.25 ? s.colors.accent : s.colors.main}">${s.short || s.number}</span><span class="sw" style="background:linear-gradient(90deg,${s.colors.main},${s.colors.accent || s.colors.main})"></span>`;
+    // name in plain white; the stripe shows the paint chosen for that car (set in renderPaints)
+    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span>`;
     b.onclick = () => { const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
     b.ondblclick = () => startDrive();
     wrapEl.appendChild(b);
@@ -471,6 +473,7 @@ function updateSelect() {
   audio.setCar({ ...s.sound, top: s.stats.top });
 }
 function goSelect() {
+  selIndex = 0;
   state = 'select';
   showScreen('select');
   updateSelect();

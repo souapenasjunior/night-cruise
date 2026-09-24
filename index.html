@@ -80,8 +80,8 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 #select .strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px clamp(16px, 5vw, 72px) calc(18px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(0deg, rgba(7, 9, 18, 0.92), rgba(7, 9, 18, 0)); display: grid; gap: 14px; }
 #select .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
 .chip { all: unset; cursor: pointer; flex: 0 0 auto; min-width: 64px; padding: 0 14px; box-sizing: border-box; height: 64px; display: grid; place-items: center; border: 1px solid var(--line); background: rgba(12, 16, 32, 0.7); position: relative; transition: border-color .15s, transform .15s; }
-.chip .n { font: 900 24px/1 var(--display); font-style: italic; letter-spacing: 0.02em; white-space: nowrap; text-transform: uppercase; }
-.chip .sw { position: absolute; left: 6px; right: 6px; bottom: 6px; height: 3px; }
+.chip .n { font: 900 24px/1 var(--display); font-style: italic; letter-spacing: 0.02em; white-space: nowrap; text-transform: uppercase; color: #ffffff; }
+.chip .sw { position: absolute; left: 6px; right: 6px; bottom: 6px; height: 3px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28); }
 .chip:hover { border-color: var(--line-2); }
 .chip.sel { border-color: var(--sodium); transform: translateY(-3px); background: rgba(40, 30, 14, 0.6); }
 .chip:focus-visible { outline: 2px solid var(--sodium); outline-offset: 2px; }
