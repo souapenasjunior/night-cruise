@@ -60,6 +60,10 @@ export class Traffic {
     const TYPES = [...TRAFFIC_GLB, ...TRAFFIC_TYPES.filter(t => TRAFFIC_KEEP.includes(t.id))];
     this.types = TYPES.map(t => ({ ...t, g: t.glb ? trafficGeometry(t) : buildTrafficGeometry(t) }));
     this.totalWeight = this.types.reduce((a, t) => a + t.weight, 0);
+    for (const T of this.types) {
+      const base = T.g.tintBase || new THREE.Color(1, 1, 1);
+      T.palette = (T.colors || ['orig']).map(h => h === 'orig' ? base.clone() : T.shade ? new THREE.Color(h).multiply(base) : new THREE.Color(h));
+    }
     const mat = twoTone(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.2, envMapIntensity: 0.9 }), '#1c1d22', 0.42, 'traffic');
     // one InstancedMesh per type (procedural) or per type and material (models); tinted parts take a colour per car
     this.meshes = this.types.map(t => {
@@ -208,8 +212,23 @@ export class Traffic {
     a.active = true;
     a.passSide = 0;
     if (a.kind === 'traffic') {
-      let x = Math.random() * this.totalWeight, ti = 0;
-      for (; ti < this.types.length; ti++) { x -= this.types[ti].weight; if (x <= 0) break; }
+      // variety: every model of the same kind already within 200 m cuts its chance to 30%
+      const nearT = new Array(this.types.length).fill(0), nearC = new Map();
+      for (const b of this.agents) {
+        if (b === a || !b.active || b.kind !== 'traffic' || b.rib !== a.rib) continue;
+        const d = a.rib.closed ? wrapDelta(b.s - a.s, a.rib.len) : b.s - a.s;
+        if (Math.abs(d) > 200) continue;
+        nearT[b.type]++;
+        const k = b.type * 16 + (b.colorIdx || 0);
+        nearC.set(k, (nearC.get(k) || 0) + 1);
+      }
+      // heavy vehicles (the bus) are capped at 5% of the traffic, however rare they are nearby
+      let heavyNow = 0;
+      for (const b of this.agents) if (b !== a && b.active && b.kind === 'traffic' && b.heavy) heavyNow++;
+      const heavyMax = Math.max(2, Math.round((this.targetCount || this.count) * 0.05));
+      const w = this.types.map((t, i) => (t.heavy && heavyNow >= heavyMax ? 0 : t.weight * Math.pow(0.3, nearT[i])));
+      let x = Math.random() * w.reduce((s, v) => s + v, 0), ti = 0;
+      for (; ti < this.types.length; ti++) { x -= w[ti]; if (x <= 0) break; }
       ti = Math.min(ti, this.types.length - 1);
       const T = this.types[ti];
       a.type = ti;
@@ -217,7 +236,12 @@ export class Traffic {
       a.wheelR = T.g.wheelR || 0.3;
       a.spin = Math.random() * 6.28; a.dive = 0;
       a.mass = T.heavy ? 9000 : 1300;
-      a.color = new THREE.Color(pick(T.colors));
+      // colour: the one of this model least seen nearby (ties at random)
+      let best = Infinity, ci = 0;
+      const order = T.palette.map((_, i) => i).sort(() => Math.random() - 0.5);
+      for (const i of order) { const n = nearC.get(ti * 16 + i) || 0; if (n < best) { best = n; ci = i; } }
+      a.colorIdx = ci;
+      a.color = T.palette[ci].clone();
       a.v0 = (T.v[0] + Math.random() * (T.v[1] - T.v[0])) / 3.6;
       a.aMax = T.heavy ? 1.0 : 1.6 + Math.random() * 0.6;
       a.T = 1.2 + Math.random() * 0.6;

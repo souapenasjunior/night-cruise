@@ -74,16 +74,18 @@ for (const s of JDM_SPECS) s.paints = PAINTS.map(p => p.hex);
 // Ordinary traffic drawn from glTF models (instanced). v = cruise speed range (km/h); tint = the
 // material recoloured per car from `colors` (the others keep their own colours / textures).
 export const TRAFFIC_GLB = [
-  { id: 't_e80', weight: 26, v: [80, 112], colors: ['#e9ebee', '#b9bec6', '#1b1d22', '#30343c', '#23324f', '#6e1f24', '#c9c2b4'],
+  // colours: 'orig' = the model's own paint, then three darker ones. The E80 body is a flat colour,
+  // so its extra colours replace it; on the textured models (shade: true) they darken the texture.
+  { id: 't_e80', weight: 30, v: [80, 112], colors: ['orig', '#1f2a44', '#4a1a1e', '#26352b'],
     glb: { file: 'models/t_e80.json', rotY: Q, length: 4.15, tint: /^gray$/, headY: 0.62, tailY: 0.7 } },
-  { id: 't_taxi', weight: 16, v: [75, 100], colors: ['#ffffff'],
-    glb: { file: 'models/t_taxi.json', rotY: 0, length: 4.6, headY: 0.64, tailY: 0.78 } },
-  { id: 't_conte', weight: 18, v: [72, 98], colors: ['#ffffff'],
-    glb: { file: 'models/t_conte.json', rotY: 0, length: 3.4, headY: 0.78, tailY: 0.95 } },
-  { id: 't_van', weight: 16, v: [78, 105], colors: ['#ffffff'],
-    glb: { file: 'models/t_van.json', rotY: Math.PI, length: 4.7, headY: 0.78, tailY: 0.9 } },
-  { id: 't_bus', weight: 7, v: [70, 85], heavy: true, colors: ['#ffffff'],
-    glb: { file: 'models/t_bus.json', rotY: -Q, length: 10.5, headY: 0.9, tailY: 1.1, lampX: 0.95 } },
+  { id: 't_conte', weight: 26, v: [72, 98], shade: true, colors: ['orig', '#6f82a8', '#9a5f5a', '#72876c'],
+    glb: { file: 'models/t_conte.json', rotY: 0, length: 3.4, tint: /./, headY: 0.78, tailY: 0.95 } },
+  { id: 't_van', weight: 26, v: [78, 105], shade: true, colors: ['orig', '#6f82a8', '#9a5f5a', '#72876c'],
+    glb: { file: 'models/t_van.json', rotY: Math.PI, length: 4.7, tint: /^Body$/, headY: 0.78, tailY: 0.9 } },
+  // the bus keeps its livery: three darker tones of it rather than other hues
+  // (low weight: the variety rule favours whatever is rare nearby, and a slow bus queues traffic)
+  { id: 't_bus', weight: 3, v: [70, 85], heavy: true, shade: true, colors: ['orig', '#c2c6ce', '#a3abbb', '#b4aa9c'],
+    glb: { file: 'models/t_bus.json', rotY: -Q, length: 10.5, tint: /./, headY: 0.9, tailY: 1.1, lampX: 0.95 } },
 ];
 // procedural traffic types still in use (none: all traffic is modelled now)
 export const TRAFFIC_KEEP = [];
@@ -95,7 +97,6 @@ export const CREDITS = [
   { title: 'Nissan 350Z', author: 'Blue3D', url: 'https://sketchfab.com/3d-models/nissan-350z-0b6b898a28364c389b0ac82e9b476f1a' },
   { title: 'Honda NSX 1990', author: 'Lexyc16', url: 'https://sketchfab.com/3d-models/honda-nsx-1990-1cc15628a00a4739a6b6c01128927c8d' },
   { title: "Tiara GT '83 Tuned - Low poly model", author: 'Daniel Zhabotinsky', url: 'https://sketchfab.com/3d-models/tiara-gt-83-tuned-low-poly-model-59a0eaaa2af144b2956957e7032d0221' },
-{ title: 'Low Poly Hongkong Taxi', author: 'Han66st', url: 'https://sketchfab.com/3d-models/low-poly-hongkong-taxi-52f3e00f0f2a4c4a894c3082639d4431' },
   { title: 'low-poly Toyota Corolla E80 Sedan', author: 'D_U', url: 'https://sketchfab.com/3d-models/low-poly-toyota-corolla-e80-sedan-6254cf268d9b46f79dd2a6511e153891' },
   { title: 'Daihatsu Move Conte (Low Poly)', author: 'NNXST', url: 'https://sketchfab.com/3d-models/daihatsu-move-conte-low-poly-eff914331c194de0abe20a33d2c3a2c3' },
   { title: 'Low Poly Car: Toyota ToyoAce Van', author: 'ROH3D', url: 'https://sketchfab.com/3d-models/low-poly-car-toyota-toyoace-van-b8abd3caa4864f41aaba6a583591155d' },

@@ -350,13 +350,14 @@ export function trafficGeometry(spec) {
     merged.push([src, geo]);
   }
   const axles = findAxles(all);
+  let tintBase = null; // the tinted material's own colour: the "original" traffic paint
   for (const [src, geo] of merged) {
     const mat = src.clone();
     // exports often leave everything fully metallic (glTF default): tame it so cars do not read as chrome
     if (!mat.metalnessMap) mat.metalness = Math.min(mat.metalness, 0.25);
     mat.roughness = Math.max(mat.roughness, 0.35);
     const tint = test(G.tint, src.name);
-    if (tint) mat.color.setRGB(1, 1, 1);
+    if (tint) { if (!tintBase) tintBase = mat.color.clone(); mat.color.setRGB(1, 1, 1); }
     const pieces = splitWheels(geo, axles);
     pieces.forEach((g, k) => { if (g) parts.push({ geo: g, mat, tint, axle: k - 1 }); });
   }
@@ -384,6 +385,7 @@ export function trafficGeometry(spec) {
     tail: [[hx, G.tailY, tz], [-hx, G.tailY, tz]],
     sign: null,
     halfL: T.L / 2, halfW: T.W / 2,
+    tintBase: tintBase || new THREE.Color(1, 1, 1),
     axles: axles.map(a => ({ y: a.r, z: a.z })),
     wheelR: axles.length ? axles.reduce((s, a) => s + a.r, 0) / axles.length : 0.3,
   };
