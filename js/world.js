@@ -865,7 +865,11 @@ export class World {
       const beamYaw = yaw;
       box(M.x, M.y + 7.7, M.z, span, 0.35, 0.35, beamYaw);
       box(M.x, M.y + 6.9, M.z, span, 0.2, 0.2, beamYaw);
-      const w = Math.min(span - 1.2, 9), h = vms ? 1.5 : 2.8;
+      panel(M, P, yaw, dir, Math.min(span - 1.2, 9), tex, vms);
+    };
+    // sign face hung from the beam at M, facing the drivers of `dir`, with a steel back
+    const panel = (M, P, yaw, dir, w, tex, vms) => {
+      const h = vms ? 1.5 : 2.8;
       const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: true });
       mat.color.setScalar(vms ? 1.8 : 0.85);
       const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
@@ -875,8 +879,23 @@ export class World {
       back.material = this.mats.steel;
       pl.position.set(M.x - P.tx * dir * 0.25, M.y + 7.4 + h / 2 - (vms ? 0.6 : 0.9), M.z - P.tz * dir * 0.25);
       back.position.set(M.x, pl.position.y, M.z);
-      back.rotation.y = pl.rotation.y + Math.PI;
+      // set the whole Euler: clone() re-derives it from the quaternion (as x = z = ±π for yaws past ±90°),
+      // so changing only .y would mirror the back and turn it askew toward the drivers
+      back.rotation.set(0, pl.rotation.y + Math.PI, 0);
       this.root.add(pl, back);
+    };
+    // loop gantry: legs on both parapets and on the median wall, one beam across both carriageways,
+    // each direction's sign over its own lanes (dir +1 drives on the negative offsets), backs to each other
+    const ringGantry = (s, faces) => {
+      for (const [g0, g1] of ring.medianGaps) if (s > g0 - 15 && s < g1 + 15) s = g1 + 25;
+      const P = ring.pointAt(s, 0);
+      if (ring.openL[P.i] || ring.openR[P.i] || P.y < 4.2) return false;
+      const yaw = Math.atan2(P.tx, P.tz), ext = ring.hw - 0.3;
+      for (const off of [-ext, 0, ext]) { const Q = ring.pointAt(s, off); box(Q.x, Q.y + 3.9, Q.z, 0.35, 7.8, 0.35, yaw); }
+      box(P.x, P.y + 7.7, P.z, ext * 2, 0.35, 0.35, yaw);
+      box(P.x, P.y + 6.9, P.z, ext * 2, 0.2, 0.2, yaw);
+      for (const f of faces) panel(ring.pointAt(s, -f.dir * ext / 2), P, yaw, f.dir, Math.min(ext - 1.2, 9), f.tex, f.vms);
+      return true;
     };
     const signs = [
       TX.signTexture([{ text: 'K1  環状線', size: 56 }, { text: 'Loop  ↑', size: 44 }]),
@@ -887,15 +906,25 @@ export class World {
     ];
     const vms = [TX.vmsTexture('夜間走行注意  ·  DRIVE SAFE'), TX.vmsTexture('K1 LOOP  10.5 km  ·  流れは順調'), TX.vmsTexture('ライト点灯  ·  LIGHTS ON')];
     const L = ring.len;
+    const dist = (a, b) => { const d = Math.abs(wrap(a - b, L)); return Math.min(d, L - d); };
+    // special signs (exits, parking area): each gets its own gantry, the other direction a regular sign
+    const specials = [];
+    for (const d of net.links.diverge) if (d.from === ring) specials.push({ s: wrap(d.s0 - d.dir * 700, L), dir: d.dir, tex: signs[1] });
+    if (net.pa) specials.push({ s: wrap(net.pa.sExit - 380, L), dir: 1, tex: TX.signTexture([{ text: '西PA  Nishi PA', size: 52 }, { text: 'P  Parking  ↗  400 m', size: 40 }]) });
     let k = 0;
-    for (let s = 150; s < L - 100; s += 700, k++) {
-      gantry(ring, s, 1, (k % 3 === 1) ? vms[k % vms.length] : signs[k % signs.length], k % 3 === 1);
-      gantry(ring, wrap(s + 350, L), -1, (k % 3 === 2) ? vms[(k + 1) % vms.length] : signs[(k + 2) % signs.length], k % 3 === 2);
+    const regular = dir => {
+      const c = k++;
+      const isVms = c % 3 === (dir > 0 ? 1 : 2);
+      return { dir, tex: isVms ? vms[c % vms.length] : signs[(c + (dir > 0 ? 0 : 2)) % signs.length], vms: isVms };
+    };
+    // regular sites every 700 m, dropped where a special sign stands within 250 m (no stacked signs)
+    for (let s = 150; s < L - 100; s += 700) {
+      if (specials.some(sp => dist(sp.s, s) < 250)) continue;
+      ringGantry(s, [regular(1), regular(-1)]);
     }
-    // parking area ahead
-    if (net.pa) gantry(ring, wrap(net.pa.sExit - 380, L), 1, TX.signTexture([{ text: '西PA  Nishi PA', size: 52 }, { text: 'P  Parking  ↗  400 m', size: 40 }]), false);
-    // exit signs before diverges
-    for (const d of net.links.diverge) gantry(d.from, wrap(d.s0 - d.dir * 700, d.from.len), d.dir, signs[1], false);
+    for (const sp of specials) ringGantry(sp.s, [{ dir: sp.dir, tex: sp.tex, vms: false }, regular(-sp.dir)]);
+    // exit signs on other roads (none today: every diverge leaves the loop)
+    for (const d of net.links.diverge) if (d.from !== ring) gantry(d.from, wrap(d.s0 - d.dir * 700, d.from.len), d.dir, signs[1], false);
     for (const r of net.ribbons) if (r.kind === 'link') { gantry(r, 400, 1, signs[4], false); gantry(r, r.len * 0.5, 1, vms[0], true); gantry(r, r.len - 500, 1, signs[0], false); }
     if (steel.length) this.root.add(new THREE.Mesh(mergeGeometries(steel), this.mats.steel));
   }
