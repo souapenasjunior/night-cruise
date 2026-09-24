@@ -273,26 +273,33 @@ export function buildNetwork() {
     const l = Math.hypot(tx, tz);
     tx /= l; tz /= l;
     const rX = -tz, rZ = tx;
-    deckPlus.push(new THREE.Vector3(cpts[i].x - rX * 9, cpts[i].y, cpts[i].z - rZ * 9));
-    deckMinus.push(new THREE.Vector3(cpts[i].x + rX * 9, cpts[i].y, cpts[i].z + rZ * 9));
+    // the two roadways run 18 m apart mid-deck, wider (26 m) where the ramps swing in, so the
+    // opposite carriageways never touch (they overlapped by up to 4.5 m, with no parapet between)
+    const e = Math.min(i, cpts.length - 1 - i), D = e <= 2 ? 13 : e === 3 ? 11 : 9;
+    deckPlus.push(new THREE.Vector3(cpts[i].x - rX * D, cpts[i].y, cpts[i].z - rZ * D));
+    deckMinus.push(new THREE.Vector3(cpts[i].x + rX * D, cpts[i].y, cpts[i].z + rZ * D));
   }
-  // points running alongside the loop; with 	aperTo, the lane narrows into the loop over the last points
-  // (an acceleration lane that merges instead of ending in a wall)
-  const par = (s0, dir, off, count = 6, step = 30, taperTo = null) => {
+  // points running alongside the loop. taperTo: an acceleration lane that slides into the loop over
+  // the last points; taperFrom: a deceleration lane that starts inside the loop and slides out over
+  // the first points. Either way the ramp's end lies entirely on the loop's pavement, its two lanes
+  // on the loop's two outer lanes, so nothing ends in a wall.
+  const par = (s0, dir, off, count = 6, step = 30, taperTo = null, taperFrom = null) => {
     const out = [];
+    const smooth = t => t * t * (3 - 2 * t);
     for (let k = 0; k < count; k++) {
       const s = S(s0 + dir * k * step);
       let o = off;
-      if (taperTo !== null && k >= 2) { const t = (k - 2) / (count - 3); o = lerp(off, taperTo, t * t * (3 - 2 * t)); }
+      if (taperTo !== null && k >= 2) o = lerp(off, taperTo, smooth((k - 2) / (count - 3)));
+      if (taperFrom !== null && k <= count - 3) o = lerp(taperFrom, off, smooth(k / (count - 3)));
       out.push(rp(s, o, ringY(s)));
     }
     return out;
   };
-  const merged = RING_HW - RAMP_HW + 1.2;
+  const merged = RING_HW - RAMP_HW; // ramp centre when fully on the loop: its lanes = the loop's two outer lanes
 
   // C+ : leaves dir+ at A (interior side), crosses the city, merges into dir+ at B
   const cPlusPts = [
-    ...par(sA, 1, -side),
+    ...par(sA, 1, -side, 6, 30, null, -merged),
     rp(S(sA + 215), -24, ringY(S(sA + 215)) + 0.3),
     rp(S(sA + 330), -60, ringY(S(sA + 330)) + 1),
     rp(S(sA + 560), -160, 14),
@@ -306,7 +313,7 @@ export function buildNetwork() {
   const yb = ringY(S(sB - 500));
   const ya = ringY(S(sA + 650));
   const cMinusPts = [
-    ...par(S(sB - 350), -1, side),
+    ...par(S(sB - 350), -1, side, 6, 30, null, merged),
     rp(S(sB - 565), side + 10, yb - 1.2),
     rp(S(sB - 640), 70, yb - 4.5),
     rp(S(sB - 725), 92, 6.5),
@@ -338,9 +345,9 @@ export function buildNetwork() {
   const paRoad = net.add(new Ribbon({
     name: 'pa', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
     points: [
-      ...par(sP, 1, -side, 3, 30),
-      rp(S(sP + 120), -27), rp(S(sP + 170), -44),
-      rp(S(sP + 215), -PA_D), rp(S(sP + 250), -PA_D), rp(S(sP + 280), -PA_D), rp(S(sP + 310), -PA_D), rp(S(sP + 345), -PA_D),
+      ...par(sP, 1, -side, 5, 30, null, -merged),
+      rp(S(sP + 165), -30), rp(S(sP + 200), -46),
+      rp(S(sP + 235), -PA_D), rp(S(sP + 250), -PA_D), rp(S(sP + 280), -PA_D), rp(S(sP + 310), -PA_D), rp(S(sP + 345), -PA_D),
       rp(S(sP + 390), -44), rp(S(sP + 440), -27),
       ...par(S(sP + 500), 1, -side, 7, 30, -merged),
     ],

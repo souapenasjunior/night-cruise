@@ -320,7 +320,7 @@ export class World {
       glow: TX.radialTexture(64),
     };
     this.mats = {
-      ring: new THREE.MeshStandardMaterial({ map: this.tex.ring, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.25 }),
+      ring: new THREE.MeshStandardMaterial({ map: this.tex.ring, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
       link: new THREE.MeshStandardMaterial({ map: this.tex.link, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.25 }),
       // bays overlap the access road by 1 m: draw on top there instead of z-fighting
       lot: new THREE.MeshStandardMaterial({ map: this.tex.lot, roughness: 0.84, metalness: 0.0, envMapIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
@@ -426,9 +426,11 @@ export class World {
     const openL = new Uint8Array(r.n), openR = new Uint8Array(r.n);
     for (let i = 0; i < r.n; i++) {
       for (const sg of [-1, 1]) {
-        const off = sg * (hw + 1.2);
+        // same test as the car's wall check (probe ~0.5 m past the edge, 1.5 m height tolerance),
+        // so a parapet stands exactly where the physics has a wall and nowhere else
+        const off = sg * (hw + 0.5);
         const x = r.px[i] - r.tz[i] * off, z = r.pz[i] + r.tx[i] * off;
-        net.surfacesAt(x, z, r.py[i], 1.2, 0, res);
+        net.surfacesAt(x, z, r.py[i], 1.5, 0, res);
         const other = res.some(q => q.r !== r);
         if (other) (sg < 0 ? openL : openR)[i] = 1;
       }
@@ -450,7 +452,17 @@ export class World {
     const grow = rg => rg.map(([i0, c]) => (r.closed || i0 > 0) && c < r.n ? [r.closed ? (i0 - 1 + r.n) % r.n : i0 - 1, c + 1] : [i0, c]);
     // surface
     const all = [[0, r.closed ? r.n + 1 : r.n]];
-    const road = sweep(r, [[-hw, 0.0], [hw, 0.0]], all, { uScale: 20, vScale: 1 });
+    // where a ramp lies on the loop, keep its surface just under the loop's: the two splines differ by
+    // a few cm, which showed as a lip and the ramp's lane lines printed over the loop's
+    const sink = new Float32Array(r.n);
+    if (!isRing && net.ring) for (let i = 0; i < r.n; i++) {
+      for (const o of [-hw + 0.3, 0, hw - 0.3]) {
+        net.surfacesAt(r.px[i] - r.tz[i] * o, r.pz[i] + r.tx[i] * o, r.py[i], 1.0, 0, res);
+        const q = res.find(q2 => q2.r === net.ring);
+        if (q) sink[i] = Math.max(-0.12, Math.min(sink[i], q.y - r.py[i] - 0.02));
+      }
+    }
+    const road = sweep(r, [[-hw, i => sink[i]], [hw, i => sink[i]]], all, { uScale: 20, vScale: 1 });
     // fix UVs: u across road
     const uvs = road.attributes.uv;
     for (let k = 0; k < uvs.count; k += 2) {
@@ -1098,14 +1110,15 @@ export class World {
         if (Math.hypot(x - 1000, z - 900) < 90) continue;
         const industrial = x < -1450 && z > 500;
         const w = industrial ? 30 + R() * 40 : 16 + R() * 26, d = industrial ? 24 + R() * 30 : 16 + R() * 26;
-        if (!net.clearance(x, z, Math.max(w, d) * 0.72 + 9, r => r.pa)) continue;
-        const onPA = !net.clearance(x, z, Math.max(w, d) * 0.72 + 9, r => !r.pa);
-        if (R() < 0.12) continue;
-        let h = industrial ? 10 + R() * 14 : heightAt(x, z);
-        const seed = R();
-        const tint = industrial ? [0.35, 0.3, 0.25] : [[0.5, 0.55, 0.7], [0.6, 0.5, 0.45], [0.45, 0.6, 0.65], [0.7, 0.65, 0.6], [0.4, 0.45, 0.55]][Math.floor(R() * 5)];
-        if (!onPA) inst.push({ x, z, w, d, h, seed, tint });
-        if (h > 60 && R() < 0.35 && !onPA) inst.push({ x, z, w: w * 0.6, d: d * 0.6, h: h + 10 + R() * 25, seed: R(), tint });
+        // draw everything first (a fixed count per cell), decide afterwards
+        const gapCell = R() < 0.12;
+        const hRand = industrial ? 10 + R() * 14 : heightAt(x, z);
+        const seed = R(), tintR = R(), towerR = R(), towerH = R(), towerSeed = R();
+        if (!net.clearance(x, z, Math.max(w, d) * 0.72 + 9) || gapCell) continue;
+        const h = hRand;
+        const tint = industrial ? [0.35, 0.3, 0.25] : [[0.5, 0.55, 0.7], [0.6, 0.5, 0.45], [0.45, 0.6, 0.65], [0.7, 0.65, 0.6], [0.4, 0.45, 0.55]][Math.floor(tintR * 5)];
+        inst.push({ x, z, w, d, h, seed, tint });
+        if (h > 60 && towerR < 0.35) inst.push({ x, z, w: w * 0.6, d: d * 0.6, h: h + 10 + towerH * 25, seed: towerSeed, tint });
       }
     }
     const g = new THREE.BoxGeometry(1, 1, 1);
