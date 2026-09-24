@@ -336,7 +336,7 @@ export function buildNetwork() {
   // 0.8 to the aisle, 1.0 overlapping the access road
   const PA_D = 56, LOT_HW = 5.3, LOT_LEN = 52, WALK = 3.2;
   const paRoad = net.add(new Ribbon({
-    name: 'pa', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] },
+    name: 'pa', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
     points: [
       ...par(sP, 1, -side, 3, 30),
       rp(S(sP + 120), -27), rp(S(sP + 170), -44),

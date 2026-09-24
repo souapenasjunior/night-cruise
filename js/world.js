@@ -325,6 +325,8 @@ export class World {
       // bays overlap the access road by 1 m: draw on top there instead of z-fighting
       lot: new THREE.MeshStandardMaterial({ map: this.tex.lot, roughness: 0.84, metalness: 0.0, envMapIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
       paint: new THREE.MeshStandardMaterial({ color: 0xd9d8cf, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 }),
+      // gore infill reads as more road surface (plain asphalt, like the bays)
+      gore: new THREE.MeshStandardMaterial({ map: this.tex.lot, roughness: 0.84, metalness: 0.0, envMapIntensity: 0.25, side: THREE.DoubleSide }),
       walk: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x7d7e84, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
       concrete: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x9a9aa0, roughness: 0.85, side: THREE.DoubleSide }),
       deck: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x6c6d74, roughness: 0.9, side: THREE.DoubleSide }),
@@ -346,6 +348,7 @@ export class World {
       this.tex[k] = TX.roadTexture(k === 'ring' ? TX.RING_ROAD : k === 'lot' ? TX.LOT_ROAD : TX.LINK_ROAD, texQ, this.aniso);
       this.mats[k].map = this.tex[k];
       this.mats[k].needsUpdate = true;
+      if (k === 'lot') { this.mats.gore.map = this.tex.lot; this.mats.gore.needsUpdate = true; }
       old.dispose();
     }
   }
@@ -431,6 +434,20 @@ export class World {
       }
     }
     r.openL = openL; r.openR = openR;
+    // distance from each edge to the nearest other deck at the same level (Infinity: none within 2.6 m)
+    const gapL = new Float32Array(r.n).fill(Infinity), gapR = new Float32Array(r.n).fill(Infinity);
+    for (let i = 0; i < r.n; i++) {
+      for (const sg of [-1, 1]) {
+        for (let t = 0.2; t <= 2.61; t += 0.4) {
+          const off = sg * (hw + t);
+          net.surfacesAt(r.px[i] - r.tz[i] * off, r.pz[i] + r.tx[i] * off, r.py[i], 1.2, 0, res);
+          if (res.some(q => q.r !== r)) { (sg < 0 ? gapL : gapR)[i] = t; break; }
+        }
+      }
+    }
+    // ranges grown by one sample in front (rangesWhere already runs one sample past the end), so
+    // profiles can taper to nothing over that sample instead of stopping with a cut
+    const grow = rg => rg.map(([i0, c]) => (r.closed || i0 > 0) && c < r.n ? [r.closed ? (i0 - 1 + r.n) % r.n : i0 - 1, c + 1] : [i0, c]);
     // surface
     const all = [[0, r.closed ? r.n + 1 : r.n]];
     const road = sweep(r, [[-hw, 0.0], [hw, 0.0]], all, { uScale: 20, vScale: 1 });
@@ -456,15 +473,26 @@ export class World {
     // parapets
     for (const sg of [-1, 1]) {
       const open = sg < 0 ? openL : openR;
-      const rg = rangesWhere(r, i => !open[i] && !tunnelPred(i));
+      const gap = sg < 0 ? gapL : gapR;
+      // where another deck continues past this edge (a ramp peeling off or joining), the parapet
+      // ramps down to the deck over one sample, like the sloped end of a concrete barrier
+      const h = i => (open[i] ? 0 : 1);
+      const rg = grow(rangesWhere(r, i => !open[i] && !tunnelPred(i)));
       const o0 = sg * (hw - 0.4), o1 = sg * hw;
-      const g = sweep(r, [[o0, 0], [o0, 1.05], [o1, 1.05], [o1, 0]], rg, { uScale: 6, vScale: 3 });
+      const g = sweep(r, [[o0, 0], [o0, i => 1.05 * h(i)], [o1, i => 1.05 * h(i)], [o1, 0]], rg, { uScale: 6, vScale: 3 });
       if (g) this.root.add(new THREE.Mesh(g, this.mats.concrete));
-      const rail = sweep(r, [[sg * (hw - 0.3), 1.05], [sg * (hw - 0.3), 1.3], [sg * (hw - 0.1), 1.3], [sg * (hw - 0.1), 1.05]], rg, { uScale: 6, vScale: 3 });
+      const rail = sweep(r, [[sg * (hw - 0.3), i => 1.05 * h(i)], [sg * (hw - 0.3), i => 1.3 * h(i)], [sg * (hw - 0.1), i => 1.3 * h(i)], [sg * (hw - 0.1), i => 1.05 * h(i)]], rg, { uScale: 6, vScale: 3 });
       if (rail) this.root.add(new THREE.Mesh(rail, this.mats.rail));
+      // gore infill: where the decks part, the narrow V between them is floored (just below the
+      // neighbour's surface, so it never z-fights) and closed underneath, until the gap opens up
+      const fw = i => (Number.isFinite(gap[i]) ? Math.min(gap[i] + 0.4, 3.0) : 0);
+      const fr = grow(rangesWhere(r, i => Number.isFinite(gap[i]) && !tunnelPred(i)));
+      const fill = sweep(r, [[sg * hw, -0.03], [i => sg * (hw + fw(i)), -0.03], [i => sg * (hw + fw(i)), bottom], [sg * hw, bottom]], fr, { uScale: 8, vScale: 8 });
+      if (fill) this.root.add(new THREE.Mesh(fill, this.mats.gore));
       // sound walls downtown
       const swPred = i => !open[i] && !tunnelPred(i) && this._soundWallAt(r, i);
-      const sw = rangesWhere(r, swPred);
+      // (drop the trailing sample rangesWhere adds, so the glass stops square instead of leaning over the opening)
+      const sw = rangesWhere(r, swPred).map(([i0, c]) => (c > 2 && c < r.n ? [i0, c - 1] : [i0, c]));
       const wg = sweep(r, [[sg * (hw - 0.15), 1.3], [sg * (hw - 0.15), 4.2], [sg * (hw - 0.9), 5.0]], sw, { uScale: 6, vScale: 3 });
       if (wg) {
         const m = new THREE.Mesh(wg, this.mats.soundwall);
@@ -547,10 +575,13 @@ export class World {
     const walls = [];
     const inner = -r.outer * (r.hw - 1.0); // where the access road begins
     const w = Math.abs(r.outer * r.hw - inner), c = (r.outer * r.hw + inner) / 2;
+    const rails = [];
     for (const sEnd of [0.2, r.len - 0.2]) {
       walls.push(put(new THREE.BoxGeometry(w, 1.05 + 1.8, 0.4), sEnd, c, (1.05 - 1.8) / 2));
+      rails.push(put(new THREE.BoxGeometry(w, 0.25, 0.2), sEnd, c, 1.175));
     }
     this.root.add(new THREE.Mesh(mergeGeometries(walls), this.mats.concrete));
+    this.root.add(new THREE.Mesh(mergeGeometries(rails), this.mats.rail));
   }
 
   _soundWallAt(r, i) {
