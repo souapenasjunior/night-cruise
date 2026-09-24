@@ -77,6 +77,8 @@ export function roadTexture(spec, q = 1, aniso = 8) {
 
 export const RING_ROAD = { hw: 13.9, period: 20, median: 1.1, edge: 11.9, lanes: [-2.9, -6.5, -10.1, 2.9, 6.5, 10.1], solid: [-11.9, 11.9], yellow: [-1.1, 1.1], dashed: [-4.7, -8.3, 4.7, 8.3] };
 export const LINK_ROAD = { hw: 5.6, period: 20, median: 0, edge: 3.6, lanes: [-1.8, 1.8], solid: [-3.6, 3.6], dashed: [0] };
+// parking bays: plain asphalt, the stall lines are separate geometry
+export const LOT_ROAD = { hw: 3.6, period: 20, median: 0, edge: 3.6, lanes: [], solid: [], dashed: [] };
 
 export function radialTexture(size = 128, stops = [[0, 'rgba(255,255,255,1)'], [0.25, 'rgba(255,255,255,0.55)'], [1, 'rgba(255,255,255,0)']]) {
   const c = makeCanvas(size, size), g = c.getContext('2d');

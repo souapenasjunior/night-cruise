@@ -192,7 +192,8 @@ export class Network {
     return out;
   }
   // Minimum horizontal distance to any ribbon edge-ish (used for placement clearance); ignores height.
-  clearance(x, z, margin) {
+  // `skip(r)` leaves ribbons out of the test.
+  clearance(x, z, margin, skip = null) {
     const c = this.cell;
     const r0 = Math.ceil(margin / c);
     const gx = Math.floor(x / c), gz = Math.floor(z / c);
@@ -203,6 +204,7 @@ export class Network {
       for (const code of list) {
         const rid = Math.floor(code / 1000000), i = code - rid * 1000000;
         const r = this.ribbons[rid];
+        if (skip && skip(r)) continue;
         r.segProject(i, x, z, tmp);
         if (tmp.dist < r.hw + margin) return false;
       }
@@ -325,6 +327,53 @@ export function buildNetwork() {
   const cPlus = net.add(new Ribbon({ name: 'c2e', label: 'C2', hw: RAMP_HW, kind: 'link', points: cPlusPts, lanes: { 1: [1.8, -1.8] } }));
   const cMinus = net.add(new Ribbon({ name: 'c2w', label: 'C2', hw: RAMP_HW, kind: 'link', points: cMinusPts, lanes: { 1: [1.8, -1.8] } }));
 
+  // Nishi PA: a parking area off the loop on the dir+ (interior) side, between Nishi Straight and
+  // Minato Bayside, where the loop is elevated, flat and gently curved. A deceleration lane peels off,
+  // the access road runs 56 m inside the loop with a parking bay on each side (cars back into the
+  // stalls, facing the aisle), and an acceleration lane merges back like the C2 ramps do.
+  const sP = S(sA + 1060);
+  // bay cross-section from the back: parapet 0.4, walkway 3.2 (keeps the chase camera inside), stall 5.2,
+  // 0.8 to the aisle, 1.0 overlapping the access road
+  const PA_D = 56, LOT_HW = 5.3, LOT_LEN = 52, WALK = 3.2;
+  const paRoad = net.add(new Ribbon({
+    name: 'pa', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] },
+    points: [
+      ...par(sP, 1, -side, 3, 30),
+      rp(S(sP + 120), -27), rp(S(sP + 170), -44),
+      rp(S(sP + 215), -PA_D), rp(S(sP + 250), -PA_D), rp(S(sP + 280), -PA_D), rp(S(sP + 310), -PA_D), rp(S(sP + 345), -PA_D),
+      rp(S(sP + 390), -44), rp(S(sP + 440), -27),
+      ...par(S(sP + 500), 1, -side, 7, 30, -merged),
+    ],
+  }));
+  paRoad.pa = true;
+  // the bays overlap the access road by 1 m, so the edge between them is open (no parapet, drive straight in)
+  const lots = [-1, 1].map(k => {
+    const off = -PA_D + k * (RAMP_HW + LOT_HW - 1);
+    const pts = [];
+    for (let d = -LOT_LEN / 2; d <= LOT_LEN / 2 + 0.01; d += LOT_LEN / 4) pts.push(rp(S(sP + 280 + d), off));
+    const lot = net.add(new Ribbon({ name: 'lot', label: 'PA', hw: LOT_HW, kind: 'lot', lanes: { 1: [0] }, points: pts, step: 2 }));
+    lot.pa = true;
+    lot.outer = k; // lateral side away from the aisle: the stalls' back wall
+    return lot;
+  });
+  // stalls: 2.9 m wide, 5.2 m deep from the back parapet; the car stands in the middle, nose to the aisle
+  const STALL_W = 2.9, STALL_D = 5.2;
+  const slots = [];
+  const perLot = lots.map(lot => {
+    const n = Math.floor((lot.len - 3) / STALL_W);
+    const s0 = (lot.len - n * STALL_W) / 2;
+    const wall = lot.outer * (LOT_HW - 0.4), back = wall - lot.outer * WALK;
+    return { lot, n, s0, wall, back, front: back - lot.outer * STALL_D };
+  });
+  // fill order: the bay away from the loop first, then alternate, from the entry end
+  for (let k = 0; k < Math.max(...perLot.map(p => p.n)); k++) {
+    for (const p of [perLot[0], perLot[1]]) {
+      if (k >= p.n) continue;
+      slots.push({ rib: p.lot, s: p.s0 + (k + 0.5) * STALL_W, off: p.back - p.lot.outer * STALL_D / 2, face: -p.lot.outer });
+    }
+  }
+  net.pa = { road: paRoad, lots, slots, bays: perLot, stallW: STALL_W, stallD: STALL_D, sExit: sP };
+
   // median U-turn gaps
   const g1 = nearestS(1350, -985), g2 = nearestS(-1150, 1130);
   ring.medianGaps = [[g1 - 25, g1 + 25], [g2 - 25, g2 + 25]];
@@ -355,6 +404,7 @@ export function buildNetwork() {
     { r: ring, s: zone(-1900, 200), name: 'Nishi Straight', jp: '西ストレート' },
     { r: cPlus, s: 250, name: 'C2 Central Link', jp: '中央連絡線' },
     { r: cMinus, s: 400, name: 'C2 Central Link', jp: '中央連絡線' },
+    { r: paRoad, s: paRoad.len / 2, name: 'Nishi PA', jp: '西パーキング' },
   ];
 
   net.buildGrid();

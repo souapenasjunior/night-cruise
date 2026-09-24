@@ -128,7 +128,8 @@ export class Traffic {
     this._v = new THREE.Vector3();
     this._s = new THREE.Vector3(1, 1, 1);
     this._c = new THREE.Color();
-    this.ribWeights = net.ribbons.map(r => r.len * (r.kind === 'ring' ? 2 : 1));
+    // no AI traffic in the parking area (road or bays)
+    this.ribWeights = net.ribbons.map(r => r.pa ? 0 : r.len * (r.kind === 'ring' ? 2 : 1));
   }
 
   setCounts(count, cruisers) {

@@ -313,6 +313,7 @@ export class World {
     this.tex = {
       ring: TX.roadTexture(TX.RING_ROAD, texQ, this.aniso),
       link: TX.roadTexture(TX.LINK_ROAD, texQ, this.aniso),
+      lot: TX.roadTexture(TX.LOT_ROAD, texQ, this.aniso),
       concrete: TX.concreteTexture(),
       tunnel: TX.tunnelTexture(),
       pool: TX.poolTexture(),
@@ -321,6 +322,10 @@ export class World {
     this.mats = {
       ring: new THREE.MeshStandardMaterial({ map: this.tex.ring, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.25 }),
       link: new THREE.MeshStandardMaterial({ map: this.tex.link, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.25 }),
+      // bays overlap the access road by 1 m: draw on top there instead of z-fighting
+      lot: new THREE.MeshStandardMaterial({ map: this.tex.lot, roughness: 0.84, metalness: 0.0, envMapIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+      paint: new THREE.MeshStandardMaterial({ color: 0xd9d8cf, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 }),
+      walk: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x7d7e84, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
       concrete: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x9a9aa0, roughness: 0.85, side: THREE.DoubleSide }),
       deck: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x6c6d74, roughness: 0.9, side: THREE.DoubleSide }),
       rail: new THREE.MeshStandardMaterial({ color: 0xb8bcc4, roughness: 0.5, metalness: 0.8, side: THREE.DoubleSide }),
@@ -336,9 +341,9 @@ export class World {
   setTextureQuality(level) {
     const texQ = { low: 0.5, medium: 0.75, high: 1 }[level] || 1;
     this.aniso = level === 'low' ? 1 : level === 'medium' ? 4 : 8;
-    for (const k of ['ring', 'link']) {
+    for (const k of ['ring', 'link', 'lot']) {
       const old = this.tex[k];
-      this.tex[k] = TX.roadTexture(k === 'ring' ? TX.RING_ROAD : TX.LINK_ROAD, texQ, this.aniso);
+      this.tex[k] = TX.roadTexture(k === 'ring' ? TX.RING_ROAD : k === 'lot' ? TX.LOT_ROAD : TX.LINK_ROAD, texQ, this.aniso);
       this.mats[k].map = this.tex[k];
       this.mats[k].needsUpdate = true;
       old.dispose();
@@ -436,7 +441,7 @@ export class World {
       uvs.setXY(k, 0, vAlong);
       uvs.setXY(k + 1, 1, vAlong);
     }
-    const roadMesh = new THREE.Mesh(road, isRing ? this.mats.ring : this.mats.link);
+    const roadMesh = new THREE.Mesh(road, isRing ? this.mats.ring : r.kind === 'lot' ? this.mats.lot : this.mats.link);
     roadMesh.receiveShadow = true;
     this.root.add(roadMesh);
     // deck sides + underside (height-dependent)
@@ -505,6 +510,47 @@ export class World {
       void i1;
     }
     // (no crash cushions: links blend straight into the loop, so their ends are live lanes)
+    if (r.kind === 'lot') this._lotDressing(r);
+  }
+
+  // parking bay: stall lines and the walls closing both ends (the aisle side stays open)
+  _lotDressing(r) {
+    const bay = this.net.pa.bays.find(b => b.lot === r);
+    const geos = [];
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+    const put = (g, s, off, dy, yawAdd = 0) => {
+      const P = r.pointAt(s, off);
+      e.set(0, Math.atan2(P.tx, P.tz) + yawAdd, 0); q.setFromEuler(e);
+      m4.compose(new THREE.Vector3(P.x, P.y + dy, P.z), q, new THREE.Vector3(1, 1, 1));
+      g.applyMatrix4(m4);
+      return g.toNonIndexed();
+    };
+    const mid = (bay.back + bay.front) / 2, D = Math.abs(bay.back - bay.front);
+    // dividers (across the bay) between stalls, plus the ends
+    for (let k = 0; k <= bay.n; k++) {
+      const g = new THREE.PlaneGeometry(D, 0.13); g.rotateX(-Math.PI / 2);
+      geos.push(put(g, bay.s0 + k * this.net.pa.stallW, mid, 0.012));
+    }
+    // front line along the stall mouths
+    const span = bay.n * this.net.pa.stallW;
+    const fl = new THREE.PlaneGeometry(0.13, span); fl.rotateX(-Math.PI / 2);
+    geos.push(put(fl, bay.s0 + span / 2, bay.front, 0.012));
+    this.root.add(new THREE.Mesh(mergeGeometries(geos), this.mats.paint));
+    // walkway behind the stalls: lighter concrete, with a curb line where the stalls begin
+    const ww = Math.abs(bay.wall - bay.back);
+    const walk = new THREE.PlaneGeometry(ww, r.len - 0.8); walk.rotateX(-Math.PI / 2);
+    const wm = new THREE.Mesh(put(walk, r.len / 2, (bay.wall + bay.back) / 2, 0.01), this.mats.walk);
+    this.root.add(wm);
+    const curb = new THREE.PlaneGeometry(0.18, r.len - 0.8); curb.rotateX(-Math.PI / 2);
+    this.root.add(new THREE.Mesh(put(curb, r.len / 2, bay.back, 0.014), this.mats.paint));
+    // end walls: parapet + a face down to the deck underside, from the back wall to the aisle edge
+    const walls = [];
+    const inner = -r.outer * (r.hw - 1.0); // where the access road begins
+    const w = Math.abs(r.outer * r.hw - inner), c = (r.outer * r.hw + inner) / 2;
+    for (const sEnd of [0.2, r.len - 0.2]) {
+      walls.push(put(new THREE.BoxGeometry(w, 1.05 + 1.8, 0.4), sEnd, c, (1.05 - 1.8) / 2));
+    }
+    this.root.add(new THREE.Mesh(mergeGeometries(walls), this.mats.concrete));
   }
 
   _soundWallAt(r, i) {
@@ -656,12 +702,12 @@ export class World {
     const poles = [], heads = [];
     const e = new THREE.Euler(), q = new THREE.Quaternion(), m4 = new THREE.Matrix4();
     for (const r of this.net.ribbons) {
-      const spacing = r.kind === 'ring' ? 25 : 45;
+      const spacing = r.kind === 'ring' ? 25 : r.kind === 'lot' ? 13 : 45;
       const step = Math.max(1, Math.round(spacing / r.ds));
       let k = 0;
       for (let i = 0; i < r.n; i += step, k++) {
         if (r.kind === 'ring' && r.py[i] < 4.2) continue;
-        const sg = r.kind === 'ring' ? (k % 2 ? 1 : -1) : (k % 2 ? 1 : -1);
+        const sg = r.kind === 'lot' ? r.outer : (k % 2 ? 1 : -1);
         if ((sg < 0 ? r.openL : r.openR)[i]) continue;
         const x0 = r.px[i], z0 = r.pz[i];
         const white = r.kind !== 'ring' || x0 > -300 || r.py[i] > 20;
@@ -803,6 +849,8 @@ export class World {
       gantry(ring, s, 1, (k % 3 === 1) ? vms[k % vms.length] : signs[k % signs.length], k % 3 === 1);
       gantry(ring, wrap(s + 350, L), -1, (k % 3 === 2) ? vms[(k + 1) % vms.length] : signs[(k + 2) % signs.length], k % 3 === 2);
     }
+    // parking area ahead
+    if (net.pa) gantry(ring, wrap(net.pa.sExit - 380, L), 1, TX.signTexture([{ text: '西PA  Nishi PA', size: 52 }, { text: 'P  Parking  ↗  400 m', size: 40 }]), false);
     // exit signs before diverges
     for (const d of net.links.diverge) gantry(d.from, wrap(d.s0 - d.dir * 700, d.from.len), d.dir, signs[1], false);
     for (const r of net.ribbons) if (r.kind === 'link') { gantry(r, 400, 1, signs[4], false); gantry(r, r.len * 0.5, 1, vms[0], true); gantry(r, r.len - 500, 1, signs[0], false); }
@@ -1019,13 +1067,14 @@ export class World {
         if (Math.hypot(x - 1000, z - 900) < 90) continue;
         const industrial = x < -1450 && z > 500;
         const w = industrial ? 30 + R() * 40 : 16 + R() * 26, d = industrial ? 24 + R() * 30 : 16 + R() * 26;
-        if (!net.clearance(x, z, Math.max(w, d) * 0.72 + 9)) continue;
+        if (!net.clearance(x, z, Math.max(w, d) * 0.72 + 9, r => r.pa)) continue;
+        const onPA = !net.clearance(x, z, Math.max(w, d) * 0.72 + 9, r => !r.pa);
         if (R() < 0.12) continue;
         let h = industrial ? 10 + R() * 14 : heightAt(x, z);
         const seed = R();
         const tint = industrial ? [0.35, 0.3, 0.25] : [[0.5, 0.55, 0.7], [0.6, 0.5, 0.45], [0.45, 0.6, 0.65], [0.7, 0.65, 0.6], [0.4, 0.45, 0.55]][Math.floor(R() * 5)];
-        inst.push({ x, z, w, d, h, seed, tint });
-        if (h > 60 && R() < 0.35) inst.push({ x, z, w: w * 0.6, d: d * 0.6, h: h + 10 + R() * 25, seed: R(), tint });
+        if (!onPA) inst.push({ x, z, w, d, h, seed, tint });
+        if (h > 60 && R() < 0.35 && !onPA) inst.push({ x, z, w: w * 0.6, d: d * 0.6, h: h + 10 + R() * 25, seed: R(), tint });
       }
     }
     const g = new THREE.BoxGeometry(1, 1, 1);

@@ -531,6 +531,22 @@ $('p-reset').onclick = () => { player.reset(); rig.snapNext = true; resumeGame()
 $('p-settings').onclick = () => openSettings();
 $('p-title').onclick = () => goTitle();
 
+// Nishi PA: park the player in stall k, backed in and facing the aisle
+// (online: everyone who joins gets the next free stall, in the order of net.pa.slots)
+function parkAtSlot(k) {
+  const sl = net.pa && net.pa.slots[k];
+  if (!player || !sl) return false;
+  player.place(sl.rib, sl.s, sl.off, 1);
+  const P = sl.rib.pointAt(sl.s, sl.off);
+  player.yaw = Math.atan2(-P.tz * sl.face, P.tx * sl.face);
+  player.lastGood = { rib: sl.rib, s: sl.s, off: sl.off, dir: 1 };
+  player._sync(0);
+  // nobody else's car on the spot
+  for (const a of traffic.agents) if (a.active && Math.hypot(a.x - player.pos.x, a.z - player.pos.z) < 30) traffic._despawn(a);
+  rig.snapNext = true;
+  return true;
+}
+
 // drive
 function startDrive() {
   const spec = HERO_SPECS[selIndex];
@@ -1058,7 +1074,7 @@ async function boot() {
       scene, net, world, traffic, get player() { return player; }, camera, renderer, S, input, applySettings, openSettings, composer, bloom, audio,
       get state() { return state; },
       step(n = 1, ms = 16.7) { for (let i = 0; i < n; i++) { fake = Math.max(fake + ms, performance.now()); tick(fake); } },
-      startDrive: () => startDrive(), goSelect: () => goSelect(),
+      startDrive: () => startDrive(), goSelect: () => goSelect(), parkAtSlot,
     };
   }
 }
