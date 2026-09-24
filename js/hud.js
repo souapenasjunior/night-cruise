@@ -1,5 +1,6 @@
 // HUD: speedometer, minimap, indicators, route sign and toasts.
 import { clamp, wrapDelta } from './util.js';
+import { drawParkingBadge, PA_ROAD, PA_BAY } from './map.js';
 import { keyName, PAD_LABELS } from './input.js';
 
 const ARC_LEN = 251; // path length of the gauge arc in the SVG
@@ -27,6 +28,10 @@ export class Hud {
       if (r.closed) p.closePath();
       return p;
     });
+    if (net.pa) {
+      const a = net.pa.lots[0].pointAt(net.pa.lots[0].len / 2, 0), b = net.pa.lots[1].pointAt(net.pa.lots[1].len / 2, 0);
+      this.paCenter = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    }
     this.lastZone = null;
     this.zoneT = 0;
     this.toastT = 0;
@@ -130,12 +135,28 @@ export class Hud {
     const order = this.net.ribbons.map((r, i) => i).sort((a, b) => (this.net.ribbons[a].kind === 'ring' ? 1 : 0) - (this.net.ribbons[b].kind === 'ring' ? 1 : 0));
     for (const i of order) {
       const r = this.net.ribbons[i];
+      // widths are exaggerated for legibility; the parking bays keep their real width (square ends)
+      const w = r.kind === 'ring' ? 44 : r.kind === 'lot' ? r.hw * 2 : 26;
+      c.lineCap = r.kind === 'lot' ? 'butt' : 'round';
       c.strokeStyle = 'rgba(4,6,12,0.95)';
-      c.lineWidth = (r.kind === 'ring' ? 44 : 26) + 18;
+      c.lineWidth = w + 18;
       c.stroke(this.paths[i]);
-      c.strokeStyle = r.kind === 'ring' ? 'rgba(206,214,232,0.9)' : 'rgba(255,190,110,0.85)';
-      c.lineWidth = r.kind === 'ring' ? 44 : 26;
+      c.strokeStyle = r.kind === 'ring' ? 'rgba(206,214,232,0.9)' : r.kind === 'lot' ? PA_BAY : r.kind === 'pa' ? PA_ROAD : 'rgba(255,190,110,0.85)';
+      c.lineWidth = w;
       c.stroke(this.paths[i]);
+      c.lineCap = 'round';
+    }
+    // parking area badge (counter-rotated so the P stays upright)
+    if (this.paCenter) {
+      const dx = this.paCenter.x - player.pos.x, dz = this.paCenter.z - player.pos.z;
+      if (dx * dx + dz * dz < 900 * 900) {
+        c.save();
+        c.translate(this.paCenter.x, this.paCenter.z);
+        c.scale(1 / k, 1 / k);
+        c.rotate(-rot);
+        drawParkingBadge(c, 0, 0, 15 * this.dpr);
+        c.restore();
+      }
     }
     // vehicles
     for (const a of traffic.agents) {

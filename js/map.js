@@ -2,6 +2,26 @@
 // Mouse wheel zooms around the cursor, dragging pans, C re-centres on the car.
 import { clamp } from './util.js';
 
+// blue "P" parking badge, centred on (x, y), in the current (screen-space) transform
+export function drawParkingBadge(c, x, y, size) {
+  const r = size * 0.22, h = size / 2;
+  c.beginPath();
+  c.moveTo(x - h + r, y - h); c.lineTo(x + h - r, y - h); c.quadraticCurveTo(x + h, y - h, x + h, y - h + r);
+  c.lineTo(x + h, y + h - r); c.quadraticCurveTo(x + h, y + h, x + h - r, y + h);
+  c.lineTo(x - h + r, y + h); c.quadraticCurveTo(x - h, y + h, x - h, y + h - r);
+  c.lineTo(x - h, y - h + r); c.quadraticCurveTo(x - h, y - h, x - h + r, y - h);
+  c.closePath();
+  c.fillStyle = '#1f5fd6'; c.fill();
+  c.lineWidth = Math.max(1, size * 0.08); c.strokeStyle = '#eef3ff'; c.stroke();
+  c.fillStyle = '#ffffff';
+  c.font = `800 ${Math.round(size * 0.72)}px "Big Shoulders Display", "Arial Narrow", sans-serif`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('P', x, y + size * 0.03);
+  c.textAlign = 'left';
+}
+// road colours by kind: loop, ramps/C2, parking area access road, parking bays
+export const PA_ROAD = '#5b9bff', PA_BAY = '#a9c8ff';
+
 export class BigMap {
   constructor(net, root) {
     this.net = net;
@@ -22,6 +42,10 @@ export class BigMap {
     // C2 appears twice (one zone per direction): label it once
     const seen = new Set();
     this.zones = this.zones.filter(z => { const k = z.name; if (seen.has(k)) return false; seen.add(k); return true; });
+    if (net.pa) {
+      const a = net.pa.lots[0].pointAt(net.pa.lots[0].len / 2, 0), b = net.pa.lots[1].pointAt(net.pa.lots[1].len / 2, 0);
+      this.paCenter = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    }
     this.view = { cx: 0, cz: 0, scale: 1 };
     this.fitScale = 1;
     this.drag = null;
@@ -115,14 +139,17 @@ export class BigMap {
       const w = Math.max(r.hw * 2, (r.kind === 'ring' ? 7 : 4.5) * dpr * px);
       c.strokeStyle = 'rgba(3,4,10,0.95)';
       c.lineWidth = w + 6 * dpr * px;
+      c.lineCap = r.kind === 'lot' ? 'butt' : 'round';
       c.stroke(this.paths[i]);
     }
     for (const i of this.order) {
       const r = R[i];
       const w = Math.max(r.hw * 2, (r.kind === 'ring' ? 7 : 4.5) * dpr * px);
-      c.strokeStyle = r.kind === 'ring' ? '#d9deea' : '#ffbe6e';
+      c.strokeStyle = r.kind === 'ring' ? '#d9deea' : r.kind === 'lot' ? PA_BAY : r.kind === 'pa' ? PA_ROAD : '#ffbe6e';
       c.lineWidth = w;
+      c.lineCap = r.kind === 'lot' ? 'butt' : 'round';
       c.stroke(this.paths[i]);
+      c.lineCap = 'round';
       // tunnels: darker, dashed
       if (this.tunnelPaths[i].length) {
         c.save();
@@ -152,12 +179,16 @@ export class BigMap {
     const cw = W / dpr, ch = H / dpr;
     c.textBaseline = 'middle';
     for (const z of this.zones) {
-      const [sx, sy] = toScreen(z.x, z.z);
+      const isPA = z.route === 'PA' && this.paCenter;
+      const [sx, sy] = isPA ? toScreen(this.paCenter.x, this.paCenter.z) : toScreen(z.x, z.z);
       if (sx < -80 || sy < -40 || sx > cw + 80 || sy > ch + 40) continue;
-      c.fillStyle = '#17744a';
-      c.beginPath(); c.arc(sx, sy, 4, 0, Math.PI * 2); c.fill();
-      c.lineWidth = 1.5; c.strokeStyle = '#e4efe8'; c.stroke();
-      const lx = sx + 10;
+      if (isPA) drawParkingBadge(c, sx, sy, 20);
+      else {
+        c.fillStyle = '#17744a';
+        c.beginPath(); c.arc(sx, sy, 4, 0, Math.PI * 2); c.fill();
+        c.lineWidth = 1.5; c.strokeStyle = '#e4efe8'; c.stroke();
+      }
+      const lx = sx + (isPA ? 16 : 10);
       c.font = '700 15px "Big Shoulders Display", "Arial Narrow", sans-serif';
       const name = z.name.toUpperCase();
       const nw = c.measureText(name).width;
