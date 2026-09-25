@@ -5,7 +5,7 @@
 Jogo de cruzeiro noturno em 3D no navegador, inspirado nas vias expressas de Tóquio (Shuto Expressway).
 Escolha um carro JDM, a cor, e rode pelo anel elevado, pontes e túneis costurando o trânsito.
 
-**Jogar:** https://souapenasjunior.github.io/night-cruise/ (computador, teclado ou controle).
+**Jogar:** https://www.nightcruisegame.com/ (computador, teclado ou controle).
 
 **Material de divulgação:** imagens para redes sociais, capturas, logo, teaser e textos prontos em [`presskit/`](presskit/).
 
@@ -69,7 +69,7 @@ Passo a passo (exemplo para a versão `1.5.0`):
    git push origin main
    ```
 6. **Conferir.** O GitHub Pages publica em alguns minutos (acompanhe em *Actions* no GitHub).
-   Abra https://souapenasjunior.github.io/night-cruise/ (se precisar, `Ctrl+F5`) e confira no canto
+   Abra https://www.nightcruisegame.com/ (se precisar, `Ctrl+F5`) e confira no canto
    superior direito do menu inicial, e no menu de pausa, o texto `v1.5.0 · <data> · <código>`.
    No console do navegador (F12) não deve aparecer nenhum aviso `Night Cruise:` sobre a versão.
 

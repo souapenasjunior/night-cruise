@@ -4,7 +4,7 @@
 
 **Night Cruise** é um jogo de direção noturna em 3D que roda direto no navegador. Anel elevado de uma Tóquio fictícia, meia-noite: sem corrida, sem missão, só você, o carro e a cidade.
 
-**Jogar:** https://souapenasjunior.github.io/night-cruise/
+**Jogar:** https://www.nightcruisegame.com/
 **Código:** https://github.com/souapenasjunior/night-cruise
 
 Todas as imagens deste kit são capturas reais do jogo (sem retoque de cenário), com título e textos por cima.
@@ -45,11 +45,11 @@ Night Cruise is a relaxed driving game inspired by Tokyo's expressways (the Shut
 - Runs in the browser, nothing to install
 
 ### Legendas para posts
-1. Tóquio, meia-noite. O anel está livre. 🌃 Jogue grátis no navegador: souapenasjunior.github.io/night-cruise
+1. Tóquio, meia-noite. O anel está livre. 🌃 Jogue grátis no navegador: nightcruisegame.com
 2. Sem corrida. Sem missão. Só a via expressa e a cidade acesa. #NightCruise #indiegame #threejs
 3. Escolha o seu: R32, S13, S14, 350Z, NSX ou o clássico dos anos 80. Estacione no Nishi PA e saia para a noite.
 4. Placas no estilo da Shuto Expressway, com a linha de baixo no seu idioma. 🇧🇷 🇺🇸
-5. (EN) Tokyo, midnight. The loop is yours. Free in your browser: souapenasjunior.github.io/night-cruise
+5. (EN) Tokyo, midnight. The loop is yours. Free in your browser: nightcruisegame.com
 
 **Hashtags:** #NightCruise #indiegame #indiedev #gamedev #threejs #webgl #browsergame #tokyo #shutoko #jdm #nightdrive
 
