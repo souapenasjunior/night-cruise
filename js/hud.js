@@ -1,6 +1,7 @@
 // HUD: speedometer, minimap, indicators, route sign and toasts.
 import { clamp, wrapDelta } from './util.js';
 import { drawParkingBadge, PA_ROAD, PA_BAY } from './map.js';
+import { zoneName } from './i18n.js';
 
 const ARC_LEN = 251; // path length of the gauge arc in the SVG
 
@@ -61,6 +62,9 @@ export class Hud {
     this.toastT = 1.8;
   }
 
+  // the language changed: the banner on screen shows the new name
+  refreshZone() { if (this.lastZone) this.zoneName.textContent = zoneName(this.lastZone.name); }
+
   update(dt, player, traffic) {
     const kmh = player.speed * 3.6;
     const shown = Math.round(this.units === 'mph' ? kmh * 0.621371 : kmh);
@@ -80,7 +84,7 @@ export class Hud {
     if (z && (!this.lastZone || z.name !== this.lastZone.name)) {
       this.lastZone = z;
       this.zoneRoute.textContent = z.r.label;
-      this.zoneName.textContent = z.name;
+      this.zoneName.textContent = zoneName(z.name);
       this.zoneJp.textContent = z.jp;
       this.zoneEl.classList.add('on');
       this.zoneT = 4.5;

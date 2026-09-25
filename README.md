@@ -24,6 +24,10 @@ No controle: RT / LT aceleram e freiam, analógico esquerdo esterça, Y faróis,
 
 Em Configurações › Controles dá para trocar as teclas e os botões do controle, ou remover um comando. A lista com os comandos em uso aparece no menu de pausa.
 
+O jogo está em português e inglês: na primeira vez ele segue o idioma do navegador, e dá para trocar em Configurações › Jogo › Idioma. As placas da estrada também mudam (a linha em japonês continua).
+
+Se criar um texto novo no jogo, coloque-o nas duas línguas em `js/i18n.js`.
+
 ## Publicar uma nova versão
 
 O jogo não tem etapa de build: o GitHub Pages publica a raiz da branch `main` como está.

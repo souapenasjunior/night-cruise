@@ -1,20 +1,25 @@
 // Keyboard + gamepad input with edge detection and key remapping.
 import { clamp } from './util.js';
+import { t } from './i18n.js';
 
-export const ACTION_LABELS = {
-  accel: 'Acelerar', brake: 'Frear / Ré', left: 'Esquerda', right: 'Direita', horn: 'Buzina',
-  lights: 'Faróis', lookLeft: 'Olhar à esquerda', lookRight: 'Olhar à direita', camera: 'Câmera',
-  lookback: 'Olhar para trás', reset: 'Reposicionar', map: 'Mapa', pause: 'Pausa',
-};
+// action names follow the language (getters: the keys stay the list of actions, in display order)
+export const ACTION_LABELS = {};
+for (const a of ['accel', 'brake', 'left', 'right', 'horn', 'lights', 'lookLeft', 'lookRight', 'camera', 'lookback', 'reset', 'map', 'pause']) {
+  Object.defineProperty(ACTION_LABELS, a, { get: () => t('act.' + a), enumerable: true });
+}
 // standard-mapping button names
-export const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →', 'Guia'];
+export const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →', 'Guide'];
 // the fixed controls (not remappable): driving on the triggers, the left stick and the d-pad's sides
-export const PAD_FIXED_LABELS = { accel: 'RT', brake: 'LT', left: 'Analógico / D-pad ←', right: 'Analógico / D-pad →' };
-export const padName = b => PAD_NAMES[b] || `Botão ${b}`;
+export const PAD_FIXED_LABELS = {
+  accel: 'RT', brake: 'LT',
+  get left() { return t('pad.stick') + ' / D-pad ←'; },
+  get right() { return t('pad.stick') + ' / D-pad →'; },
+};
+export const padName = b => (b === 16 ? t('pad.guide') : PAD_NAMES[b]) || t('pad.button', { n: b });
 
 export function keyName(code) {
   if (!code) return '—';
-  const map = { Space: 'Espaço', Escape: 'Esc', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'Shift', ShiftRight: 'Shift dir.', ControlLeft: 'Ctrl', ControlRight: 'Ctrl dir.', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace' };
+  const map = { Space: t('key.space'), Escape: 'Esc', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'Shift', ShiftRight: t('key.shiftR'), ControlLeft: 'Ctrl', ControlRight: t('key.ctrlR'), Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace' };
   if (map[code]) return map[code];
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);

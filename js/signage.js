@@ -7,13 +7,17 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { wrap, makeCanvas } from './util.js';
 import { RING_X, PARAPET_W } from './network.js';
+import { t, num, zoneName } from './i18n.js';
 
 export const SIGN_GAP = 250;
+// gore sign: each half of the plate is this wide (m); the V must be this wide for the post
+const GORE_HALF = 1.75, GORE_GAP = 2 * GORE_HALF + 0.3;
 const GREEN = '#13704a', BLUE = '#1d4b98', WHITE = '#f2f5f1';
 const JP = '"Yu Gothic UI", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif';
 const EN = '"IBM Plex Sans", "Segoe UI", Arial, sans-serif';
-const K1 = d => (d > 0 ? { shield: 'K1', jp: '内回り', en: 'Inner Loop' } : { shield: 'K1', jp: '外回り', en: 'Outer Loop' });
-const PA = { shield: 'P', jp: '西PA', en: 'Nishi Parking Area', blue: true };
+// destinations: the Japanese line stays, the line under it (`en`) follows the language
+const K1 = d => (d > 0 ? { shield: 'K1', jp: '内回り', en: t('sign.inner') } : { shield: 'K1', jp: '外回り', en: t('sign.outer') });
+const PA_DEST = () => ({ shield: 'P', jp: '西PA', en: t('sign.pa'), blue: true });
 
 // ------------------------------------------------------------------ topology
 // Where each ribbon starts and ends on another one (its host), in which direction of the host, and
@@ -72,16 +76,16 @@ export function roadTopology(net) {
 // what a ribbon leads to
 function destOf(topo, r) {
   const a = topo.att.get(r) || {};
-  if (r.kind === 'pa' && a.start && a.start.host.kind === 'ring') return PA;
+  if (r.kind === 'pa' && a.start && a.start.host.kind === 'ring') return PA_DEST();
   const e = a.end;
   if (!e) return null;
   if (e.host.kind === 'ring') {
     const k = K1(e.dir);
     // leaving one carriageway of the loop for the other
-    if (a.start && a.start.host.kind === 'ring' && a.start.dir !== e.dir) return { ...k, jp: 'Uターン', en: 'U-turn · ' + k.en };
+    if (a.start && a.start.host.kind === 'ring' && a.start.dir !== e.dir) return { ...k, jp: 'Uターン', en: t('sign.uturn') + ' · ' + k.en };
     return k;
   }
-  if (e.host.kind === 'pa') return PA;
+  if (e.host.kind === 'pa') return PA_DEST();
   return null;
 }
 // what staying on a road leads to
@@ -89,13 +93,13 @@ function throughOf(topo, road, d) {
   if (road.kind === 'ring') return K1(d);
   const e = (topo.att.get(road) || {}).end;
   if (!e) return null;
-  return e.host.kind === 'ring' ? K1(e.dir) : e.host.kind === 'pa' ? PA : null;
+  return e.host.kind === 'ring' ? K1(e.dir) : e.host.kind === 'pa' ? PA_DEST() : null;
 }
 
 export function fmtDist(m) {
   if (m < 950) return `${Math.max(50, Math.round(m / 50) * 50)} m`;
   const k = Math.round(m / 100) / 10;
-  return `${Number.isInteger(k) ? k : k.toFixed(1)} km`;
+  return `${Number.isInteger(k) ? k : num(k)} km`;
 }
 
 // ------------------------------------------------------------------ drawing
@@ -121,9 +125,23 @@ function arrow(g, cx, cy, size, deg, color = WHITE) {
   g.fill();
   g.restore();
 }
+// largest font (from px down) at which text fits maxW; it always fits, however small
 function fit(g, text, weight, px, family, maxW) {
   let p = px;
-  do { g.font = `${weight} ${Math.round(p)}px ${family}`; p *= 0.92; } while (g.measureText(text).width > maxW && p > 6);
+  do { g.font = `${weight} ${Math.round(p * 10) / 10}px ${family}`; p *= 0.92; } while (g.measureText(text).width > maxW && p > 2);
+}
+// like fit, but a text that would shrink below 80% goes on two lines (split at the space nearest the
+// middle); returns the lines, the font is set for them
+function fitWrap(g, text, weight, px, family, maxW) {
+  fit(g, text, weight, px, family, maxW);
+  const size = parseFloat(/([\d.]+)px/.exec(g.font)[1]);
+  if (size >= px * 0.8 || text.indexOf(' ') < 0) return [text];
+  let cut = -1;
+  for (let i = 0; i < text.length; i++) if (text[i] === ' ' && (cut < 0 || Math.abs(i - text.length / 2) < Math.abs(cut - text.length / 2))) cut = i;
+  const lines = [text.slice(0, cut), text.slice(cut + 1)];
+  const longest = lines.reduce((a, b) => (g.measureText(a).width >= g.measureText(b).width ? a : b));
+  fit(g, longest, weight, px * 0.85, family, maxW);
+  return lines;
 }
 // route shield; returns its width
 function shield(g, x, cy, size, dest, bg) {
@@ -159,17 +177,19 @@ function destRow(g, x, y, w, h, { dest, dist, arrowDeg = null, arrowSide = -1, b
   if (dest.shield) x0 += shield(g, x0, y + h / 2, h * 0.5, dest, bg) + pad * 0.8;
   g.fillStyle = WHITE;
   g.textBaseline = 'middle';
+  // the distance shares the Japanese line; the line under it (the player's language) gets the full width
+  const xEnd = x1;
   if (dist) {
     g.textAlign = 'right';
     fit(g, dist, 700, h * 0.4, EN, w * 0.3);
     const dw = g.measureText(dist).width;
-    g.fillText(dist, x1, y + h * 0.5);
+    g.fillText(dist, x1, y + h * 0.36);
     x1 -= dw + pad;
   }
   g.textAlign = 'left';
   fit(g, dest.jp, 700, h * 0.42, JP, x1 - x0);
   g.fillText(dest.jp, x0, y + h * 0.36);
-  fit(g, dest.en, 600, h * 0.2, EN, x1 - x0);
+  fit(g, dest.en, 600, h * 0.2, EN, xEnd - x0);
   g.fillText(dest.en, x0, y + h * 0.76);
 }
 // ------------------------------------------------------------------ atlas
@@ -405,8 +425,9 @@ export function buildSignage(world) {
         // 出口 EXIT tab
         g.fillStyle = WHITE; rrect(g, x + pad * 1.5, y + pad * 1.2, w - pad * 3, h * 0.24, h * 0.04); g.fill();
         g.fillStyle = bg; g.textAlign = 'center'; g.textBaseline = 'middle';
-        fit(g, '出口  EXIT', 800, h * 0.19, `${JP}`, w - pad * 5);
-        g.fillText('出口  EXIT', x + w / 2, y + pad * 1.2 + h * 0.125);
+        const exitTxt = '出口  ' + t('sign.exit');
+        fit(g, exitTxt, 800, h * 0.19, `${JP}`, w - pad * 5);
+        g.fillText(exitTxt, x + w / 2, y + pad * 1.2 + h * 0.125);
         const sw = shield(g, tx0, y + h * 0.54, h * 0.24, dest, bg);
         g.fillStyle = WHITE; g.textAlign = 'left';
         fit(g, dest.jp, 700, h * 0.27, JP, tx1 - tx0 - sw - pad * 0.6);
@@ -427,7 +448,7 @@ export function buildSignage(world) {
           const dest = destOf(topo, nx.e.r), bg = bgOf(dest);
           g.fillStyle = bg; rrect(g, x + h * 0.08, y + h * 0.55, w - h * 0.16, h * 0.38, h * 0.03); g.fill();
           destRow(g, x + h * 0.08, y + h * 0.55, w - h * 0.16, h * 0.38, { dest, dist: fmtDist(nx.t), arrowDeg: arrowFor(nx.e.side), arrowSide: nx.e.side, bg });
-        } else if (nz) destRow(g, x + h * 0.1, y + h * 0.52, w - h * 0.1, h * 0.42, { dest: { shield: '', jp: nz.z.jp, en: nz.z.name }, dist: fmtDist(nz.t), bg: GREEN });
+        } else if (nz) destRow(g, x + h * 0.1, y + h * 0.52, w - h * 0.1, h * 0.42, { dest: { shield: '', jp: nz.z.jp, en: zoneName(nz.z.name) }, dist: fmtDist(nz.t), bg: GREEN });
       });
     } else if (it.kind === 'paexit') {
       const w = Math.min(7.5, u1 - u0);
@@ -435,8 +456,9 @@ export function buildSignage(world) {
         plate(g, x, y, W, H, GREEN);
         g.fillStyle = WHITE; rrect(g, x + H * 0.08, y + H * 0.08, W - H * 0.16, H * 0.26, H * 0.04); g.fill();
         g.fillStyle = GREEN; g.textAlign = 'center'; g.textBaseline = 'middle';
-        fit(g, '出口  EXIT', 800, H * 0.19, JP, W - H * 0.4);
-        g.fillText('出口  EXIT', x + W / 2, y + H * 0.215);
+        const exitTxt = '出口  ' + t('sign.exit');
+        fit(g, exitTxt, 800, H * 0.19, JP, W - H * 0.4);
+        g.fillText(exitTxt, x + W / 2, y + H * 0.215);
         destRow(g, x, y + H * 0.38, W, H * 0.58, { dest: it.dest, arrowDeg: it.arrowDeg, arrowSide: 1, bg: GREEN });
       });
     } else if (it.kind === 'adv') {
@@ -487,26 +509,26 @@ export function buildSignage(world) {
     if (it.type === 'side') {
       // post on the parapet, plate over the edge
       const sg = -d, P = r.pointAt(s, sg * (r.hw - 0.2)), yaw = Math.atan2(P.tx, P.tz);
-      const postH = it.kind === 'noentry' ? 4.4 : 3.6;
+      const postH = it.kind === 'noentry' ? 4.9 : 3.6;
       box(P.x, P.y + postH / 2, P.z, 0.16, postH, 0.16, yaw);
       if (it.kind === 'noentry') {
-        // red disc with a white bar over a white plate: 進入禁止 NO ENTRY / 出口ではありません (not the exit)
-        const w = 1.8, h = 2.5, uc = -(r.hw - 0.2 + w / 2);
-        addPanel(r, d, s, uc - w / 2, uc + w / 2, 1.9, h, SMALL, (g, x, y, W, H) => {
-          g.fillStyle = '#22262d'; rrect(g, x, y, W, H, W * 0.06); g.fill();
-          const R = W * 0.4, cx = x + W / 2, cy = y + W * 0.47;
-          g.fillStyle = WHITE; g.beginPath(); g.arc(cx, cy, R * 1.06, 0, Math.PI * 2); g.fill();
+        // red disc with a white bar over a white plate: 進入禁止 + NO ENTRY, 出口ではありません + NOT AN EXIT
+        const w = 2.2, h = 3.4, uc = -(r.hw - 0.2 + w / 2);
+        addPanel(r, d, s, uc - w / 2, uc + w / 2, 1.5, h, SMALL, (g, x, y, W, H) => {
+          g.fillStyle = '#22262d'; rrect(g, x, y, W, H, W * 0.05); g.fill();
+          const R = W * 0.34, cx = x + W / 2, cy = y + W * 0.42;
+          g.fillStyle = WHITE; g.beginPath(); g.arc(cx, cy, R * 1.07, 0, Math.PI * 2); g.fill();
           g.fillStyle = '#c8202a'; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
           g.fillStyle = WHITE; g.fillRect(cx - R * 0.72, cy - R * 0.16, R * 1.44, R * 0.32);
-          const py = y + W * 0.95;
-          g.fillStyle = WHITE; rrect(g, x + W * 0.06, py, W * 0.88, H - (py - y) - W * 0.06, W * 0.04); g.fill();
+          const m = W * 0.05, py = y + W * 0.84, ph = H - (py - y) - m, pw = W - 2 * m, tw = pw * 0.9;
+          g.fillStyle = WHITE; rrect(g, x + m, py, pw, ph, W * 0.04); g.fill();
           g.fillStyle = '#c8202a'; g.textAlign = 'center'; g.textBaseline = 'middle';
-          const ph = H - (py - y) - W * 0.06;
-          fit(g, '進入禁止', 800, ph * 0.3, JP, W * 0.8); g.fillText('進入禁止', cx, py + ph * 0.22);
-          fit(g, 'NO ENTRY', 800, ph * 0.2, EN, W * 0.8); g.fillText('NO ENTRY', cx, py + ph * 0.5);
+          const noEntry = t('sign.noEntry'), notExit = t('sign.notExit');
+          fit(g, '進入禁止', 800, ph * 0.26, JP, tw); g.fillText('進入禁止', cx, py + ph * 0.19);
+          fit(g, noEntry, 800, ph * 0.2, EN, tw); g.fillText(noEntry, cx, py + ph * 0.43);
           g.fillStyle = '#22262d';
-          fit(g, '出口ではありません', 700, ph * 0.13, JP, W * 0.82); g.fillText('出口ではありません', cx, py + ph * 0.72);
-          fit(g, 'NOT AN EXIT', 600, ph * 0.12, EN, W * 0.8); g.fillText('NOT AN EXIT', cx, py + ph * 0.88);
+          fit(g, '出口ではありません', 700, ph * 0.13, JP, tw); g.fillText('出口ではありません', cx, py + ph * 0.65);
+          fit(g, notExit, 700, ph * 0.15, EN, tw); g.fillText(notExit, cx, py + ph * 0.84);
         }, 0.9, 0.12);
         continue;
       }
@@ -519,7 +541,8 @@ export function buildSignage(world) {
         g.fillStyle = WHITE; g.textBaseline = 'middle';
         g.textAlign = 'center';
         fit(g, z.jp, 700, H * 0.44, JP, W * 0.9); g.fillText(z.jp, x + W / 2, y + H * 0.38);
-        fit(g, z.name.toUpperCase(), 600, H * 0.2, EN, W * 0.9); g.fillText(z.name.toUpperCase(), x + W / 2, y + H * 0.76);
+        const zn = zoneName(z.name).toUpperCase();
+        fit(g, zn, 600, H * 0.2, EN, W * 0.9); g.fillText(zn, x + W / 2, y + H * 0.76);
       }, 0.85, 0.12);
     } else if (it.kind === 'gore') {
       const e = it.e, host = e.host;
@@ -529,7 +552,7 @@ export function buildSignage(world) {
       // land on a deck)
       const away = Math.sign(e.gore.s - e.sep.s) || 1;
       let hs = 0, P = null, H = null, sg = 1, gap = 0;
-      for (let k = 0; k <= 50 && gap < 2.9; k++) {
+      for (let k = 0; k <= 50 && gap < GORE_GAP; k++) {
         const s = e.gore.s + away * k * 2;
         if (s < 0 || s > e.r.len) break;
         P = e.r.pointAt(s, 0);
@@ -543,14 +566,14 @@ export function buildSignage(world) {
           if (Math.abs(e.r.projectLocal(Q.x, Q.z, Math.floor(s / e.r.ds), 12).off) <= e.r.hw) { gap = t; break; }
         }
       }
-      if (gap < 2.9) continue;
+      if (gap < GORE_GAP) continue;
       const E1 = host.pointAt(hs, sg * host.hw);
       const G = host.pointAt(hs, sg * (host.hw + gap / 2));
       const gx = G.x, gz = G.z, gy = Math.min(E1.y, P.y);
       // nothing overhead, no pole in the way
       if (net.surfacesAt(gx, gz, gy + 3.5, 3, 0.2, res).some(qq => qq.r !== host && qq.r !== e.r) || nearPole(gx, gz, 1.5)) continue;
       const yaw = Math.atan2(H.tx, H.tz);
-      box(gx, gy + 1.45, gz, 0.14, 2.9, 0.14, yaw);
+      box(gx, gy + 1.55, gz, 0.14, 3.1, 0.14, yaw);
       it.at = { x: gx, y: gy, z: gz };
       // plate: left half = the left branch, right half = the right branch
       // (inside the PA only the exit's way is shown: the access road is two-way, going on is no route)
@@ -558,17 +581,19 @@ export function buildSignage(world) {
       const left = e.side < 0 ? exitDest : thr, right = e.side < 0 ? thr : exitDest;
       const halves = [[0, left], [1, right]].filter(h => h[1]);
       // host-lateral of the post, in drivers' u
-      const uPost = ((gx - H.x) * -H.tz + (gz - H.z) * H.tx) * e.dir, hw = 0.65 * halves.length;
-      addPanel(host, e.dir, hs, uPost - hw, uPost + hw, 1.6, 1.3, SMALL, (g, x, y, W, Hh) => {
+      const uPost = ((gx - H.x) * -H.tz + (gz - H.z) * H.tx) * e.dir, hw = GORE_HALF / 2 * halves.length;
+      addPanel(host, e.dir, hs, uPost - hw, uPost + hw, 1.6, 1.5, SMALL, (g, x, y, W, Hh) => {
         const hwid = W / halves.length;
         for (const [k, dest] of halves) {
           const xx = x + (halves.length > 1 ? k : 0) * hwid;
           plate(g, xx, y, hwid, Hh, bgOf(dest));
-          arrow(g, xx + (k ? hwid - Hh * 0.28 : Hh * 0.28), y + Hh * 0.3, Hh * 0.42, k ? 45 : -45);
-          shield(g, xx + Hh * 0.12 + (k ? 0 : Hh * 0.45), y + Hh * 0.3, Hh * 0.26, dest, bgOf(dest));
+          arrow(g, xx + (k ? hwid - Hh * 0.26 : Hh * 0.26), y + Hh * 0.25, Hh * 0.36, k ? 45 : -45);
+          shield(g, xx + Hh * 0.1 + (k ? 0 : Hh * 0.4), y + Hh * 0.25, Hh * 0.22, dest, bgOf(dest));
           g.fillStyle = WHITE; g.textAlign = 'center'; g.textBaseline = 'middle';
-          fit(g, dest.jp, 700, Hh * 0.22, JP, hwid - Hh * 0.2); g.fillText(dest.jp, xx + hwid / 2, y + Hh * 0.62);
-          fit(g, dest.en, 600, Hh * 0.13, EN, hwid - Hh * 0.2); g.fillText(dest.en, xx + hwid / 2, y + Hh * 0.84);
+          fit(g, dest.jp, 700, Hh * 0.2, JP, hwid - Hh * 0.2); g.fillText(dest.jp, xx + hwid / 2, y + Hh * 0.53);
+          const lines = fitWrap(g, dest.en, 600, Hh * 0.14, EN, hwid - Hh * 0.2);
+          if (lines.length === 1) g.fillText(lines[0], xx + hwid / 2, y + Hh * 0.78);
+          else { g.fillText(lines[0], xx + hwid / 2, y + Hh * 0.73); g.fillText(lines[1], xx + hwid / 2, y + Hh * 0.87); }
         }
       }, 0.85, 0.1);
     }
@@ -607,9 +632,21 @@ export function buildSignage(world) {
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: t, vertexColors: true }));
     out.add(m);
   });
-  if (steel.length) out.add(new THREE.Mesh(mergeGeometries(steel), world.mats.steel));
+  if (steel.length) { const m = new THREE.Mesh(mergeGeometries(steel), world.mats.steel); m.userData.keepMat = true; out.add(m); }
   world.root.add(out);
+  if (world.signage && world.signage.group) disposeGroup(world.root, world.signage.group);
   // for audits
-  world.signage = { topo, sites, items, panels, pages: atlas.pages.length, paSigns };
+  world.signage = { topo, sites, items, panels, pages: atlas.pages.length, paSigns, group: out };
   return world.signage;
+}
+
+// a rebuild (language change) replaces the previous signs: free their geometry, atlas textures and materials
+function disposeGroup(root, g) {
+  root.remove(g);
+  g.traverse(o => {
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    if (o.material.map) o.material.map.dispose();
+    if (!o.userData.keepMat) o.material.dispose(); // (the steel is the world's shared material)
+  });
 }

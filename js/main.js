@@ -18,9 +18,12 @@ import { Input, ACTION_LABELS, PAD_FIXED_LABELS, padName, keyName } from './inpu
 import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
+import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
+const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
 const S = SET.load();
+setLang(resolveLang(S.lang));
 const nextFrame = () => new Promise(r => { let done = false; requestAnimationFrame(() => { if (!done) { done = true; r(); } }); setTimeout(() => { if (!done) { done = true; r(); } }, 60); });
 
 // ------------------------------------------------------------------ renderer
@@ -384,12 +387,12 @@ function openCredits() {
   for (const c of CREDITS) {
     const row = document.createElement('div');
     row.className = 'cred';
-    const t = document.createElement('b'); t.textContent = c.title;
-    const a = document.createElement('span'); a.textContent = 'por ' + c.author + ' · licença ';
+    const ti = document.createElement('b'); ti.textContent = c.title;
+    const a = document.createElement('span'); a.textContent = t('cred.by', { author: c.author });
     const lic = document.createElement('a'); lic.href = 'https://creativecommons.org/licenses/by/4.0/'; lic.target = '_blank'; lic.rel = 'noopener'; lic.textContent = 'CC BY 4.0';
     a.appendChild(lic);
     const l = document.createElement('a'); l.href = c.url; l.target = '_blank'; l.rel = 'noopener'; l.textContent = c.url;
-    row.append(t, a, l);
+    row.append(ti, a, l);
     el.appendChild(row);
   }
   $('credits').hidden = false;
@@ -470,15 +473,15 @@ function updateSelect() {
   $('sel-brand').textContent = s.brand;
   $('sel-desc').textContent = s.desc;
   const st = s.stats;
-  const zero100 = (27.8 / (st.accel * 0.82)).toFixed(1);
+  const zero100 = ((S.gameplay.units === 'mph' ? 26.8 : 27.8) / (st.accel * 0.82)).toFixed(1);
   const unit = S.gameplay.units === 'mph' ? 'mph' : 'km/h';
   const top = S.gameplay.units === 'mph' ? Math.round(st.top * 0.621) : st.top;
   $('sel-stats').innerHTML =
-    statRow('Vel. máxima', (st.top - 150) / 170, `${top} ${unit}`) +
-    statRow('0–100 km/h', (st.accel - 4.5) / 6, `${zero100} s`) +
-    statRow('Aderência', (st.grip - 0.6) / 0.75, st.grip >= 1.05 ? 'alta' : st.grip >= 0.88 ? 'média' : 'baixa') +
-    statRow('Traseira', (st.drift - 0.4) / 1.1, st.drift >= 1.2 ? 'solta' : st.drift >= 0.85 ? 'neutra' : 'firme') +
-    statRow('Peso', st.mass / 4400, `${st.mass} kg`);
+    statRow(t('stat.top'), (st.top - 150) / 170, `${top} ${unit}`) +
+    statRow(S.gameplay.units === 'mph' ? '0–60 mph' : '0–100 km/h', (st.accel - 4.5) / 6, `${num(zero100)} s`) +
+    statRow(t('stat.grip'), (st.grip - 0.6) / 0.75, t(st.grip >= 1.05 ? 'grip.high' : st.grip >= 0.88 ? 'grip.mid' : 'grip.low')) +
+    statRow(t('stat.rear'), (st.drift - 0.4) / 1.1, t(st.drift >= 1.2 ? 'rear.loose' : st.drift >= 0.85 ? 'rear.neutral' : 'rear.firm')) +
+    statRow(t('stat.mass'), st.mass / 4400, `${st.mass} kg`);
   [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); });
   const chip = $('sel-chips').children[selIndex];
   if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -514,7 +517,7 @@ function renderPauseKeys() {
   const pad = input.hasPad;
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const kbd = list => list.map(t => `<kbd>${esc(t)}</kbd>`).join('');
-  let html = `<thead><tr><th>Ação</th><th>Teclado</th>${pad ? '<th>Controle</th>' : ''}</tr></thead><tbody>`;
+  let html = `<thead><tr><th>${t('keys.action')}</th><th>${t('keys.keyboard')}</th>${pad ? `<th>${t('keys.pad')}</th>` : ''}</tr></thead><tbody>`;
   for (const action of Object.keys(ACTION_LABELS)) {
     const keys = (S.bindings[action] || []).map(keyName);
     const btn = PAD_FIXED_LABELS[action] ? [PAD_FIXED_LABELS[action]] : (S.pad[action] || []).map(padName);
@@ -528,7 +531,7 @@ function pauseGame() {
   state = 'pause';
   showScreen('pause');
   renderPauseKeys();
-  $('pause-info').textContent = `${player.spec.name} · ${Math.round(player.odo / 1000 * 10) / 10} km rodados`;
+  $('pause-info').textContent = t('pause.info', { car: player.spec.name, km: num(Math.round(player.odo / 100) / 10) });
 }
 function resumeGame() {
   if (state !== 'pause') return;
@@ -614,48 +617,48 @@ function startDrive() {
   showScreen('drive');
   applySettings();
   hud.lastZone = null;
-  hud.toast(`${spec.name} — boa viagem`);
+  hud.toast(t('toast.go', { car: spec.name }));
   driveClock = 0; fpsSamples = []; adaptDone = 0;
   lastTime = performance.now();
 }
 
 // ------------------------------------------------------------------ settings UI
-const TABS = [
-  ['graphics', 'Gráficos'], ['display', 'Tela'], ['audio', 'Áudio'], ['controls', 'Controles'], ['gameplay', 'Jogo'],
-];
+const TABS = ['graphics', 'display', 'audio', 'controls', 'gameplay'];
 const pct = v => `${Math.round(v * 100)}%`;
+// labels are i18n keys (resolved when the panel is drawn, so a language change shows at once)
 const SCHEMA = {
   graphics: [
-    { path: 'graphics.preset', label: 'Qualidade gráfica', type: 'seg', opts: [['auto', 'Automática'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra']], note: () => S.graphics.preset === 'custom' ? 'Personalizada — ajustes individuais abaixo.' : S.graphics.preset === 'auto' ? `Detectada para este hardware: ${qualName(S.graphics.quality)}.` : '' },
-    { path: 'graphics.renderDist', label: 'Distância de renderização', type: 'range', min: 400, max: 1600, step: 50, fmt: v => `${v} m`, custom: true },
-    { path: 'graphics.shadows', label: 'Sombras', type: 'seg', opts: [['off', 'Desligadas'], ['low', 'Baixa'], ['high', 'Alta']], custom: true },
-    { path: 'graphics.textures', label: 'Texturas', type: 'seg', opts: [['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta']], custom: true },
-    { path: 'graphics.effects', label: 'Efeitos e reflexos', type: 'seg', opts: [['off', 'Desligados'], ['low', 'Básicos'], ['high', 'Completos']], custom: true, note: () => 'Brilho das luzes, reflexos no asfalto e iluminação dinâmica dos postes.' },
-    { path: 'graphics.traffic', label: 'Densidade do tráfego', type: 'seg', opts: [['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['max', 'Máxima']], custom: true },
-    { path: 'graphics.fpsCap', label: 'Limite de FPS', type: 'seg', opts: [[30, '30'], [60, '60'], [120, '120'], [0, 'Ilimitado']], note: () => `${Math.round(1000 / refreshMs)} Hz detectados. O limite se ajusta ao monitor para os quadros ficarem uniformes.` },
-    { label: 'V-Sync', type: 'info', text: 'Sempre ativo: o navegador sincroniza os quadros com a taxa do monitor.' },
+    { path: 'graphics.preset', label: 'opt.quality', type: 'seg', opts: [['auto', 'q.auto'], ['low', 'q.low'], ['medium', 'q.medium'], ['high', 'q.high'], ['ultra', 'q.ultra']], note: () => S.graphics.preset === 'custom' ? t('q.custom') : S.graphics.preset === 'auto' ? t('q.detected', { q: qualName(S.graphics.quality) }) : '' },
+    { path: 'graphics.renderDist', label: 'opt.renderDist', type: 'range', min: 400, max: 1600, step: 50, fmt: v => `${v} m`, custom: true },
+    { path: 'graphics.shadows', label: 'opt.shadows', type: 'seg', opts: [['off', 'off.f'], ['low', 'q.low'], ['high', 'q.high']], custom: true },
+    { path: 'graphics.textures', label: 'opt.textures', type: 'seg', opts: [['low', 'q.low'], ['medium', 'q.medium'], ['high', 'q.high']], custom: true },
+    { path: 'graphics.effects', label: 'opt.effects', type: 'seg', opts: [['off', 'off.m'], ['low', 'fx.basic'], ['high', 'fx.full']], custom: true, note: () => t('opt.effectsNote') },
+    { path: 'graphics.traffic', label: 'opt.traffic', type: 'seg', opts: [['low', 'q.low'], ['medium', 'q.medium'], ['high', 'q.high'], ['max', 'q.max']], custom: true },
+    { path: 'graphics.fpsCap', label: 'opt.fps', type: 'seg', opts: [[30, '30'], [60, '60'], [120, '120'], [0, 'fps.none']], note: () => t('fps.note', { hz: Math.round(1000 / refreshMs) }) },
+    { label: 'V-Sync', type: 'info', text: 'vsync.text' },
   ],
   display: [
-    { path: 'display.mode', label: 'Modo de exibição', type: 'seg', opts: [['window', 'Janela'], ['fullscreen', 'Tela cheia']] },
-    { path: 'graphics.resScale', label: 'Resolução de renderização', type: 'seg', opts: [[0.5, '50%'], [0.75, '75%'], [1, '100%'], ['native', 'Nativa']], custom: true, note: () => `Tela atual: ${innerWidth}×${innerHeight} · densidade ${(window.devicePixelRatio || 1).toFixed(2)}×. O navegador não permite trocar a resolução do monitor; esta opção muda a resolução interna do jogo.` },
+    { path: 'display.mode', label: 'opt.display', type: 'seg', opts: [['window', 'disp.window'], ['fullscreen', 'disp.full']] },
+    { path: 'graphics.resScale', label: 'opt.res', type: 'seg', opts: [[0.5, '50%'], [0.75, '75%'], [1, '100%'], ['native', 'res.native']], custom: true, note: () => t('res.note', { w: innerWidth, h: innerHeight, d: num(window.devicePixelRatio || 1, 2) }) },
   ],
   audio: [
-    { path: 'audio.master', label: 'Volume geral', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct },
-    { path: 'audio.engine', label: 'Motor', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct },
-    { path: 'audio.sfx', label: 'Efeitos', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => 'Pneus, buzina, impactos, setas e passagens.' },
-    { path: 'audio.ambient', label: 'Ambiente', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => 'Vento, tráfego e cidade.' },
+    { path: 'audio.master', label: 'opt.master', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct },
+    { path: 'audio.engine', label: 'opt.engine', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct },
+    { path: 'audio.sfx', label: 'opt.sfx', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => t('opt.sfxNote') },
+    { path: 'audio.ambient', label: 'opt.ambient', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => t('opt.ambientNote') },
   ],
   gameplay: [
-    { path: 'gameplay.units', label: 'Unidade de velocidade', type: 'seg', opts: [['kmh', 'km/h'], ['mph', 'mph']] },
-    { path: 'gameplay.minimap', label: 'Minimapa', type: 'tog' },
-    { path: 'gameplay.hud', label: 'HUD', type: 'tog' },
-    { path: 'gameplay.mirror', label: 'Retrovisor', type: 'tog' },
-    { path: 'gameplay.camDist', label: 'Distância da câmera', type: 'range', min: 0.7, max: 1.5, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
-    { path: 'gameplay.camSmooth', label: 'Sensibilidade da câmera', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => 'Mais alta: a câmera acompanha as curvas mais rápido.' },
-    { path: 'gameplay.vibration', label: 'Vibração do controle', type: 'tog', note: () => (navigator.getGamepads ? 'Funciona em controles com suporte a vibração no navegador.' : 'Não suportado neste navegador.') },
+    { path: 'lang', label: 'opt.lang', type: 'seg', opts: [['auto', 'lang.auto'], ['pt', 'lang.pt'], ['en', 'lang.en']], note: () => t('lang.note') },
+    { path: 'gameplay.units', label: 'opt.units', type: 'seg', opts: [['kmh', 'km/h'], ['mph', 'mph']] },
+    { path: 'gameplay.minimap', label: 'opt.minimap', type: 'tog' },
+    { path: 'gameplay.hud', label: 'opt.hud', type: 'tog' },
+    { path: 'gameplay.mirror', label: 'opt.mirror', type: 'tog' },
+    { path: 'gameplay.camDist', label: 'opt.camDist', type: 'range', min: 0.7, max: 1.5, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+    { path: 'gameplay.camSmooth', label: 'opt.camSmooth', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => t('opt.camSmoothNote') },
+    { path: 'gameplay.vibration', label: 'opt.vibration', type: 'tog', note: () => t(navigator.getGamepads ? 'vib.ok' : 'vib.no') },
   ],
 };
-const qualName = q => ({ low: 'Baixa', medium: 'Média', high: 'Alta', ultra: 'Ultra' }[q] || q);
+const qualName = q => t('q.' + q);
 const getPath = p => p.split('.').reduce((o, k) => o[k], S);
 const setPath = (p, v) => { const ks = p.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], S)[last] = v; };
 let currentTab = 'graphics';
@@ -678,10 +681,10 @@ function closeSettings() {
 function renderTabs() {
   const el = $('set-tabs');
   el.innerHTML = '';
-  for (const [id, name] of TABS) {
+  for (const id of TABS) {
     const b = document.createElement('button');
     b.className = 'tab' + (id === currentTab ? ' on' : '');
-    b.textContent = name;
+    b.textContent = t('tab.' + id);
     b.onclick = () => { currentTab = id; renderTabs(); renderOpts(); b.focus(); };
     el.appendChild(b);
   }
@@ -693,6 +696,7 @@ function onChange(item, v) {
     else if (v !== 'custom') SET.applyPreset(S, v);
   } else if (item.custom) S.graphics.preset = 'custom';
   if (item.path === 'display.mode') setFullscreen(v === 'fullscreen');
+  if (item.path === 'lang') setLang(resolveLang(v));
   applySettings();
   SET.save(S);
   renderOpts();
@@ -707,17 +711,18 @@ function renderOpts() {
     row.className = 'opt';
     const lab = document.createElement('div');
     lab.className = 'lab';
-    lab.textContent = item.label;
+    const label = t(item.label);
+    lab.textContent = label;
     row.appendChild(lab);
     const v = item.path ? getPath(item.path) : null;
     if (item.type === 'seg') {
       const seg = document.createElement('div');
       seg.className = 'seg';
       seg.setAttribute('role', 'radiogroup');
-      seg.setAttribute('aria-label', item.label);
+      seg.setAttribute('aria-label', label);
       for (const [val, name] of item.opts) {
         const b = document.createElement('button');
-        b.textContent = name;
+        b.textContent = t(name);
         b.dataset.fid = item.path + ':' + val;
         const on = v === val || (item.path === 'graphics.preset' && v === 'custom' && false);
         b.className = on ? 'on' : '';
@@ -735,7 +740,7 @@ function renderOpts() {
       inp.id = 'opt-' + item.path.replace('.', '-');
       inp.min = item.min; inp.max = item.max; inp.step = item.step; inp.value = v;
       inp.dataset.fid = item.path;
-      inp.setAttribute('aria-label', item.label);
+      inp.setAttribute('aria-label', label);
       const out = document.createElement('output');
       out.textContent = item.fmt(v);
       inp.oninput = () => { out.textContent = item.fmt(+inp.value); setPath(item.path, +inp.value); if (item.custom) S.graphics.preset = 'custom'; applySettings(); };
@@ -747,14 +752,14 @@ function renderOpts() {
       b.className = 'tog' + (v ? ' on' : '');
       b.setAttribute('role', 'switch');
       b.setAttribute('aria-checked', !!v);
-      b.setAttribute('aria-label', item.label);
+      b.setAttribute('aria-label', label);
       b.dataset.fid = item.path;
       b.onclick = () => onChange(item, !v);
       row.appendChild(b);
     } else if (item.type === 'info') {
       const t = document.createElement('div');
       t.className = 'chipinfo';
-      t.textContent = item.text;
+      t.textContent = tx(item.text);
       row.appendChild(t);
     }
     const note = item.note && item.note();
@@ -770,7 +775,7 @@ const PAD_ACTIONS = Object.keys(SET.DEFAULT_PAD);
 function renderControls(el) {
   const t = document.createElement('table');
   t.className = 'keys';
-  t.innerHTML = '<thead><tr><th>Ação</th><th>Teclado</th><th>Controle</th></tr></thead>';
+  t.innerHTML = `<thead><tr><th>${tx('keys.action')}</th><th>${tx('keys.keyboard')}</th><th>${tx('keys.pad')}</th></tr></thead>`;
   const tb = document.createElement('tbody');
   const refocus = sel => { const again = el.querySelector(sel); if (again) again.focus(); };
   const mk = (text, label, fid, onclick, cls = 'keybtn') => {
@@ -788,9 +793,9 @@ function renderControls(el) {
     const wrap = document.createElement('span'); wrap.className = 'binds';
     for (const slot of [0, 1]) {
       const code = S.bindings[action][slot];
-      const kb = mk(code ? keyName(code) : '—', `${name}: tecla ${slot + 1}`, `k:${action}:${slot}`, () => {
+      const kb = mk(code ? keyName(code) : '—', tx('ctl.key', { name, n: slot + 1 }), `k:${action}:${slot}`, () => {
         kb.classList.add('wait');
-        kb.textContent = 'Tecla…';
+        kb.textContent = tx('ctl.pressKey');
         input.capture = c => {
           if (c === 'Delete' || c === 'Backspace') {
             S.bindings[action] = S.bindings[action].filter((_, i) => i !== slot);
@@ -807,7 +812,7 @@ function renderControls(el) {
       });
       wrap.appendChild(kb);
     }
-    wrap.appendChild(mk('✕', `Remover ${name} do teclado`, `kx:${action}`, () => {
+    wrap.appendChild(mk('✕', tx('ctl.removeKb', { name }), `kx:${action}`, () => {
       S.bindings[action] = [];
       SET.save(S); renderOpts(); refocus(`[data-fid="kx:${action}"]`);
     }, 'keybtn unbind'));
@@ -817,9 +822,9 @@ function renderControls(el) {
     if (PAD_ACTIONS.includes(action)) {
       const w2 = document.createElement('span'); w2.className = 'binds';
       const cur = S.pad[action][0];
-      const pb = mk(cur !== undefined ? padName(cur) : '—', `${name}: botão do controle`, `p:${action}`, () => {
+      const pb = mk(cur !== undefined ? padName(cur) : '—', tx('ctl.padBtn', { name }), `p:${action}`, () => {
         pb.classList.add('wait');
-        pb.textContent = 'Botão…';
+        pb.textContent = tx('ctl.pressBtn');
         input.padCapture = btn => {
           if (btn === 'remove') S.pad[action] = [];
           else if (Number.isInteger(btn)) {
@@ -832,7 +837,7 @@ function renderControls(el) {
         };
       });
       w2.appendChild(pb);
-      w2.appendChild(mk('✕', `Remover ${name} do controle`, `px:${action}`, () => {
+      w2.appendChild(mk('✕', tx('ctl.removePad', { name }), `px:${action}`, () => {
         S.pad[action] = [];
         SET.save(S); renderOpts(); refocus(`[data-fid="px:${action}"]`);
       }, 'keybtn unbind'));
@@ -848,10 +853,10 @@ function renderControls(el) {
   el.appendChild(t);
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:14px;flex-wrap:wrap';
-  row.innerHTML = '<span class="chipinfo">Clique numa tecla ou botão e pressione o novo. <kbd>Del</kbd> apaga, <kbd>Esc</kbd> cancela, ✕ remove o comando.</span>';
+  row.innerHTML = `<span class="chipinfo">${tx('ctl.help')}</span>`;
   const rb = document.createElement('button');
   rb.className = 'btn small';
-  rb.textContent = 'Restaurar controles';
+  rb.textContent = tx('ctl.reset');
   rb.onclick = () => {
     S.bindings = JSON.parse(JSON.stringify(SET.DEFAULT_BINDINGS)); S.pad = JSON.parse(JSON.stringify(SET.DEFAULT_PAD));
     input.bindings = S.bindings; input.padBindings = S.pad;
@@ -861,6 +866,18 @@ function renderControls(el) {
   el.appendChild(row);
 }
 $('set-close').onclick = closeSettings;
+// language change (Settings › Game): the page texts are swapped by i18n.js; redraw what is built in code
+onLangChange(() => {
+  if (settingsOpen) { renderTabs(); renderOpts(); }
+  if (state === 'select') { buildChips(); updateSelect(); }
+  if (!$('credits').hidden) openCredits();
+  if (player) {
+    renderPauseKeys();
+    $('pause-info').textContent = t('pause.info', { car: player.spec.name, km: num(Math.round(player.odo / 100) / 10) });
+  }
+  if (hud) hud.refreshZone();
+  if (world) world.rebuildSigns();
+});
 $('set-reset').onclick = () => {
   const d = SET.defaults();
   const keepCar = S.lastCar;
@@ -873,13 +890,14 @@ $('set-reset').onclick = () => {
   S.graphics.preset = 'auto';
   applySettings();
   SET.save(S);
+  setLang(resolveLang(S.lang));
   renderOpts();
 };
 function setFullscreen(on) {
   try {
     if (on && !document.fullscreenElement) {
       const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
-      if (p && p.catch) p.catch(() => { S.display.mode = 'window'; renderOpts(); hud && hud.toast('Tela cheia indisponível aqui'); });
+      if (p && p.catch) p.catch(() => { S.display.mode = 'window'; renderOpts(); hud && hud.toast(t('toast.noFull')); });
       else if (!p) { S.display.mode = 'window'; }
     } else if (!on && document.fullscreenElement) document.exitFullscreen();
   } catch (e) { S.display.mode = 'window'; }
@@ -965,9 +983,9 @@ function driveStep(dt) {
   // (Esc always pauses, even with the pause command removed: it cannot be given to any other action)
   if (input.pressed('pause') || input.edges.has('Escape')) { pauseGame(); return; }
   if (input.pressed('map')) { openMap(); return; }
-  if (input.pressed('lights')) { player.lights.head = !player.lights.head; hud.toast(player.lights.head ? 'Faróis ligados' : 'Faróis desligados'); }
-  if (input.pressed('camera')) { camMode = (camMode + 1) % 4; rig.snapNext = true; hud.toast(['Câmera: perseguição', 'Câmera: perto', 'Câmera: distante', 'Câmera: capô'][camMode]); }
-  if (input.pressed('reset')) { player.reset(); rig.snapNext = true; hud.toast('Reposicionado na faixa'); }
+  if (input.pressed('lights')) { player.lights.head = !player.lights.head; hud.toast(t(player.lights.head ? 'toast.lightsOn' : 'toast.lightsOff')); }
+  if (input.pressed('camera')) { camMode = (camMode + 1) % 4; rig.snapNext = true; hud.toast(t('toast.cam').split('|')[camMode]); }
+  if (input.pressed('reset')) { player.reset(); rig.snapNext = true; hud.toast(t('toast.reset')); }
   // physics substeps
   const n = Math.max(1, Math.ceil(dt / (1 / 120)));
   const h = dt / n;
@@ -1040,7 +1058,7 @@ function autoAdapt(dt) {
       S.graphics.preset = 'auto';
       applySettings();
       SET.save(S);
-      hud.toast(`Qualidade ajustada automaticamente: ${qualName(order[i - 1])}`);
+      hud.toast(t('toast.autoQ', { q: qualName(order[i - 1]) }));
     }
     adaptDone++;
   } else adaptDone = 2;
@@ -1111,15 +1129,15 @@ async function boot() {
   if (!S._loaded || S.graphics.preset === 'auto') { SET.applyPreset(S, det.quality); S.graphics.preset = 'auto'; }
   $('set-gpu').textContent = det.gpu ? String(det.gpu).replace(/ANGLE \(|\)$/g, '').slice(0, 60) : '';
   resize();
-  await step(12, 'Traçando a via expressa…');
+  await step(12, t('load.road'));
   net = buildNetwork();
-  await step(30, 'Erguendo a cidade…');
+  await step(30, t('load.city'));
   world = new World(scene, net, S.graphics);
-  await step(50, 'Trazendo os carros para a garagem…');
+  await step(50, t('load.cars'));
   let nCars = 0;
   const allCars = [...HERO_SPECS, ...TRAFFIC_GLB];
   await loadGlbCars(allCars, () => { nCars++; bar.style.width = `${50 + (nCars / allCars.length) * 12}%`; });
-  await step(62, 'Acendendo os postes…');
+  await step(62, t('load.lamps'));
   // environment map from the city itself (reflections on paint, glass and asphalt)
   const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
   const cubeCam = new THREE.CubeCamera(1, 3000, cubeRT);
@@ -1132,7 +1150,7 @@ async function boot() {
   scene.environmentIntensity = 0.9;
   show.scene.environment = env;
   cubeRT.dispose();
-  await step(78, 'Colocando o trânsito na pista…');
+  await step(78, t('load.traffic'));
   const counts = SET.TRAFFIC_COUNTS.max;
   traffic = new Traffic(scene, net, world, { count: counts[0], cruisers: counts[1], heroSpecs: HERO_SPECS, hq: S.graphics.quality !== 'low', streaks: true });
   const [n, c] = SET.TRAFFIC_COUNTS[S.graphics.traffic] || SET.TRAFFIC_COUNTS.medium;
@@ -1145,7 +1163,7 @@ async function boot() {
   drone.s = net.zones[1].s - 300;
   updateDrone(0);
   traffic.populate(camera.position);
-  await step(92, 'Compilando shaders…');
+  await step(92, t('load.shaders'));
   // build every cruiser now and compile its shaders, so a car appearing mid-drive never stalls a frame
   const warm = [];
   for (const s of HERO_SPECS) { const m = traffic._heroModel(s); if (!m.group.parent) { scene.add(m.group); warm.push(m.group); } }
@@ -1169,5 +1187,5 @@ async function boot() {
 requestAnimationFrame(frame);
 boot().catch(err => {
   console.error(err);
-  $('load-msg').textContent = 'Não foi possível iniciar o WebGL neste navegador. Tente atualizar a página ou usar outro navegador.';
+  $('load-msg').textContent = t('load.webgl');
 });

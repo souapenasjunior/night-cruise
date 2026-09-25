@@ -1042,6 +1042,8 @@ export class World {
     const sg = buildSignage(this);
     buildMarkings(this, sg.topo);
   }
+  // the language changed: the boards are drawn again (same places, new text)
+  rebuildSigns() { buildSignage(this); }
 
   // ---------------------------------------------------------------- bridge
   _bridge() {

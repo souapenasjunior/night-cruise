@@ -27,6 +27,7 @@ export function defaults() {
     gameplay: { units: 'kmh', minimap: true, hud: true, camDist: 1, camSmooth: 0.5, vibration: true, mirror: true },
     bindings: JSON.parse(JSON.stringify(DEFAULT_BINDINGS)),
     pad: JSON.parse(JSON.stringify(DEFAULT_PAD)),
+    lang: 'auto', // 'auto' (browser language), 'pt' or 'en'
     lastCar: 'kaiju',
     paintIdx: {}, // chosen colour (index into PAINTS) per car id
   };
@@ -79,6 +80,7 @@ function sanitize(s) {
     if (!Array.isArray(s.pad[a])) s.pad[a] = DEFAULT_PAD[a].slice();
     s.pad[a] = s.pad[a].filter(b => Number.isInteger(b) && b >= 0 && b <= 16 && !PAD_FIXED.includes(b));
   }
+  if (!['auto', 'pt', 'en'].includes(s.lang)) s.lang = d.lang;
   if (typeof s.lastCar !== 'string') s.lastCar = d.lastCar;
   if (!s.paintIdx || typeof s.paintIdx !== 'object' || Array.isArray(s.paintIdx)) s.paintIdx = {};
   for (const [id, i] of Object.entries(s.paintIdx)) if (!Number.isInteger(i) || i < 0 || i >= PAINT_COUNT) delete s.paintIdx[id];

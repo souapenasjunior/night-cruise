@@ -1,6 +1,7 @@
 // Full-screen map (M): the whole expressway network, zones, tunnels, the player and nearby cars.
 // Mouse wheel zooms around the cursor, dragging pans, C re-centres on the car.
 import { clamp } from './util.js';
+import { zoneName } from './i18n.js';
 
 // blue "P" parking badge, centred on (x, y), in the current (screen-space) transform
 export function drawParkingBadge(c, x, y, size) {
@@ -190,7 +191,7 @@ export class BigMap {
       }
       const lx = sx + (isPA ? 16 : 10);
       c.font = '700 15px "Big Shoulders Display", "Arial Narrow", sans-serif';
-      const name = z.name.toUpperCase();
+      const name = zoneName(z.name).toUpperCase();
       const nw = c.measureText(name).width;
       c.font = '600 10.5px "IBM Plex Sans", sans-serif';
       const jw = c.measureText(z.jp).width;
