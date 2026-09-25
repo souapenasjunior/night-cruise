@@ -1,6 +1,16 @@
 // "Novidades" screen: one entry per release, newest first. Plain text, 3 to 5 lines each.
 export const CHANGELOG = [
   {
+    version: '1.6.0', date: '2026-09-25',
+    lines: [
+      'Pistas sem acostamento: só uma faixa estreita entre a última faixa e a mureta, no anel, no C2, nas rampas e no PA.',
+      'O trânsito agora roda só no anel K1; C2, rampas e PA ficam livres para você.',
+      'Asfalto mais nítido de perto, com textura em resolução maior e grão fino em todas as pistas.',
+      'No menu principal só tocam os sons do menu, sem motor nem barulho da pista.',
+      'Controles: botões do controle remapeáveis, qualquer comando pode ser removido, mapa no D-pad ↓ e lista de comandos no menu de pausa.',
+    ],
+  },
+  {
     version: '1.5.1', date: '2026-09-25',
     lines: [
       'Acostamento dos dois lados do anel: agora também há 3,1 m livres junto à mureta central, e um carro parado cabe inteiro em qualquer lado.',

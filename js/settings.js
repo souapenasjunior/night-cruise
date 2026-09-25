@@ -14,6 +14,11 @@ export const DEFAULT_BINDINGS = {
   camera: ['KeyV'], lookback: ['KeyC'], reset: ['KeyR'], map: ['KeyM'], pause: ['Escape'],
 };
 
+// controller buttons (standard mapping) per action; accelerate (RT), brake (LT) and steering (left stick,
+// d-pad left / right) stay fixed. An empty list: the action has no button.
+export const DEFAULT_PAD = { horn: [1], lights: [3], lookLeft: [4], lookRight: [5], camera: [8], lookback: [11], reset: [12], map: [13], pause: [9] };
+export const PAD_FIXED = [6, 7, 14, 15]; // triggers and d-pad left / right: driving, not remappable
+
 export function defaults() {
   return {
     graphics: { preset: 'auto', quality: 'high', ...PRESETS.high, fpsCap: 60, vsync: true },
@@ -21,6 +26,7 @@ export function defaults() {
     audio: { master: 0.8, engine: 0.8, sfx: 0.8, ambient: 0.6 },
     gameplay: { units: 'kmh', minimap: true, hud: true, camDist: 1, camSmooth: 0.5, vibration: true, mirror: true },
     bindings: JSON.parse(JSON.stringify(DEFAULT_BINDINGS)),
+    pad: JSON.parse(JSON.stringify(DEFAULT_PAD)),
     lastCar: 'kaiju',
     paintIdx: {}, // chosen colour (index into PAINTS) per car id
   };
@@ -67,6 +73,12 @@ function sanitize(s) {
   num(P, p, 'camSmooth', 0, 1);
   for (const k of Object.keys(P)) if (!(k in p)) delete P[k]; // options that no longer exist (e.g. rain)
   for (const a of Object.keys(s.bindings)) s.bindings[a] = s.bindings[a].filter(c => typeof c === 'string');
+  if (!s.pad || typeof s.pad !== 'object' || Array.isArray(s.pad)) s.pad = JSON.parse(JSON.stringify(DEFAULT_PAD));
+  for (const a of Object.keys(s.pad)) if (!DEFAULT_PAD[a]) delete s.pad[a];
+  for (const a of Object.keys(DEFAULT_PAD)) {
+    if (!Array.isArray(s.pad[a])) s.pad[a] = DEFAULT_PAD[a].slice();
+    s.pad[a] = s.pad[a].filter(b => Number.isInteger(b) && b >= 0 && b <= 16 && !PAD_FIXED.includes(b));
+  }
   if (typeof s.lastCar !== 'string') s.lastCar = d.lastCar;
   if (!s.paintIdx || typeof s.paintIdx !== 'object' || Array.isArray(s.paintIdx)) s.paintIdx = {};
   for (const [id, i] of Object.entries(s.paintIdx)) if (!Number.isInteger(i) || i < 0 || i >= PAINT_COUNT) delete s.paintIdx[id];

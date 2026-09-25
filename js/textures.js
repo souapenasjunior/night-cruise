@@ -13,8 +13,9 @@ function tex(canvas, { repeat = false, srgb = true, aniso = 8 } = {}) {
 
 // Road surface. Width in meters, lane lines defined by offsets from center.
 // U maps across the road (0 = -hw, 1 = +hw), V repeats every `period` meters.
+// Resolution follows the road's width: about 1.3 cm per pixel across (at most 2048) and 2 cm along.
 export function roadTexture(spec, q = 1, aniso = 8) {
-  const W = Math.round(1024 * q), H = Math.round(512 * q);
+  const W = Math.round(Math.min(2048, Math.max(1024, (2 * spec.hw) / 0.013)) * q), H = Math.round(1024 * q);
   const c = makeCanvas(W, H), g = c.getContext('2d');
   const hw = spec.hw, period = spec.period;
   const U = off => ((off + hw) / (2 * hw)) * W;
@@ -233,6 +234,22 @@ export function tunnelTexture() {
   g.fillStyle = grd;
   g.fillRect(0, 150, 256, 106);
   return tex(c, { repeat: true });
+}
+
+// Fine asphalt grain for the road materials' bump map, tiled about every 1.2 m: keeps the surface crisp
+// right in front of the car (the colour texture alone is magnified there) and catches the headlights.
+export function grainTexture(aniso = 8) {
+  const N = 256, c = makeCanvas(N, N), g = c.getContext('2d');
+  const img = g.createImageData(N, N), d = img.data, r = rng(19);
+  for (let i = 0; i < d.length; i += 4) {
+    // aggregate: mostly fine noise, a few bright stones and dark pits
+    let v = 128 + (r() - 0.5) * 70;
+    const k = r();
+    if (k < 0.04) v += 70; else if (k < 0.08) v -= 60;
+    d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, v)); d[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return tex(c, { repeat: true, srgb: false, aniso });
 }
 
 export function concreteTexture() {

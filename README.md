@@ -20,7 +20,9 @@ Escolha um carro JDM, a cor, e rode pelo anel elevado, pontes e túneis costuran
 | Voltar para a pista | R |
 | Pausa | Esc |
 
-Todas as teclas podem ser trocadas em Configurações.
+No controle: RT / LT aceleram e freiam, analógico esquerdo esterça, Y faróis, B buzina, LB / RB olhar para os lados, R3 olhar para trás, View câmera, D-pad ↑ reposicionar, D-pad ↓ mapa, Start pausa.
+
+Em Configurações › Controles dá para trocar as teclas e os botões do controle, ou remover um comando. A lista com os comandos em uso aparece no menu de pausa.
 
 ## Publicar uma nova versão
 
