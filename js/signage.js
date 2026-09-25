@@ -1,7 +1,7 @@
-// Road signs computed from the network itself. Every exit gets advance boards at its real distance
-// (2 km / 1 km / 500 m), an EXIT board over the exit lane and a sign on the gore showing both ways;
-// every merge a warning (VMS) over the road it joins and a MERGE board on the ramp; region names stand
-// by the roadside. Green = directions, blue = services (PA), amber VMS = warnings only. Boards on one
+// Road signs computed from the network itself, kept to what a driver needs: every exit from the loop
+// (to the PA) gets advance boards at its real distance (1 km / 500 m), an EXIT board over the
+// exit lane and a sign on the gore showing both ways; inside the PA a gore sign shows the way back to
+// the loop; region names stand by the roadside. Green = directions, blue = services (PA). Boards on one
 // road (and direction) keep >= 250 m apart. All faces share canvas atlases; all steel is one mesh.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -13,7 +13,6 @@ const GREEN = '#13704a', BLUE = '#1d4b98', WHITE = '#f2f5f1';
 const JP = '"Yu Gothic UI", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif';
 const EN = '"IBM Plex Sans", "Segoe UI", Arial, sans-serif';
 const K1 = d => (d > 0 ? { shield: 'K1', jp: '内回り', en: 'Inner Loop' } : { shield: 'K1', jp: '外回り', en: 'Outer Loop' });
-const C2 = { shield: 'C2', jp: '中央連絡線', en: 'Central Link' };
 const PA = { shield: 'P', jp: '西PA', en: 'Nishi Parking Area', blue: true };
 
 // ------------------------------------------------------------------ topology
@@ -74,7 +73,6 @@ export function roadTopology(net) {
 function destOf(topo, r) {
   const a = topo.att.get(r) || {};
   if (r.kind === 'pa' && a.start && a.start.host.kind === 'ring') return PA;
-  if (r.label === 'C2' && !r.ramp) return C2;
   const e = a.end;
   if (!e) return null;
   if (e.host.kind === 'ring') {
@@ -84,14 +82,14 @@ function destOf(topo, r) {
     return k;
   }
   if (e.host.kind === 'pa') return PA;
-  return C2;
+  return null;
 }
 // what staying on a road leads to
 function throughOf(topo, road, d) {
   if (road.kind === 'ring') return K1(d);
   const e = (topo.att.get(road) || {}).end;
-  if (!e) return C2;
-  return e.host.kind === 'ring' ? K1(e.dir) : e.host.kind === 'pa' ? PA : C2;
+  if (!e) return null;
+  return e.host.kind === 'ring' ? K1(e.dir) : e.host.kind === 'pa' ? PA : null;
 }
 
 export function fmtDist(m) {
@@ -174,22 +172,6 @@ function destRow(g, x, y, w, h, { dest, dist, arrowDeg = null, arrowSide = -1, b
   fit(g, dest.en, 600, h * 0.2, EN, x1 - x0);
   g.fillText(dest.en, x0, y + h * 0.76);
 }
-function vms(g, x, y, w, h, lines) {
-  const pitch = 3, cols = Math.floor(w / pitch), rows = Math.floor(h / pitch);
-  const src = makeCanvas(cols, rows), s = src.getContext('2d');
-  s.fillStyle = '#000'; s.fillRect(0, 0, cols, rows);
-  s.fillStyle = '#fff'; s.textAlign = 'center'; s.textBaseline = 'middle';
-  const lh = (rows - 4) / lines.length;
-  lines.forEach((t, k) => { fit(s, t, 700, lh * 0.9, `${EN.split(',')[0]}, ${JP}`, cols - 6); s.fillText(t, cols / 2, 2 + lh * (k + 0.5) + 0.5); });
-  const px = s.getImageData(0, 0, cols, rows).data;
-  g.fillStyle = '#16181b'; g.fillRect(x, y, w, h);
-  g.fillStyle = '#050403'; g.fillRect(x + 4, y + 4, w - 8, h - 8);
-  for (let j = 1; j < rows - 1; j++) for (let i = 1; i < cols - 1; i++) {
-    g.fillStyle = px[(j * cols + i) * 4] > 100 ? '#ffb030' : '#1a1206';
-    g.fillRect(x + i * pitch + 0.5, y + j * pitch + 0.5, pitch - 1, pitch - 1);
-  }
-}
-
 // ------------------------------------------------------------------ atlas
 class Atlas {
   constructor() { this.pages = []; this.size = 2048; this.tiles = []; }
@@ -298,43 +280,28 @@ export function buildSignage(world) {
   const ahead = (r, d, from, to) => (r.closed ? wrap((to - from) * d, r.len) : (to - from) * d);
   // 250 m between boards of a kind (overhead / roadside); a small roadside name plate and an overhead
   // board never overlap in view, so between the two 150 m is enough
-  const SIDE = new Set(['region', 'routeName']);
+  const SIDE = new Set(['region']);
   const spaced = (r, d, s, kind) => !(placed.get(roadKey(r, d)) || []).some(b => dist(r, b.s, s) < (SIDE.has(kind) === SIDE.has(b.kind) ? SIGN_GAP : 150));
   const wants = [];
-  const signRoad = r => r.kind === 'ring' || (r.kind === 'link' && !r.ramp);
-  const exitsOn = (r, d) => topo.exits.filter(e => e.host === r && e.dir === d);
+  // only exits that lead somewhere get boards (the PA's own roads are two-way: a branch driven
+  // backwards is no destination)
+  const exitsOn = (r, d) => topo.exits.filter(e => e.host === r && e.dir === d && destOf(topo, e.r));
 
   for (const e of topo.exits) {
     const r = e.host, d = e.dir;
-    if (!signRoad(r) && r.kind !== 'pa') continue;
+    if (!destOf(topo, e.r) || (r.kind !== 'ring' && r.kind !== 'pa')) continue;
     if (e.gore) wants.push({ prio: 0, kind: 'gore', r, d, e });
-    if (!signRoad(r)) continue;
+    if (r.kind !== 'ring') continue;
     // before the taper starts (from there the edge is open), over the lane that becomes the exit
     wants.push({ prio: 0, kind: 'exit', r, d, e, t: 10, lo: 2, hi: 70, type: 'gantry' });
     wants.push({ prio: 2, kind: 'adv', r, d, e, t: 500, lo: 400, hi: 650, type: 'gantry' });
     wants.push({ prio: 3, kind: 'adv', r, d, e, t: 1000, lo: 820, hi: 1300, type: 'gantry' });
-    // 2 km only when no other exit comes first (that one's boards already list this exit)
-    const prev = exitsOn(r, d).some(o => o !== e && ahead(r, d, o.sAt, e.sAt) > 0 && ahead(r, d, o.sAt, e.sAt) < 2000);
-    if (!prev) wants.push({ prio: 5, kind: 'adv', r, d, e, t: 2000, lo: 1750, hi: 2250, type: 'gantry' });
-  }
-  for (const e of topo.merges) {
-    const host = e.host;
-    if (!signRoad(host)) continue;
-    // warning over the road being joined, before the ramp's lane touches it
-    wants.push({ prio: 1, kind: 'warn', r: host, d: e.dir, e, t: 220, lo: 120, hi: 420, type: 'gantry', ref: e.sep.sHost });
-    // MERGE board on the ramp itself
-    wants.push({ prio: 1, kind: 'merge', r: e.r, d: 1, e, t: 160, lo: 60, hi: 380, type: 'gantry', ref: e.sep.s });
   }
   // region names where each stretch begins: between the previous zone and this one, nearer the boundary
   const ringZones = net.zones.filter(z => z.r === ring);
   for (const z of ringZones) for (const d of [1, -1]) {
     const gap = Math.min(...ringZones.filter(o => o !== z).map(o => ahead(ring, d, o.s, z.s)));
     wants.push({ prio: 6, kind: 'region', r: ring, d, z, t: gap * 0.4, lo: 0, hi: gap * 0.5, type: 'side', ref: z.s });
-  }
-  for (const r of net.ribbons) if (r.kind === 'link' && !r.ramp) {
-    const a = topo.att.get(r);
-    const s0 = a && a.start ? a.start.sep.s : 0;
-    wants.push({ prio: 6, kind: 'routeName', r, d: 1, t: -150, lo: -500, hi: -60, type: 'side', ref: s0 });
   }
   wants.sort((a, b) => a.prio - b.prio || b.d - a.d);
 
@@ -375,13 +342,6 @@ export function buildSignage(world) {
       break;
     }
   }
-  // the empty face of a loop gantry: which way the loop goes and what comes next
-  for (const site of sites) for (const d of [1, -1]) {
-    if (site.faces[d] || !spaced(ring, d, site.s, 'route')) continue;
-    site.faces[d] = { kind: 'route', r: ring, d, s: site.s };
-    put({ r: ring, d, kind: 'route' }, site.s);
-  }
-
   // ---- contents
   const zonesAhead = (d, s, n) => net.zones.filter(z => z.r === ring).map(z => ({ z, t: ahead(ring, d, s, z.s) })).filter(o => o.t > 300).sort((a, b) => a.t - b.t).slice(0, n);
   const exitsAhead = (r, d, s, n, maxT = 3200) => exitsOn(r, d).map(e => ({ e, t: ahead(r, d, s, e.sAt) })).filter(o => o.t > 0 && o.t <= maxT).sort((a, b) => a.t - b.t).slice(0, n);
@@ -457,35 +417,6 @@ export function buildSignage(world) {
           destRow(g, x + H * 0.03, yy, W - H * 0.06, rh - H * 0.02, { dest, dist: fmtDist(o.t), arrowDeg: arrowFor(o.e.side), arrowSide: o.e.side, bg });
         });
       });
-    } else if (it.kind === 'warn') {
-      const w = Math.min(9, u1 - u0);
-      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, 2.2, HI, (g, x, y, W, H) => vms(g, x, y, W, H, ['合流注意', 'MERGING TRAFFIC']), 1.8);
-    } else if (it.kind === 'merge') {
-      const e = it.e, dest = e.host.kind === 'ring' ? K1(e.dir) : C2;
-      const w = Math.min(9, u1 - u0);
-      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, 3.0, HI, (g, x, y, W, H) => {
-        plate(g, x, y, W, H, GREEN);
-        g.fillStyle = WHITE; rrect(g, x + H * 0.1, y + H * 0.1, W * 0.42, H * 0.3, H * 0.05); g.fill();
-        g.fillStyle = GREEN; g.textAlign = 'center'; g.textBaseline = 'middle';
-        fit(g, '合流  MERGE', 800, H * 0.22, JP, W * 0.4);
-        g.fillText('合流  MERGE', x + H * 0.1 + W * 0.21, y + H * 0.25);
-        destRow(g, x, y + H * 0.42, W, H * 0.54, { dest, arrowDeg: arrowFor(e.sep.hostSide), arrowSide: e.sep.hostSide, bg: GREEN });
-      });
-    } else if (it.kind === 'route') {
-      const zs = zonesAhead(d, s, 2), w = Math.min(9, u1 - u0);
-      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, 3.4, HI, (g, x, y, W, H) => {
-        plate(g, x, y, W, H, GREEN);
-        destRow(g, x, y + H * 0.05, W, H * 0.4, { dest: K1(d), arrowDeg: 0, arrowSide: 1, bg: GREEN });
-        g.fillStyle = 'rgba(242,245,241,0.7)'; g.fillRect(x + H * 0.1, y + H * 0.47, W - H * 0.2, Math.max(2, H * 0.01));
-        zs.forEach((o, k) => {
-          const yy = y + H * (0.5 + k * 0.23), hh = H * 0.23;
-          g.fillStyle = WHITE; g.textBaseline = 'middle';
-          g.textAlign = 'right'; fit(g, fmtDist(o.t), 700, hh * 0.62, EN, W * 0.25); g.fillText(fmtDist(o.t), x + W - H * 0.14, yy + hh / 2);
-          g.textAlign = 'left'; fit(g, o.z.jp, 700, hh * 0.62, JP, W * 0.35); g.fillText(o.z.jp, x + H * 0.2, yy + hh / 2);
-          const jw = g.measureText(o.z.jp).width;
-          fit(g, o.z.name, 600, hh * 0.44, EN, W * 0.4); g.fillText(o.z.name, x + H * 0.2 + jw + H * 0.1, yy + hh / 2 + hh * 0.04);
-        });
-      });
     }
     void span;
   };
@@ -521,15 +452,13 @@ export function buildSignage(world) {
       // post on the parapet, plate over the edge
       const sg = -d, P = r.pointAt(s, sg * (r.hw - 0.2)), yaw = Math.atan2(P.tx, P.tz);
       box(P.x, P.y + 1.8, P.z, 0.16, 3.6, 0.16, yaw);
-      const isRoute = it.kind === 'routeName';
-      const dest = isRoute ? C2 : null, z = it.z;
+      const z = it.z;
       const w = 3.4, h = 1.3;
       // u (drivers' right) of the plate: from the post on the parapet outward, clear of the shoulder
       const uc = -(r.hw - 0.2 + w / 2);
       addPanel(r, d, s, uc - w / 2, uc + w / 2, 2.3, h, SMALL, (g, x, y, W, H) => {
         plate(g, x, y, W, H, GREEN);
         g.fillStyle = WHITE; g.textBaseline = 'middle';
-        if (isRoute) { destRow(g, x, y + H * 0.08, W, H * 0.84, { dest, bg: GREEN }); return; }
         g.textAlign = 'center';
         fit(g, z.jp, 700, H * 0.44, JP, W * 0.9); g.fillText(z.jp, x + W / 2, y + H * 0.38);
         fit(g, z.name.toUpperCase(), 600, H * 0.2, EN, W * 0.9); g.fillText(z.name.toUpperCase(), x + W / 2, y + H * 0.76);
@@ -566,20 +495,22 @@ export function buildSignage(world) {
       box(gx, gy + 1.45, gz, 0.14, 2.9, 0.14, yaw);
       it.at = { x: gx, y: gy, z: gz };
       // plate: left half = the left branch, right half = the right branch
-      const exitDest = destOf(topo, e.r), thr = throughOf(topo, host, e.dir);
+      // (inside the PA only the exit's way is shown: the access road is two-way, going on is no route)
+      const exitDest = destOf(topo, e.r), thr = host.kind === 'ring' ? throughOf(topo, host, e.dir) : null;
       const left = e.side < 0 ? exitDest : thr, right = e.side < 0 ? thr : exitDest;
+      const halves = [[0, left], [1, right]].filter(h => h[1]);
       // host-lateral of the post, in drivers' u
-      const uPost = ((gx - H.x) * -H.tz + (gz - H.z) * H.tx) * e.dir;
-      addPanel(host, e.dir, hs, uPost - 1.3, uPost + 1.3, 1.6, 1.3, SMALL, (g, x, y, W, Hh) => {
-        for (const [k, dest] of [[0, left], [1, right]]) {
-          const xx = x + (k * W) / 2;
-          plate(g, xx, y, W / 2, Hh, bgOf(dest));
-          arrow(g, xx + (k ? W / 2 - Hh * 0.28 : Hh * 0.28), y + Hh * 0.3, Hh * 0.42, k ? 45 : -45);
-          const sw = shield(g, xx + Hh * 0.12 + (k ? 0 : Hh * 0.45), y + Hh * 0.3, Hh * 0.26, dest, bgOf(dest));
-          void sw;
+      const uPost = ((gx - H.x) * -H.tz + (gz - H.z) * H.tx) * e.dir, hw = 0.65 * halves.length;
+      addPanel(host, e.dir, hs, uPost - hw, uPost + hw, 1.6, 1.3, SMALL, (g, x, y, W, Hh) => {
+        const hwid = W / halves.length;
+        for (const [k, dest] of halves) {
+          const xx = x + (halves.length > 1 ? k : 0) * hwid;
+          plate(g, xx, y, hwid, Hh, bgOf(dest));
+          arrow(g, xx + (k ? hwid - Hh * 0.28 : Hh * 0.28), y + Hh * 0.3, Hh * 0.42, k ? 45 : -45);
+          shield(g, xx + Hh * 0.12 + (k ? 0 : Hh * 0.45), y + Hh * 0.3, Hh * 0.26, dest, bgOf(dest));
           g.fillStyle = WHITE; g.textAlign = 'center'; g.textBaseline = 'middle';
-          fit(g, dest.jp, 700, Hh * 0.22, JP, W / 2 - Hh * 0.2); g.fillText(dest.jp, xx + W / 4, y + Hh * 0.62);
-          fit(g, dest.en, 600, Hh * 0.13, EN, W / 2 - Hh * 0.2); g.fillText(dest.en, xx + W / 4, y + Hh * 0.84);
+          fit(g, dest.jp, 700, Hh * 0.22, JP, hwid - Hh * 0.2); g.fillText(dest.jp, xx + hwid / 2, y + Hh * 0.62);
+          fit(g, dest.en, 600, Hh * 0.13, EN, hwid - Hh * 0.2); g.fillText(dest.en, xx + hwid / 2, y + Hh * 0.84);
         }
       }, 0.85, 0.1);
     }

@@ -134,8 +134,8 @@ export class Traffic {
     this._v = new THREE.Vector3();
     this._s = new THREE.Vector3(1, 1, 1);
     this._c = new THREE.Color();
-    // AI traffic keeps to the loop: it never enters the C2, the ramps or the parking area (their tight
-    // curves and merges are the player's; cars there got stuck or cut corners)
+    // AI traffic keeps to the loop: it never enters the parking area's roads (two-way,
+    // the player's own)
     this.ribWeights = net.ribbons.map(r => (r.kind === 'ring' ? r.len : 0));
   }
 
@@ -741,7 +741,7 @@ export class Traffic {
     a.blink = Math.sign((a.targetOff - a.off) * dir);
     a.pendingLane = -1;
     if (a.kind === 'cruiser' && a.mode === 'leave') a.wantExit = false;
-    // on a link some drivers take one of its own exits (the C2 now has ramps to both directions)
+    // on a link some drivers take one of its own exits (no links today: traffic stays on the loop)
     else if (to.kind === 'link') a.wantExit = !to.ramp && Math.random() < 0.3;
   }
 

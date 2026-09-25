@@ -19,7 +19,7 @@ export function drawParkingBadge(c, x, y, size) {
   c.fillText('P', x, y + size * 0.03);
   c.textAlign = 'left';
 }
-// road colours by kind: loop, ramps/C2, parking area access road, parking bays
+// road colours by kind: loop, parking area roads, parking bays
 export const PA_ROAD = '#5b9bff', PA_BAY = '#a9c8ff';
 
 export class BigMap {
@@ -39,7 +39,7 @@ export class BigMap {
     // ring drawn last so it sits on top of the links
     this.order = net.ribbons.map((r, i) => i).sort((a, b) => (net.ribbons[a].kind === 'ring') - (net.ribbons[b].kind === 'ring'));
     this.zones = net.zones.map(z => { const P = z.r.pointAt(z.s, 0); return { x: P.x, z: P.z, name: z.name, jp: z.jp, route: z.r.label }; });
-    // C2 appears twice (one zone per direction): label it once
+    // a name given to several ribbons (the PA's road and bays): label it once
     const seen = new Set();
     this.zones = this.zones.filter(z => { const k = z.name; if (seen.has(k)) return false; seen.add(k); return true; });
     if (net.pa) {
