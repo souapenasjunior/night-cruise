@@ -19,7 +19,7 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
-const tr = t; // (where a local `t` names an element)
+const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
 const S = SET.load();
@@ -759,7 +759,7 @@ function renderOpts() {
     } else if (item.type === 'info') {
       const t = document.createElement('div');
       t.className = 'chipinfo';
-      t.textContent = tr(item.text);
+      t.textContent = tx(item.text);
       row.appendChild(t);
     }
     const note = item.note && item.note();
@@ -775,7 +775,7 @@ const PAD_ACTIONS = Object.keys(SET.DEFAULT_PAD);
 function renderControls(el) {
   const t = document.createElement('table');
   t.className = 'keys';
-  t.innerHTML = `<thead><tr><th>${tr('keys.action')}</th><th>${tr('keys.keyboard')}</th><th>${tr('keys.pad')}</th></tr></thead>`;
+  t.innerHTML = `<thead><tr><th>${tx('keys.action')}</th><th>${tx('keys.keyboard')}</th><th>${tx('keys.pad')}</th></tr></thead>`;
   const tb = document.createElement('tbody');
   const refocus = sel => { const again = el.querySelector(sel); if (again) again.focus(); };
   const mk = (text, label, fid, onclick, cls = 'keybtn') => {
@@ -793,9 +793,9 @@ function renderControls(el) {
     const wrap = document.createElement('span'); wrap.className = 'binds';
     for (const slot of [0, 1]) {
       const code = S.bindings[action][slot];
-      const kb = mk(code ? keyName(code) : '—', tr('ctl.key', { name, n: slot + 1 }), `k:${action}:${slot}`, () => {
+      const kb = mk(code ? keyName(code) : '—', tx('ctl.key', { name, n: slot + 1 }), `k:${action}:${slot}`, () => {
         kb.classList.add('wait');
-        kb.textContent = tr('ctl.pressKey');
+        kb.textContent = tx('ctl.pressKey');
         input.capture = c => {
           if (c === 'Delete' || c === 'Backspace') {
             S.bindings[action] = S.bindings[action].filter((_, i) => i !== slot);
@@ -812,7 +812,7 @@ function renderControls(el) {
       });
       wrap.appendChild(kb);
     }
-    wrap.appendChild(mk('✕', tr('ctl.removeKb', { name }), `kx:${action}`, () => {
+    wrap.appendChild(mk('✕', tx('ctl.removeKb', { name }), `kx:${action}`, () => {
       S.bindings[action] = [];
       SET.save(S); renderOpts(); refocus(`[data-fid="kx:${action}"]`);
     }, 'keybtn unbind'));
@@ -822,9 +822,9 @@ function renderControls(el) {
     if (PAD_ACTIONS.includes(action)) {
       const w2 = document.createElement('span'); w2.className = 'binds';
       const cur = S.pad[action][0];
-      const pb = mk(cur !== undefined ? padName(cur) : '—', tr('ctl.padBtn', { name }), `p:${action}`, () => {
+      const pb = mk(cur !== undefined ? padName(cur) : '—', tx('ctl.padBtn', { name }), `p:${action}`, () => {
         pb.classList.add('wait');
-        pb.textContent = tr('ctl.pressBtn');
+        pb.textContent = tx('ctl.pressBtn');
         input.padCapture = btn => {
           if (btn === 'remove') S.pad[action] = [];
           else if (Number.isInteger(btn)) {
@@ -837,7 +837,7 @@ function renderControls(el) {
         };
       });
       w2.appendChild(pb);
-      w2.appendChild(mk('✕', tr('ctl.removePad', { name }), `px:${action}`, () => {
+      w2.appendChild(mk('✕', tx('ctl.removePad', { name }), `px:${action}`, () => {
         S.pad[action] = [];
         SET.save(S); renderOpts(); refocus(`[data-fid="px:${action}"]`);
       }, 'keybtn unbind'));
@@ -853,10 +853,10 @@ function renderControls(el) {
   el.appendChild(t);
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:14px;flex-wrap:wrap';
-  row.innerHTML = `<span class="chipinfo">${tr('ctl.help')}</span>`;
+  row.innerHTML = `<span class="chipinfo">${tx('ctl.help')}</span>`;
   const rb = document.createElement('button');
   rb.className = 'btn small';
-  rb.textContent = tr('ctl.reset');
+  rb.textContent = tx('ctl.reset');
   rb.onclick = () => {
     S.bindings = JSON.parse(JSON.stringify(SET.DEFAULT_BINDINGS)); S.pad = JSON.parse(JSON.stringify(SET.DEFAULT_PAD));
     input.bindings = S.bindings; input.padBindings = S.pad;
