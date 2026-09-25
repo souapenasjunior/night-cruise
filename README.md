@@ -1,9 +1,13 @@
 # Night Cruise
 
+![Night Cruise](presskit/keyart-1920x1080.jpg)
+
 Jogo de cruzeiro noturno em 3D no navegador, inspirado nas vias expressas de Tóquio (Shuto Expressway).
 Escolha um carro JDM, a cor, e rode pelo anel elevado, pontes e túneis costurando o trânsito.
 
-**Jogar:** abra a página do GitHub Pages deste repositório (computador, teclado ou controle).
+**Jogar:** https://souapenasjunior.github.io/night-cruise/ (computador, teclado ou controle).
+
+**Material de divulgação:** imagens para redes sociais, capturas, logo, teaser e textos prontos em [`presskit/`](presskit/).
 
 ## Controles
 
