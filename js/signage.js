@@ -7,13 +7,15 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { wrap, makeCanvas } from './util.js';
 import { RING_X, PARAPET_W } from './network.js';
+import { t, num, zoneName } from './i18n.js';
 
 export const SIGN_GAP = 250;
 const GREEN = '#13704a', BLUE = '#1d4b98', WHITE = '#f2f5f1';
 const JP = '"Yu Gothic UI", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif';
 const EN = '"IBM Plex Sans", "Segoe UI", Arial, sans-serif';
-const K1 = d => (d > 0 ? { shield: 'K1', jp: '内回り', en: 'Inner Loop' } : { shield: 'K1', jp: '外回り', en: 'Outer Loop' });
-const PA = { shield: 'P', jp: '西PA', en: 'Nishi Parking Area', blue: true };
+// destinations: the Japanese line stays, the line under it (`en`) follows the language
+const K1 = d => (d > 0 ? { shield: 'K1', jp: '内回り', en: t('sign.inner') } : { shield: 'K1', jp: '外回り', en: t('sign.outer') });
+const PA_DEST = () => ({ shield: 'P', jp: '西PA', en: t('sign.pa'), blue: true });
 
 // ------------------------------------------------------------------ topology
 // Where each ribbon starts and ends on another one (its host), in which direction of the host, and
@@ -72,16 +74,16 @@ export function roadTopology(net) {
 // what a ribbon leads to
 function destOf(topo, r) {
   const a = topo.att.get(r) || {};
-  if (r.kind === 'pa' && a.start && a.start.host.kind === 'ring') return PA;
+  if (r.kind === 'pa' && a.start && a.start.host.kind === 'ring') return PA_DEST();
   const e = a.end;
   if (!e) return null;
   if (e.host.kind === 'ring') {
     const k = K1(e.dir);
     // leaving one carriageway of the loop for the other
-    if (a.start && a.start.host.kind === 'ring' && a.start.dir !== e.dir) return { ...k, jp: 'Uターン', en: 'U-turn · ' + k.en };
+    if (a.start && a.start.host.kind === 'ring' && a.start.dir !== e.dir) return { ...k, jp: 'Uターン', en: t('sign.uturn') + ' · ' + k.en };
     return k;
   }
-  if (e.host.kind === 'pa') return PA;
+  if (e.host.kind === 'pa') return PA_DEST();
   return null;
 }
 // what staying on a road leads to
@@ -89,13 +91,13 @@ function throughOf(topo, road, d) {
   if (road.kind === 'ring') return K1(d);
   const e = (topo.att.get(road) || {}).end;
   if (!e) return null;
-  return e.host.kind === 'ring' ? K1(e.dir) : e.host.kind === 'pa' ? PA : null;
+  return e.host.kind === 'ring' ? K1(e.dir) : e.host.kind === 'pa' ? PA_DEST() : null;
 }
 
 export function fmtDist(m) {
   if (m < 950) return `${Math.max(50, Math.round(m / 50) * 50)} m`;
   const k = Math.round(m / 100) / 10;
-  return `${Number.isInteger(k) ? k : k.toFixed(1)} km`;
+  return `${Number.isInteger(k) ? k : num(k)} km`;
 }
 
 // ------------------------------------------------------------------ drawing
@@ -405,8 +407,9 @@ export function buildSignage(world) {
         // 出口 EXIT tab
         g.fillStyle = WHITE; rrect(g, x + pad * 1.5, y + pad * 1.2, w - pad * 3, h * 0.24, h * 0.04); g.fill();
         g.fillStyle = bg; g.textAlign = 'center'; g.textBaseline = 'middle';
-        fit(g, '出口  EXIT', 800, h * 0.19, `${JP}`, w - pad * 5);
-        g.fillText('出口  EXIT', x + w / 2, y + pad * 1.2 + h * 0.125);
+        const exitTxt = '出口  ' + t('sign.exit');
+        fit(g, exitTxt, 800, h * 0.19, `${JP}`, w - pad * 5);
+        g.fillText(exitTxt, x + w / 2, y + pad * 1.2 + h * 0.125);
         const sw = shield(g, tx0, y + h * 0.54, h * 0.24, dest, bg);
         g.fillStyle = WHITE; g.textAlign = 'left';
         fit(g, dest.jp, 700, h * 0.27, JP, tx1 - tx0 - sw - pad * 0.6);
@@ -427,7 +430,7 @@ export function buildSignage(world) {
           const dest = destOf(topo, nx.e.r), bg = bgOf(dest);
           g.fillStyle = bg; rrect(g, x + h * 0.08, y + h * 0.55, w - h * 0.16, h * 0.38, h * 0.03); g.fill();
           destRow(g, x + h * 0.08, y + h * 0.55, w - h * 0.16, h * 0.38, { dest, dist: fmtDist(nx.t), arrowDeg: arrowFor(nx.e.side), arrowSide: nx.e.side, bg });
-        } else if (nz) destRow(g, x + h * 0.1, y + h * 0.52, w - h * 0.1, h * 0.42, { dest: { shield: '', jp: nz.z.jp, en: nz.z.name }, dist: fmtDist(nz.t), bg: GREEN });
+        } else if (nz) destRow(g, x + h * 0.1, y + h * 0.52, w - h * 0.1, h * 0.42, { dest: { shield: '', jp: nz.z.jp, en: zoneName(nz.z.name) }, dist: fmtDist(nz.t), bg: GREEN });
       });
     } else if (it.kind === 'paexit') {
       const w = Math.min(7.5, u1 - u0);
@@ -435,8 +438,9 @@ export function buildSignage(world) {
         plate(g, x, y, W, H, GREEN);
         g.fillStyle = WHITE; rrect(g, x + H * 0.08, y + H * 0.08, W - H * 0.16, H * 0.26, H * 0.04); g.fill();
         g.fillStyle = GREEN; g.textAlign = 'center'; g.textBaseline = 'middle';
-        fit(g, '出口  EXIT', 800, H * 0.19, JP, W - H * 0.4);
-        g.fillText('出口  EXIT', x + W / 2, y + H * 0.215);
+        const exitTxt = '出口  ' + t('sign.exit');
+        fit(g, exitTxt, 800, H * 0.19, JP, W - H * 0.4);
+        g.fillText(exitTxt, x + W / 2, y + H * 0.215);
         destRow(g, x, y + H * 0.38, W, H * 0.58, { dest: it.dest, arrowDeg: it.arrowDeg, arrowSide: 1, bg: GREEN });
       });
     } else if (it.kind === 'adv') {
@@ -503,10 +507,11 @@ export function buildSignage(world) {
           g.fillStyle = '#c8202a'; g.textAlign = 'center'; g.textBaseline = 'middle';
           const ph = H - (py - y) - W * 0.06;
           fit(g, '進入禁止', 800, ph * 0.3, JP, W * 0.8); g.fillText('進入禁止', cx, py + ph * 0.22);
-          fit(g, 'NO ENTRY', 800, ph * 0.2, EN, W * 0.8); g.fillText('NO ENTRY', cx, py + ph * 0.5);
+          const noEntry = t('sign.noEntry'), notExit = t('sign.notExit');
+          fit(g, noEntry, 800, ph * 0.2, EN, W * 0.8); g.fillText(noEntry, cx, py + ph * 0.5);
           g.fillStyle = '#22262d';
           fit(g, '出口ではありません', 700, ph * 0.13, JP, W * 0.82); g.fillText('出口ではありません', cx, py + ph * 0.72);
-          fit(g, 'NOT AN EXIT', 600, ph * 0.12, EN, W * 0.8); g.fillText('NOT AN EXIT', cx, py + ph * 0.88);
+          fit(g, notExit, 600, ph * 0.12, EN, W * 0.8); g.fillText(notExit, cx, py + ph * 0.88);
         }, 0.9, 0.12);
         continue;
       }
@@ -519,7 +524,8 @@ export function buildSignage(world) {
         g.fillStyle = WHITE; g.textBaseline = 'middle';
         g.textAlign = 'center';
         fit(g, z.jp, 700, H * 0.44, JP, W * 0.9); g.fillText(z.jp, x + W / 2, y + H * 0.38);
-        fit(g, z.name.toUpperCase(), 600, H * 0.2, EN, W * 0.9); g.fillText(z.name.toUpperCase(), x + W / 2, y + H * 0.76);
+        const zn = zoneName(z.name).toUpperCase();
+        fit(g, zn, 600, H * 0.2, EN, W * 0.9); g.fillText(zn, x + W / 2, y + H * 0.76);
       }, 0.85, 0.12);
     } else if (it.kind === 'gore') {
       const e = it.e, host = e.host;
@@ -607,9 +613,21 @@ export function buildSignage(world) {
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: t, vertexColors: true }));
     out.add(m);
   });
-  if (steel.length) out.add(new THREE.Mesh(mergeGeometries(steel), world.mats.steel));
+  if (steel.length) { const m = new THREE.Mesh(mergeGeometries(steel), world.mats.steel); m.userData.keepMat = true; out.add(m); }
   world.root.add(out);
+  if (world.signage && world.signage.group) disposeGroup(world.root, world.signage.group);
   // for audits
-  world.signage = { topo, sites, items, panels, pages: atlas.pages.length, paSigns };
+  world.signage = { topo, sites, items, panels, pages: atlas.pages.length, paSigns, group: out };
   return world.signage;
+}
+
+// a rebuild (language change) replaces the previous signs: free their geometry, atlas textures and materials
+function disposeGroup(root, g) {
+  root.remove(g);
+  g.traverse(o => {
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    if (o.material.map) o.material.map.dispose();
+    if (!o.userData.keepMat) o.material.dispose(); // (the steel is the world's shared material)
+  });
 }

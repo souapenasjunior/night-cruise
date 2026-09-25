@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <title>Night Cruise</title>
-<meta name="description" content="Cruise noturno 3D por uma rodovia urbana elevada.">
+<meta name="description" content="Passeio noturno em 3D pelas vias expressas elevadas de uma Tóquio fictícia." data-i18n-content="meta.desc">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -217,18 +217,18 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   <div class="box">
     <div class="word">NIGHT CRUISE</div>
     <div class="bar"><i id="load-bar"></i></div>
-    <div class="msg" id="load-msg">Acendendo as luzes da cidade…</div>
+    <div class="msg" id="load-msg" data-i18n="load.lights">Acendendo as luzes da cidade…</div>
   </div>
 </div>
 
 <div id="title" class="screen" hidden>
   <div class="kanji">首都高 · 夜間巡航</div>
   <h1><span>Night</span><span class="l2">Cruise</span></h1>
-  <p class="tag">Anel K1, meia-noite. Sem corrida e sem missão: escolha um carro, entre na via expressa e dirija.</p>
+  <p class="tag" data-i18n="title.tag">Anel K1, meia-noite. Sem corrida e sem missão: escolha um carro, entre na via expressa e dirija.</p>
   <nav id="title-nav">
-    <button class="menu-btn primary" id="btn-play">Jogar</button>
-    <button class="menu-btn" id="btn-settings">Configurações</button>
-    <button class="menu-btn" id="btn-credits">Créditos</button>
+    <button class="menu-btn primary" id="btn-play" data-i18n="title.play">Jogar</button>
+    <button class="menu-btn" id="btn-settings" data-i18n="title.settings">Configurações</button>
+    <button class="menu-btn" id="btn-credits" data-i18n="title.credits">Créditos</button>
   </nav>
   <div class="ver" id="title-ver"></div>
 </div>
@@ -240,15 +240,15 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <div class="brand" id="sel-brand">MECHARA · Nº 14</div>
     <p class="desc" id="sel-desc"></p>
     <div class="stats" id="sel-stats"></div>
-    <div class="paints"><span class="plabel">Cor</span><div class="swatches" id="sel-paints" role="radiogroup" aria-label="Cor do carro"></div></div>
+    <div class="paints"><span class="plabel" data-i18n="sel.paint">Cor</span><div class="swatches" id="sel-paints" role="radiogroup" aria-label="Cor do carro" data-i18n-aria="sel.paintAria"></div></div>
   </div>
   <div class="strip">
-    <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos"></div>
+    <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
     <div class="row">
-      <div class="hint"><span><kbd>←</kbd> <kbd>→</kbd> trocar</span><span><kbd>1</kbd>–<kbd>7</kbd> cor</span><span>arraste para girar</span><span><kbd>Enter</kbd> dirigir</span><span><kbd>Esc</kbd> voltar</span></div>
+      <div class="hint" data-i18n-html="sel.hint"><span><kbd>←</kbd> <kbd>→</kbd> trocar</span><span><kbd>1</kbd>–<kbd>7</kbd> cor</span><span>arraste para girar</span><span><kbd>Enter</kbd> dirigir</span><span><kbd>Esc</kbd> voltar</span></div>
       <div style="display:flex;gap:8px">
-        <button class="btn small" id="sel-back">Voltar</button>
-        <button class="btn go" id="sel-go">Dirigir</button>
+        <button class="btn small" id="sel-back" data-i18n="sel.back">Voltar</button>
+        <button class="btn go" id="sel-go" data-i18n="sel.go">Dirigir</button>
       </div>
     </div>
   </div>
@@ -273,39 +273,39 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 </div>
 
 <div id="map" class="screen" hidden>
-  <canvas id="map-c" aria-label="Mapa da via expressa"></canvas>
-  <div class="map-head"><h2>Mapa</h2><span>Anel K1 · Nishi PA</span></div>
-  <div class="map-keys"><span><kbd>Roda</kbd> zoom</span><span><kbd>Arrastar</kbd> mover</span><span><kbd>C</kbd> centralizar no carro</span><span><kbd>M</kbd> / <kbd>Esc</kbd> fechar</span></div>
+  <canvas id="map-c" aria-label="Mapa da via expressa" data-i18n-aria="map.aria"></canvas>
+  <div class="map-head"><h2 data-i18n="map.title">Mapa</h2><span data-i18n="map.sub">Anel K1 · Estacionamento Nishi</span></div>
+  <div class="map-keys" data-i18n-html="map.keys"><span><kbd>Roda</kbd> zoom</span><span><kbd>Arrastar</kbd> mover</span><span><kbd>C</kbd> centralizar no carro</span><span><kbd>M</kbd> / <kbd>Esc</kbd> fechar</span></div>
   <div class="map-legend">
-    <div><svg width="22" height="14" viewBox="0 0 18 20"><path d="M9 1 L16 18 L9 14 L2 18 Z" fill="#ffb23f" stroke="#000" stroke-opacity=".7" stroke-width="1.5"/></svg>Você</div>
-    <div><i class="sw" style="background:#d9deea"></i>Anel K1</div>
-    <div><i class="sw" style="background:repeating-linear-gradient(90deg,#5d6680 0 6px,transparent 6px 10px)"></i>Túnel</div>
-    <div><svg width="22" height="16" viewBox="0 0 22 16"><rect x="3" y="0.75" width="14.5" height="14.5" rx="3.2" fill="#1f5fd6" stroke="#eef3ff" stroke-width="1.2"/><text x="10.25" y="12.4" text-anchor="middle" font-size="11.5" font-weight="800" fill="#fff" font-family="Arial Narrow, sans-serif">P</text></svg>Estacionamento (PA)</div>
-    <div><i class="dot" style="background:#17744a;border:1.5px solid #e4efe8"></i>Regiões</div>
+    <div><svg width="22" height="14" viewBox="0 0 18 20"><path d="M9 1 L16 18 L9 14 L2 18 Z" fill="#ffb23f" stroke="#000" stroke-opacity=".7" stroke-width="1.5"/></svg><span data-i18n="map.you">Você</span></div>
+    <div><i class="sw" style="background:#d9deea"></i><span data-i18n="map.ring">Anel K1</span></div>
+    <div><i class="sw" style="background:repeating-linear-gradient(90deg,#5d6680 0 6px,transparent 6px 10px)"></i><span data-i18n="map.tunnel">Túnel</span></div>
+    <div><svg width="22" height="16" viewBox="0 0 22 16"><rect x="3" y="0.75" width="14.5" height="14.5" rx="3.2" fill="#1f5fd6" stroke="#eef3ff" stroke-width="1.2"/><text x="10.25" y="12.4" text-anchor="middle" font-size="11.5" font-weight="800" fill="#fff" font-family="Arial Narrow, sans-serif">P</text></svg><span data-i18n="map.pa">Estacionamento (PA)</span></div>
+    <div><i class="dot" style="background:#17744a;border:1.5px solid #e4efe8"></i><span data-i18n="map.zones">Regiões</span></div>
   </div>
 </div>
 
 <div id="credits" class="screen scrim" hidden>
   <div class="panel" role="dialog" aria-labelledby="cred-title">
-    <header><h2 id="cred-title">Créditos</h2><span class="chipinfo">Modelos 3D dos carros · licença CC BY 4.0</span></header>
+    <header><h2 id="cred-title" data-i18n="cred.title">Créditos</h2><span class="chipinfo" data-i18n="cred.sub">Modelos 3D dos carros · licença CC BY 4.0</span></header>
     <div class="cred-list" id="cred-list"></div>
-    <footer><span class="chipinfo">Modelos otimizados (texturas e malhas comprimidas) e adaptados para o jogo. Nomes e marcas pertencem aos respectivos fabricantes.</span><button class="btn go small" id="cred-close">Fechar</button></footer>
+    <footer><span class="chipinfo" data-i18n="cred.foot">Modelos otimizados (texturas e malhas comprimidas) e adaptados para o jogo. Nomes e marcas pertencem aos respectivos fabricantes.</span><button class="btn go small" id="cred-close" data-i18n="close">Fechar</button></footer>
   </div>
 </div>
 
 <div id="pause" class="screen scrim" hidden>
   <div class="panel">
-    <header><h2>Pausa</h2><span class="chipinfo" id="pause-info"></span></header>
+    <header><h2 data-i18n="pause.title">Pausa</h2><span class="chipinfo" id="pause-info"></span></header>
     <div class="pbody">
       <nav>
-        <button class="menu-btn primary" id="p-resume">Continuar</button>
-        <button class="menu-btn" id="p-car">Trocar veículo</button>
-        <button class="menu-btn" id="p-reset">Reposicionar na pista</button>
-        <button class="menu-btn" id="p-settings">Configurações</button>
-        <button class="menu-btn" id="p-title">Menu inicial</button>
+        <button class="menu-btn primary" id="p-resume" data-i18n="pause.resume">Continuar</button>
+        <button class="menu-btn" id="p-car" data-i18n="pause.car">Trocar de carro</button>
+        <button class="menu-btn" id="p-reset" data-i18n="pause.reset">Voltar para a pista</button>
+        <button class="menu-btn" id="p-settings" data-i18n="pause.settings">Configurações</button>
+        <button class="menu-btn" id="p-title" data-i18n="pause.menu">Menu inicial</button>
       </nav>
       <section class="pkeys" aria-labelledby="pk-title">
-        <h3 id="pk-title">Comandos</h3>
+        <h3 id="pk-title" data-i18n="pause.keys">Comandos</h3>
         <table id="pause-keys"></table>
       </section>
     </div>
@@ -315,14 +315,14 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 
 <div id="settings" class="screen scrim" hidden>
   <div class="panel" role="dialog" aria-labelledby="set-title">
-    <header><h2 id="set-title">Configurações</h2><span class="chipinfo" id="set-gpu"></span></header>
+    <header><h2 id="set-title" data-i18n="set.title">Configurações</h2><span class="chipinfo" id="set-gpu"></span></header>
     <div class="body">
       <div class="tabs" id="set-tabs"></div>
       <div class="opts" id="set-opts"></div>
     </div>
     <footer>
-      <button class="btn small" id="set-reset">Restaurar padrões</button>
-      <button class="btn go small" id="set-close">Fechar</button>
+      <button class="btn small" id="set-reset" data-i18n="set.reset">Restaurar padrões</button>
+      <button class="btn go small" id="set-close" data-i18n="close">Fechar</button>
     </footer>
   </div>
 </div>
@@ -336,8 +336,8 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.8.0';
-  var MODULES = ['audio', 'cars', 'glbcars', 'hud', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
+  var V = '1.9.0';
+  var MODULES = ['audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',

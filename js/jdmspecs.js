@@ -1,11 +1,12 @@
 // The drivable cars: realistic glTF models (credits in CREDITS below and on the credits screen).
 // glb: how to read each file — orientation, real length, which meshes are wheels / calipers / lamps.
+import { t } from './i18n.js';
+
 const Q = Math.PI / 2;
 
 export const JDM_SPECS = [
   {
     id: 'r32', short: 'R32', name: 'Skyline GT-R R32', brand: 'NISSAN', number: '32', cls: 'Grand tourer',
-    desc: 'O Godzilla original. Tração integral e turbo duplo: gruda nas curvas e não para de puxar.',
     colors: { main: '#16171b', accent: '#c9ccd2' },
     stats: { top: 265, accel: 8.6, grip: 1.12, drift: 0.85, mass: 1430 },
     sound: { type: 'v6', turbo: true, pops: 0.5 },
@@ -14,7 +15,6 @@ export const JDM_SPECS = [
   },
   {
     id: 's13', short: 'S13', name: 'Silvia S13', brand: 'NISSAN', number: '13', cls: 'Drift',
-    desc: 'Leve, tração traseira e turbo: a escola do drift. A traseira sai com um toque.',
     colors: { main: '#e8e8e4', accent: '#8e939b' },
     stats: { top: 240, accel: 7.4, grip: 0.95, drift: 1.4, mass: 1200 },
     sound: { type: 'i4turbo', turbo: true, pops: 0.8 },
@@ -23,7 +23,6 @@ export const JDM_SPECS = [
   },
   {
     id: 's14', short: 'S14', name: 'Silvia S14', brand: 'NISSAN', number: '14', cls: 'Drift',
-    desc: 'A Silvia dos anos 90: entre-eixos maior, mais estável que a S13 e ainda feita para deslizar.',
     colors: { main: '#eceff2', accent: '#2a2d33' },
     stats: { top: 250, accel: 7.8, grip: 0.98, drift: 1.35, mass: 1240 },
     sound: { type: 'i4turbo', turbo: true, pops: 0.7 },
@@ -32,7 +31,6 @@ export const JDM_SPECS = [
   },
   {
     id: 'z350', short: '350Z', name: '350Z', brand: 'NISSAN', number: '35', cls: 'Esportivo',
-    desc: 'V6 aspirado com ronco encorpado. Equilibrado, previsível e rápido na saída de curva.',
     colors: { main: '#d98c14', accent: '#1a1a1a' },
     stats: { top: 255, accel: 7.9, grip: 1.0, drift: 1.2, mass: 1450 },
     sound: { type: 'v6', pops: 0.6 },
@@ -41,7 +39,6 @@ export const JDM_SPECS = [
   },
   {
     id: 'nsx', short: 'NSX', name: 'NSX', brand: 'HONDA', number: '90', cls: 'Superesportivo',
-    desc: 'Motor central V6 que gira alto. Leve e afiado, o carro mais preciso da garagem.',
     colors: { main: '#f0f0ee', accent: '#141414' },
     stats: { top: 270, accel: 8.4, grip: 1.1, drift: 0.95, mass: 1370 },
     sound: { type: 'flat6', pops: 0.4 },
@@ -50,7 +47,6 @@ export const JDM_SPECS = [
   },
   {
     id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico',
-    desc: 'Cupê leve dos anos 80, tração traseira e motor que grita. Lendário nas descidas de montanha.',
     colors: { main: '#efefef', accent: '#1b1b1b' },
     stats: { top: 215, accel: 6.9, grip: 0.92, drift: 1.5, mass: 950 },
     sound: { type: 'i4rally', pops: 0.9 },
@@ -70,6 +66,14 @@ export const PAINTS = [
   { name: 'Rosa', hex: '#e86aa6' },
 ];
 for (const s of JDM_SPECS) s.paints = PAINTS.map(p => p.hex);
+// class and description follow the language (texts in i18n.js: cls.*, car.<id>)
+const CLS_KEY = { 'Grand tourer': 'cls.gt', Drift: 'cls.drift', Esportivo: 'cls.sports', Superesportivo: 'cls.super', 'Clássico': 'cls.classic' };
+for (const s of JDM_SPECS) {
+  const ck = CLS_KEY[s.cls];
+  Object.defineProperty(s, 'cls', { get: () => t(ck), enumerable: true });
+  Object.defineProperty(s, 'desc', { get: () => t('car.' + s.id), enumerable: true });
+}
+PAINTS.forEach((p, i) => Object.defineProperty(p, 'name', { get: () => t('paint.' + i), enumerable: true }));
 
 // Ordinary traffic drawn from glTF models (instanced). v = cruise speed range (km/h); tint = the
 // material recoloured per car from `colors` (the others keep their own colours / textures).
