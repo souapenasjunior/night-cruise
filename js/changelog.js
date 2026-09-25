@@ -1,6 +1,14 @@
 // "Novidades" screen: one entry per release, newest first. Plain text, 3 to 5 lines each.
 export const CHANGELOG = [
   {
+    version: '1.5.1', date: '2026-09-25',
+    lines: [
+      'Acostamento dos dois lados do anel: agora também há 3,1 m livres junto à mureta central, e um carro parado cabe inteiro em qualquer lado.',
+      'Faixas pintadas no chão não piscam mais onde uma rampa entra ou sai do anel e na entrada dos boxes do PA.',
+      'Carros do trânsito só mudam da faixa de aceleração para a pista quando ela já corre ao lado, sem cruzar o acostamento.',
+    ],
+  },
+  {
     version: '1.5.0', date: '2026-09-25',
     lines: [
       'Acostamento largo no mapa inteiro: 3,1 m livres no anel e 2,4 m no C2, nas rampas e no PA; dá para parar ou passar por ele.',

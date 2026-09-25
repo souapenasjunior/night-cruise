@@ -510,6 +510,67 @@ export class World {
     return this.roadMats.get(key);
   }
 
+  // Road surface. Where this deck lies under an earlier one (a ramp on the loop, a bay under the access
+  // road's edge) it is not drawn: the two share one surface (network.js drape), and two coplanar surfaces
+  // flicker in the distance whatever their drawing order. Near such a deck the surface is laid out in
+  // 0.4 m columns; a cell wholly under the other deck (0.15 m past its edge) is left out, and the strip
+  // it keeps under the other deck's edge sits 1 cm lower (drawing only: the car rides the shared surface).
+  _roadSurface(r) {
+    const net = this.net, hw = r.hw, n = r.n, res = [];
+    const pos = [], uv = [], idx = [];
+    const rows = r.closed ? n + 1 : n; // (a closed ribbon repeats its first row at the end)
+    const I = k => (r.closed ? k % n : k);
+    const pt = (i, o) => ({ x: r.px[i] - r.tz[i] * o, y: r.py[i] + o * r.cs[i], z: r.pz[i] + r.tx[i] * o });
+    const hosts = q => q.r.layer < r.layer;
+    const near = new Uint8Array(rows);
+    if (r.layer > 0) for (let k = 0; k < rows; k++) {
+      const P = pt(I(k), 0);
+      near[k] = net.surfacesAt(P.x, P.z, P.y, LEVEL_TOL + 0.5, hw, res).some(hosts) ? 1 : 0;
+    }
+    const seg = k => near[k] || (k + 1 < rows && near[k + 1]);
+    const M = Math.max(2, Math.ceil((2 * hw) / 0.4));
+    const rowStart = [], rowCnt = [], deep = [];
+    for (let k = 0; k < rows; k++) {
+      const grid = seg(k) || (k > 0 && seg(k - 1));
+      const cnt = grid ? M + 1 : 2, i = I(k);
+      rowStart.push(pos.length / 3); rowCnt.push(cnt);
+      const dRow = [];
+      for (let j = 0; j < cnt; j++) {
+        const o = -hw + (j * 2 * hw) / (cnt - 1), P = pt(i, o);
+        let under = false, inside = false;
+        if (grid) for (const q of net.surfacesAt(P.x, P.z, P.y, LEVEL_TOL, 0.02, res)) {
+          if (!hosts(q)) continue;
+          under = true;
+          if (Math.abs(q.off) < q.r.hw - 0.15) inside = true;
+        }
+        dRow.push(inside);
+        pos.push(P.x, P.y - (under ? 0.01 : 0), P.z);
+        uv.push((o + hw) / (2 * hw), (k * r.ds) / 20);
+      }
+      deep.push(dRow);
+    }
+    for (let k = 0; k + 1 < rows; k++) {
+      const a0 = rowStart[k], b0 = rowStart[k + 1], ca = rowCnt[k], cb = rowCnt[k + 1];
+      if (ca === cb) {
+        for (let j = 0; j + 1 < ca; j++) {
+          if (ca > 2 && deep[k][j] && deep[k][j + 1] && deep[k + 1][j] && deep[k + 1][j + 1]) continue;
+          const a = a0 + j, b = a + 1, c = b0 + j, d = c + 1;
+          idx.push(a, b, c, b, d, c);
+        }
+      } else {
+        // from a plain row to a column row: one quad on the outer vertices (collinear with the columns)
+        const a = a0, b = a0 + ca - 1, c = b0, d = b0 + cb - 1;
+        idx.push(a, b, c, b, d, c);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+
   _ribbon(r) {
     const net = this.net;
     const hw = r.hw;
@@ -526,15 +587,7 @@ export class World {
     for (let i = 0; i < r.n; i++) { openL[i] = r.wallAt(-1, i * r.ds) ? 0 : 1; openR[i] = r.wallAt(1, i * r.ds) ? 0 : 1; }
     r.openL = openL; r.openR = openR;
     // surface
-    const all = [[0, r.closed ? r.n + 1 : r.n]];
-    const road = sweep(r, [[-hw, 0], [hw, 0]], all, { uScale: 20, vScale: 1 });
-    // fix UVs: u across road
-    const uvs = road.attributes.uv;
-    for (let k = 0; k < uvs.count; k += 2) {
-      const vAlong = uvs.getX(k);
-      uvs.setXY(k, 0, vAlong);
-      uvs.setXY(k + 1, 1, vAlong);
-    }
+    const road = this._roadSurface(r);
     const roadMesh = new THREE.Mesh(road, this._roadMat(r));
     roadMesh.receiveShadow = true;
     this.root.add(roadMesh);
