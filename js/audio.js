@@ -227,7 +227,7 @@ export class AudioSys {
       v.rf.frequency.setTargetAtTime((260 + kmh * 3.2) * doppler, t, 0.1);
       v.eng.gain.setTargetAtTime((heavy ? 0.1 : 0.06) * (0.55 + 0.45 * push), t, 0.1);
       v.rg.gain.setTargetAtTime(Math.pow(clamp(kmh / 110, 0, 1.2), 1.5) * (heavy ? 0.16 : 0.11), t, 0.1);
-      v.level = att * 0.45;
+      v.level = att * 0.36;
       v.out.gain.setTargetAtTime(v.level, t, fresh ? 0.08 : 0.06);
       if (v.pan.pan) v.pan.pan.setTargetAtTime(clamp(c.pan, -1, 1), t, 0.05);
     }
@@ -424,15 +424,15 @@ export class AudioSys {
     const wob = Math.sin(t * 11) * 25 + Math.sin(t * 29) * 12;
     this.sq[0].frequency.setTargetAtTime(760 + sq * 220 + wob, t, 0.03);
     this.sq[1].frequency.setTargetAtTime(772 + sq * 230 - wob, t, 0.03);
-    this.roll.g.gain.setTargetAtTime(clamp(kmh / 200, 0, 0.42), t, 0.1);
+    this.roll.g.gain.setTargetAtTime(clamp(kmh / 250, 0, 0.3), t, 0.1);
     this.roll.fl.frequency.setTargetAtTime(110 + kmh * 1.1, t, 0.1);
     // tyre roar on the asphalt: rises with speed, its band moves up; a slow random wobble stands for
     // the changing surface
     this.treadWob = clamp(this.treadWob + (Math.random() - 0.5) * dt * 1.2, 0.85, 1.15);
     const tr = Math.pow(clamp(kmh / 160, 0, 1.4), 1.3);
-    this.tread.g.gain.setTargetAtTime(tr * 0.22 * this.treadWob * (1 + this.inTunnel * 0.3), t, 0.08);
+    this.tread.g.gain.setTargetAtTime(tr * 0.12 * this.treadWob * (1 + this.inTunnel * 0.3), t, 0.08);
     this.tread.fl.frequency.setTargetAtTime(Math.min(1300, 380 + kmh * 3.5), t, 0.1);
-    this.treadHi.g.gain.setTargetAtTime(tr * 0.025, t, 0.1);
+    this.treadHi.g.gain.setTargetAtTime(tr * 0.01, t, 0.1);
     // expansion joints of the elevated road: a soft double thump (front, then rear axle) every 40 m
     if (kmh > 25 && !p.reverse) {
       this.jointD += (kmh / 3.6) * dt;
@@ -450,7 +450,7 @@ export class AudioSys {
     this.windHi.g.gain.setTargetAtTime(clamp((v - 1) * 0.03, 0, 0.05), t, 0.2);
     // ambience
     this.city.g.gain.setTargetAtTime(0.14 * (1 - this.inTunnel * 0.7), t, 0.4);
-    this.traffic.g.gain.setTargetAtTime(clamp(p.trafficNear * 0.012, 0, 0.045), t, 0.4);
+    this.traffic.g.gain.setTargetAtTime(clamp(p.trafficNear * 0.008, 0, 0.03), t, 0.4);
     this.inTunnel = lerp(this.inTunnel, p.tunnel ? 1 : 0, 1 - Math.exp(-dt * 3));
     this.revSend.gain.setTargetAtTime(this.inTunnel * 0.55, t, 0.1);
     this.tunnelHum.g.gain.setTargetAtTime(this.inTunnel * 0.08, t, 0.3);

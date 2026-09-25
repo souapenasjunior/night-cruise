@@ -350,8 +350,13 @@ export function buildSignage(world) {
       const s = w.s + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2;
       if (s < 5 || s > w.r.len - 5) continue;
       if (w.kind === 'paexit') {
-        const legs = gantryLegs(w.r, s);
-        if (!legs) continue;
+        // legs on the parapeted edge(s); the PA's own roads lying on the deck at its level are fine
+        const P = w.r.pointAt(s, 0), ext = w.r.hw - 0.3;
+        const legs = [-1, 1].filter(sg => edgeClosed(w.r, P.i, [sg])).map(sg => sg * ext);
+        if (!legs.length || legs.some(o => {
+          const Q = w.r.pointAt(s, o);
+          return nearPole(Q.x, Q.z, 1.6) || net.surfacesAt(Q.x, Q.z, Q.y + 5.75, 6.25, 1.2, res).some(q => q.r !== w.r && Math.abs(q.y - Q.y) > 0.6);
+        })) continue;
         const it = { kind: 'paexit', type: 'gantry', r: w.r, d: w.d, s, legs, dest: K1(w.dest), arrowDeg: w.arrow };
         items.push(it); paSigns.push(it);
       } else {

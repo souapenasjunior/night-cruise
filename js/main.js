@@ -945,6 +945,7 @@ function padMenus() {
   if (a && el && el.click) el.click();
   if (b) {
     if (settingsOpen) closeSettings();
+    else if (!$('credits').hidden) closeCredits();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
