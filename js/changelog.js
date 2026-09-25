@@ -1,6 +1,16 @@
 // "Novidades" screen: one entry per release, newest first. Plain text, 3 to 5 lines each.
 export const CHANGELOG = [
   {
+    version: '1.5.0', date: '2026-09-25',
+    lines: [
+      'Acostamento largo no mapa inteiro: 3,1 m livres no anel e 2,4 m no C2, nas rampas e no PA; dá para parar ou passar por ele.',
+      'Junções niveladas: onde duas pistas se encontram o chão é um só, sem degrau, tranco nem piso tremendo.',
+      'Muretas refeitas: exatamente na borda da pista, sem sobreposição nem lascas, pontas inclinadas nos bicos.',
+      'Toda mureta que se vê tem colisão, e o carro não atravessa mais nenhuma, nem com a frente nas curvas fechadas.',
+      'Pilares, postes e placas não atravessam mais pistas, e toda passagem inferior tem ao menos 4,5 m de altura livre.',
+    ],
+  },
+  {
     version: '1.4.0', date: '2026-09-25',
     lines: [
       'Nova tela de Novidades no menu inicial, com o que mudou em cada versão.',

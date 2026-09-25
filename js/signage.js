@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { wrap, makeCanvas } from './util.js';
+import { RING_X, PARAPET_W } from './network.js';
 
 export const SIGN_GAP = 250;
 const GREEN = '#13704a', BLUE = '#1d4b98', WHITE = '#f2f5f1';
@@ -273,13 +274,14 @@ export function buildSignage(world) {
     }
     return legs;
   };
-  // post on the parapet at the drivers' left, the plate over the shoulder and the edge
+  // post on the parapet at the drivers' left, the plate reaching out past the edge
   const sideOk = (r, s, d) => {
     const P = r.pointAt(s, 0);
     if (tunnel(r, P.y)) return false;
     const u = -1, sg = u * d; // offset sign of the left edge for drivers going d
     if (!edgeClosed(r, P.i, [sg], 4)) return false;
-    for (const o of [r.hw - 0.2, r.hw + 1.9]) {
+    // (the plate reaches 3.2 m past the edge: nothing may lie there)
+    for (const o of [r.hw - 0.2, r.hw + 1.6, r.hw + 3.4]) {
       const Q = r.pointAt(s, sg * o);
       if (others(r, Q.x, Q.z, Q.y + 1.5, 3.5, 0.3)) return false;
     }
@@ -400,7 +402,8 @@ export function buildSignage(world) {
   const faceBoards = (it, span) => {
     const { r, d, s } = it;
     // driver-lateral range of the deck this face covers (u: + = drivers' right)
-    const u0 = r.kind === 'ring' ? -(r.hw - 0.9) : -(r.hw - 0.6), u1 = r.kind === 'ring' ? -1.3 : r.hw - 0.6;
+    // (over the lanes, from 0.6 m past the edge line to the yellow line; links: 1.4 m past each edge line)
+    const u0 = r.kind === 'ring' ? -(r.edge + 0.6) : -(r.edge + 1.4), u1 = r.kind === 'ring' ? -(RING_X.yellow - 0.25) : r.edge + 1.4;
     const mid = (u0 + u1) / 2;
     const Y = 6.5;
     if (it.kind === 'exit') {
@@ -499,9 +502,9 @@ export function buildSignage(world) {
   const gantrySteel = (r, s, legs) => {
     const P = r.pointAt(s, 0), yaw = Math.atan2(P.tx, P.tz), ext = r.hw - 0.3;
     for (const o of legs) {
-      const Q = r.pointAt(s, o);
-      // a cantilever's leg is heavier
+      // a cantilever's leg is heavier; edge legs stand on the parapet, their inner face flush with it
       const t = legs.length < (r.median ? 3 : 2) ? 0.55 : 0.35;
+      const Q = r.pointAt(s, o === 0 ? 0 : Math.sign(o) * (r.hw - PARAPET_W + t / 2));
       box(Q.x, Q.y + 3.9, Q.z, t, 7.8, t, yaw);
     }
     box(P.x, P.y + 7.7, P.z, ext * 2, 0.35, 0.35, yaw);
@@ -521,8 +524,8 @@ export function buildSignage(world) {
       const isRoute = it.kind === 'routeName';
       const dest = isRoute ? C2 : null, z = it.z;
       const w = 3.4, h = 1.3;
-      // u (drivers' right) of the plate: centred just past the edge
-      const uc = -(r.hw + 0.1);
+      // u (drivers' right) of the plate: from the post on the parapet outward, clear of the shoulder
+      const uc = -(r.hw - 0.2 + w / 2);
       addPanel(r, d, s, uc - w / 2, uc + w / 2, 2.3, h, SMALL, (g, x, y, W, H) => {
         plate(g, x, y, W, H, GREEN);
         g.fillStyle = WHITE; g.textBaseline = 'middle';
@@ -533,14 +536,30 @@ export function buildSignage(world) {
       }, 0.85, 0.12);
     } else if (it.kind === 'gore') {
       const e = it.e, host = e.host;
-      const hs = e.gore.sHost, P = e.r.pointAt(e.gore.s, 0);
-      const H = host.pointAt(hs, 0);
-      // post halfway between the two decks' edges
-      const rel = (P.x - H.x) * -H.tz + (P.z - H.z) * H.tx; // host offset of the ramp centre
-      const sg = Math.sign(rel), E1 = host.pointAt(hs, sg * host.hw);
-      const dx = E1.x - P.x, dz = E1.z - P.z, dl = Math.hypot(dx, dz) || 1;
-      const E2x = P.x + (dx / dl) * e.r.hw, E2z = P.z + (dz / dl) * e.r.hw;
-      const gx = (E1.x + E2x) / 2, gz = (E1.z + E2z) / 2, gy = Math.min(E1.y, P.y);
+      // the post stands in the V between the two decks, where the V is wide enough for the whole plate
+      // (2.6 m) to clear both parapets: searched along the ramp from the nose, across the host's
+      // cross-section (the ramp crosses it at an angle: measured along any other line the post would
+      // land on a deck)
+      const away = Math.sign(e.gore.s - e.sep.s) || 1;
+      let hs = 0, P = null, H = null, sg = 1, gap = 0;
+      for (let k = 0; k <= 50 && gap < 2.9; k++) {
+        const s = e.gore.s + away * k * 2;
+        if (s < 0 || s > e.r.len) break;
+        P = e.r.pointAt(s, 0);
+        hs = host.projectGlobal(P.x, P.z).s;
+        H = host.pointAt(hs, 0);
+        sg = Math.sign((P.x - H.x) * -H.tz + (P.z - H.z) * H.tx); // host side of the ramp
+        gap = 0;
+        // (projected near s: the same road may pass close by elsewhere, at another level)
+        for (let t = 0.05; t < 8; t += 0.05) {
+          const Q = host.pointAt(hs, sg * (host.hw + t));
+          if (Math.abs(e.r.projectLocal(Q.x, Q.z, Math.floor(s / e.r.ds), 12).off) <= e.r.hw) { gap = t; break; }
+        }
+      }
+      if (gap < 2.9) continue;
+      const E1 = host.pointAt(hs, sg * host.hw);
+      const G = host.pointAt(hs, sg * (host.hw + gap / 2));
+      const gx = G.x, gz = G.z, gy = Math.min(E1.y, P.y);
       // nothing overhead, no pole in the way
       if (net.surfacesAt(gx, gz, gy + 3.5, 3, 0.2, res).some(qq => qq.r !== host && qq.r !== e.r) || nearPole(gx, gz, 1.5)) continue;
       const yaw = Math.atan2(H.tx, H.tz);

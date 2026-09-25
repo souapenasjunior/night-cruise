@@ -1,6 +1,7 @@
 // Procedural canvas textures.
 import * as THREE from 'three';
 import { makeCanvas, rng, FONT_DISPLAY } from './util.js';
+import { RING_X, LINK_X, LANE_W } from './network.js';
 
 function tex(canvas, { repeat = false, srgb = true, aniso = 8 } = {}) {
   const t = new THREE.CanvasTexture(canvas);
@@ -75,8 +76,13 @@ export function roadTexture(spec, q = 1, aniso = 8) {
   return t;
 }
 
-export const RING_ROAD = { hw: 13.9, period: 20, median: 1.1, edge: 11.9, lanes: [-2.9, -6.5, -10.1, 2.9, 6.5, 10.1], solid: [-11.9, 11.9], yellow: [-1.1, 1.1], dashed: [-4.7, -8.3, 4.7, 8.3] };
-export const LINK_ROAD = { hw: 5.6, period: 20, median: 0, edge: 3.6, lanes: [-1.8, 1.8], solid: [-3.6, 3.6], dashed: [0] };
+// line layouts from the roads' cross-sections (network.js), so the paint always matches the lanes
+const both = list => [...list.map(o => -o), ...list];
+export const RING_ROAD = {
+  hw: RING_X.hw, period: 20, median: RING_X.yellow, edge: RING_X.edge, lanes: both(RING_X.lanes),
+  solid: both([RING_X.edge]), yellow: both([RING_X.yellow]), dashed: both([1, 2].map(k => RING_X.yellow + LANE_W * k)),
+};
+export const LINK_ROAD = { hw: LINK_X.hw, period: 20, median: 0, edge: LINK_X.edge, lanes: LINK_X.lanes.slice(), solid: both([LINK_X.edge]), dashed: [0] };
 // parking bays: plain asphalt, the stall lines are separate geometry
 export const LOT_ROAD = { hw: 3.6, period: 20, median: 0, edge: 3.6, lanes: [], solid: [], dashed: [] };
 

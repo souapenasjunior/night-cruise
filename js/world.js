@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rng, clamp, lerp } from './util.js';
 import * as TX from './textures.js';
-import { RING_HW, RAMP_HW } from './network.js';
+import { CHAMFER, PARAPET_W, LEVEL_TOL } from './network.js';
 import { buildSignage } from './signage.js';
 import { buildMarkings } from './markings.js';
 
@@ -27,7 +27,8 @@ function sweep(r, profile, ranges, { uScale = 4, vScale = 4 } = {}) {
         const s = (i0 + k) * r.ds;
         const ao = val(profile[j][0], i), ay = val(profile[j][1], i);
         const bo = val(profile[j + 1][0], i), by = val(profile[j + 1][1], i);
-        pos.push(P[i] + rx * ao, Y[i] + ay, Z[i] + rz * ao, P[i] + rx * bo, Y[i] + by, Z[i] + rz * bo);
+        // (the deck's cross slope: zero except where it lies on another road crossing at an angle)
+        pos.push(P[i] + rx * ao, Y[i] + ao * r.cs[i] + ay, Z[i] + rz * ao, P[i] + rx * bo, Y[i] + bo * r.cs[i] + by, Z[i] + rz * bo);
         uv.push(s / uScale, 0, s / uScale, Math.hypot(bo - ao, by - ay) / vScale);
       }
       for (let k = 0; k < count - 1; k++) {
@@ -44,6 +45,81 @@ function sweep(r, profile, ranges, { uScale = 4, vScale = 4 } = {}) {
   g.computeVertexNormals();
   return g;
 }
+
+// Sweep along the exact stretch [s0, s1] of r (s1 may run past the end of a closed ribbon): vertices at
+// both ends and at every sample in between. profile: [[off, dy], ...]; off may be a function of s, dy a
+// function of (s, deck height there). caps: close both ends with the profile polygon.
+function sweepS(r, profile, s0, s1, { uScale = 4, vScale = 4, caps = false } = {}) {
+  if (!(s1 - s0 > 0.02)) return null;
+  const list = [s0];
+  for (let k = Math.floor(s0 / r.ds) + 1; k * r.ds < s1 - 0.05; k++) if (k * r.ds > s0 + 0.05) list.push(k * r.ds);
+  list.push(s1);
+  const val = (q, s, y) => (typeof q === 'function' ? q(s, y) : q);
+  const pos = [], uv = [], idx = [], P = {};
+  const ring = []; // per station: [x, y, z] for each profile point
+  for (const s of list) {
+    const pts = [];
+    for (const [o, dy] of profile) {
+      const off = val(o, s);
+      r.pointAt(r.wrapS(s), off, P);
+      pts.push([P.x, P.y + val(dy, s, P.y), P.z]);
+    }
+    ring.push(pts);
+  }
+  for (let j = 0; j < profile.length - 1; j++) {
+    const base = pos.length / 3;
+    list.forEach((s, k) => {
+      const a = ring[k][j], b = ring[k][j + 1];
+      pos.push(...a, ...b);
+      uv.push(s / uScale, 0, s / uScale, Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / vScale);
+    });
+    for (let k = 0; k < list.length - 1; k++) {
+      const a = base + k * 2, b = a + 1, c = a + 2, d = a + 3;
+      idx.push(a, b, c, b, d, c);
+    }
+  }
+  if (caps) {
+    for (const k of [0, list.length - 1]) {
+      const base = pos.length / 3;
+      for (const p of ring[k]) { pos.push(...p); uv.push(0, 0); }
+      for (let j = 1; j < profile.length - 1; j++) idx.push(base, base + j, base + j + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// s-intervals of A ({s0, s1}) minus the union of B (closed ribbons: wrap-aware). A full loop is cut
+// open at the first removed stretch, so its pieces keep their true ends.
+function subtract(A, B, r) {
+  const L = r.len, Bs = [];
+  for (const b of B) for (const k of r.closed ? [-1, 0, 1, 2] : [0]) Bs.push([b.s0 + k * L, b.s1 + k * L]);
+  const out = [];
+  for (let a of A) {
+    if (a.full && r.closed && B.length) { const e = B[0].s1; a = { ...a, s0: e, s1: e + L }; }
+    let pieces = [[a.s0, a.s1]];
+    for (const [b0, b1] of Bs) {
+      const next = [];
+      for (const [p0, p1] of pieces) {
+        if (b1 <= p0 || b0 >= p1) { next.push([p0, p1]); continue; }
+        if (b0 > p0) next.push([p0, b0]);
+        if (b1 < p1) next.push([b1, p1]);
+      }
+      pieces = next;
+    }
+    for (const [p0, p1] of pieces) if (p1 - p0 > 0.05) out.push({ s0: p0, s1: p1 });
+  }
+  return out;
+}
+// s-intervals where the sample predicate is false
+function invert(r, pred) {
+  return rangesWhere(r, i => !pred(i)).map(([i0, c]) => ({ s0: i0 * r.ds, s1: (i0 + c - 1) * r.ds }));
+}
+const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 
 // contiguous ranges of sample indices where pred(i) is true (handles closed wrap)
 function rangesWhere(r, pred) {
@@ -321,14 +397,17 @@ export class World {
       pool: TX.poolTexture(),
       glow: TX.radialTexture(64),
     };
+    this.roadMats = new Map(); // per kind and layer (see _roadMat)
     this.mats = {
       ring: new THREE.MeshStandardMaterial({ map: this.tex.ring, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
       link: new THREE.MeshStandardMaterial({ map: this.tex.link, roughness: 0.82, metalness: 0.0, envMapIntensity: 0.25 }),
       // bays overlap the access road by 1 m: draw on top there instead of z-fighting
       lot: new THREE.MeshStandardMaterial({ map: this.tex.lot, roughness: 0.84, metalness: 0.0, envMapIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
-      paint: new THREE.MeshStandardMaterial({ color: 0xd9d8cf, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 }),
-      // gore infill reads as more road surface (plain asphalt, like the bays)
-      gore: new THREE.MeshStandardMaterial({ map: this.tex.lot, roughness: 0.84, metalness: 0.0, envMapIntensity: 0.25, side: THREE.DoubleSide }),
+      // painted markings win over every road layer (see _roadMat)
+      paint: new THREE.MeshStandardMaterial({ color: 0xd9d8cf, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -2 * net.layers - 4 }),
+      // gore infill reads as more road surface (plain asphalt, like the bays); flush with the decks and
+      // drawn behind them where it tucks 0.4 m under the neighbouring deck
+      gore: new THREE.MeshStandardMaterial({ map: this.tex.lot, roughness: 0.84, metalness: 0.0, envMapIntensity: 0.25, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 }),
       walk: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x7d7e84, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
       concrete: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x9a9aa0, roughness: 0.85, side: THREE.DoubleSide }),
       deck: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x6c6d74, roughness: 0.9, side: THREE.DoubleSide }),
@@ -350,6 +429,7 @@ export class World {
       this.tex[k] = TX.roadTexture(k === 'ring' ? TX.RING_ROAD : k === 'lot' ? TX.LOT_ROAD : TX.LINK_ROAD, texQ, this.aniso);
       this.mats[k].map = this.tex[k];
       this.mats[k].needsUpdate = true;
+      for (const [key, m] of this.roadMats) if (key.startsWith(k + ':')) { m.map = this.tex[k]; m.needsUpdate = true; }
       if (k === 'lot') { this.mats.gore.map = this.tex.lot; this.mats.gore.needsUpdate = true; }
       old.dispose();
     }
@@ -414,6 +494,22 @@ export class World {
   }
 
   // ---------------------------------------------------------------- roads
+  // road material for a deck: where decks overlap they share one surface (network.js drape), and the
+  // deck it was draped onto is drawn in front (polygon offset by layer), so nothing flickers even where
+  // three decks meet
+  _roadMat(r) {
+    const kind = r.kind === 'ring' ? 'ring' : r.kind === 'lot' ? 'lot' : 'link';
+    const key = kind + ':' + r.layer;
+    if (!this.roadMats.has(key)) {
+      const m = this.mats[kind].clone();
+      m.polygonOffset = true;
+      m.polygonOffsetFactor = -1;
+      m.polygonOffsetUnits = -2 * (this.net.layers - r.layer) + 1;
+      this.roadMats.set(key, m);
+    }
+    return this.roadMats.get(key);
+  }
+
   _ribbon(r) {
     const net = this.net;
     const hw = r.hw;
@@ -423,70 +519,15 @@ export class World {
     const tRanges = rangesWhere(r, tunnelPred);
     this.tunnels.set(r.id, tRanges.map(([i0, c]) => [i0 * r.ds, (i0 + c) * r.ds]));
     r.tunnelRanges = this.tunnels.get(r.id);
-    // open edges
-    const res = [];
+    const tunnelS = r.tunnelRanges.map(([a, b]) => ({ s0: a, s1: b }));
+    // walls stand on the boundary of the drivable area (network.js buildWalls); samples with no wall
+    // on a side are "open" there (lamps and sign posts need a parapet to stand on)
     const openL = new Uint8Array(r.n), openR = new Uint8Array(r.n);
-    // open only because a parking bay lies beyond (the bay's end wall closes the corner there)
-    const bayL = new Uint8Array(r.n), bayR = new Uint8Array(r.n);
-    for (let i = 0; i < r.n; i++) {
-      for (const sg of [-1, 1]) {
-        // same test as the car's wall check (probe ~0.5 m past the edge, 1.5 m height tolerance),
-        // so a parapet stands exactly where the physics has a wall and nowhere else
-        const off = sg * (hw + 0.5);
-        const x = r.px[i] - r.tz[i] * off, z = r.pz[i] + r.tx[i] * off;
-        net.surfacesAt(x, z, r.py[i], 1.5, 0, res);
-        const other = res.some(q => q.r !== r);
-        if (other) (sg < 0 ? openL : openR)[i] = 1;
-        if (other && res.every(q => q.r === r || q.r.kind === 'lot')) (sg < 0 ? bayL : bayR)[i] = 1;
-      }
-    }
+    for (let i = 0; i < r.n; i++) { openL[i] = r.wallAt(-1, i * r.ds) ? 0 : 1; openR[i] = r.wallAt(1, i * r.ds) ? 0 : 1; }
     r.openL = openL; r.openR = openR;
-    // where a ramp's edge runs along the edge of the road it leaves or joins (the first/last metres of
-    // a taper), both would draw a parapet in the same place: two walls inside each other, flickering.
-    // The earlier road draws it; the ramp leaves it out there (the physics wall is the same either way)
-    const dupL = new Uint8Array(r.n), dupR = new Uint8Array(r.n);
-    if (!isRing && r.kind !== 'lot') for (let i = 0; i < r.n; i++) {
-      for (const sg of [-1, 1]) {
-        const off = sg * (r.hw - 0.2);
-        net.surfacesAt(r.px[i] - r.tz[i] * off, r.pz[i] + r.tx[i] * off, r.py[i], 1.5, 0, res);
-        const q = res.find(q2 => q2.r !== r && q2.r.id < r.id && q2.r.kind !== 'lot' && Math.abs(q2.off) > q2.r.hw - 0.7 &&
-          !(q2.off < 0 ? q2.r.openL : q2.r.openR)[q2.i]);
-        if (q) (sg < 0 ? dupL : dupR)[i] = 1;
-      }
-    }
-    r.dupL = dupL; r.dupR = dupR;
-    // distance from each edge to the nearest other deck at the same level (Infinity: none within 2.6 m)
-    const gapL = new Float32Array(r.n).fill(Infinity), gapR = new Float32Array(r.n).fill(Infinity);
-    for (let i = 0; i < r.n; i++) {
-      for (const sg of [-1, 1]) {
-        for (let t = 0.2; t <= 2.61; t += 0.4) {
-          const off = sg * (hw + t);
-          net.surfacesAt(r.px[i] - r.tz[i] * off, r.pz[i] + r.tx[i] * off, r.py[i], 1.2, 0, res);
-          if (res.some(q => q.r !== r)) { (sg < 0 ? gapL : gapR)[i] = t; break; }
-        }
-      }
-    }
-    // ranges grown by one sample in front (rangesWhere already runs one sample past the end), so
-    // profiles can taper to nothing over that sample instead of stopping with a cut
-    const grow = rg => rg.map(([i0, c]) => (r.closed || i0 > 0) && c < r.n ? [r.closed ? (i0 - 1 + r.n) % r.n : i0 - 1, c + 1] : [i0, c]);
     // surface
     const all = [[0, r.closed ? r.n + 1 : r.n]];
-    // where a ramp lies on the loop, keep its surface just under the loop's: the two splines differ by
-    // a few cm, which showed as a lip and the ramp's lane lines printed over the loop's
-    const sink = new Float32Array(r.n);
-    // (the same under any road it branches from or joins: a link, the PA's access road)
-    if (!isRing && r.kind !== 'lot') for (let i = 0; i < r.n; i++) {
-      for (const o of [-hw + 0.3, 0, hw - 0.3]) {
-        net.surfacesAt(r.px[i] - r.tz[i] * o, r.pz[i] + r.tx[i] * o, r.py[i], 1.0, 0, res);
-        for (const q of res) {
-          if (q.r === r || q.r.id > r.id || q.r.kind === 'lot') continue;
-          const top = q.y + (q.r.sink ? lerp(q.r.sink[q.i], q.r.sink[q.r.next(q.i)], clamp(q.t, 0, 1)) : 0);
-          sink[i] = Math.max(-0.12, Math.min(sink[i], top - r.py[i] - 0.02));
-        }
-      }
-    }
-    r.sink = sink; // road markings sit on the surface actually drawn
-    const road = sweep(r, [[-hw, i => sink[i]], [hw, i => sink[i]]], all, { uScale: 20, vScale: 1 });
+    const road = sweep(r, [[-hw, 0], [hw, 0]], all, { uScale: 20, vScale: 1 });
     // fix UVs: u across road
     const uvs = road.attributes.uv;
     for (let k = 0; k < uvs.count; k += 2) {
@@ -494,70 +535,78 @@ export class World {
       uvs.setXY(k, 0, vAlong);
       uvs.setXY(k + 1, 1, vAlong);
     }
-    const roadMesh = new THREE.Mesh(road, isRing ? this.mats.ring : r.kind === 'lot' ? this.mats.lot : this.mats.link);
+    const roadMesh = new THREE.Mesh(road, this._roadMat(r));
     roadMesh.receiveShadow = true;
     this.root.add(roadMesh);
-    // deck sides + underside (height-dependent)
-    const bottom = i => {
-      const y = r.py[i];
-      if (y <= 5) return -(y + 0.3);
-      return -lerp(y + 0.3, 1.8, Math.min(1, (y - 5) / 2));
-    };
+    // deck underside (height-dependent; a deck lying on another is lifted a hair inside it, so the two
+    // undersides never coincide), and its sides only where its edges are the edges of the deck mass
+    const bottom = y => (y <= 5 ? -(y + 0.3) : -lerp(y + 0.3, 1.8, Math.min(1, (y - 5) / 2)));
+    const lift = 0.03 * r.layer;
     const deckRanges = rangesWhere(r, i => !tunnelPred(i));
-    const deck = sweep(r, [[-hw - 0.05, 0], [-hw - 0.05, bottom], [hw + 0.05, bottom], [hw + 0.05, 0]], deckRanges, { uScale: 8, vScale: 8 });
-    if (deck) this.root.add(new THREE.Mesh(deck, this.mats.deck));
-    // parapets
+    const under = sweep(r, [[-hw - 0.05, i => bottom(r.py[i]) + lift], [hw + 0.05, i => bottom(r.py[i]) + lift]], deckRanges, { uScale: 8, vScale: 8 });
+    if (under) this.root.add(new THREE.Mesh(under, this.mats.deck));
     for (const sg of [-1, 1]) {
-      const open = sg < 0 ? openL : openR, dup = sg < 0 ? dupL : dupR;
-      const gap = sg < 0 ? gapL : gapR;
-      // where another deck continues past this edge (a ramp peeling off or joining), the parapet
-      // ramps down to the deck over one sample, like the sloped end of a concrete barrier
-      const h = i => (open[i] || dup[i] ? 0 : 1);
-      const bay = sg < 0 ? bayL : bayR;
-      // next to a parking bay the parapet does not slope down into the bay: it runs on, full height,
-      // exactly to where the bay (and its end wall) begins
-      const bayEnds = [];
-      const rg = grow(rangesWhere(r, i => !open[i] && !dup[i] && !tunnelPred(i))).map(([i0, c]) => {
-        const first = i0 % r.n, last = (i0 + c - 1) % r.n;
-        if (c > 2 && bay[first]) { bayEnds.push([(first + 1) % r.n, first]); i0++; c--; }
-        if (c > 2 && bay[last]) { bayEnds.push([(last - 1 + r.n) % r.n, last]); c--; }
-        return [i0, c];
-      });
-      for (const [iIn, iOut] of bayEnds) this._parapetTo(r, sg, iIn, iOut);
-      const o0 = sg * (hw - 0.4), o1 = sg * hw;
-      const g = sweep(r, [[o0, 0], [o0, i => 1.05 * h(i)], [o1, i => 1.05 * h(i)], [o1, 0]], rg, { uScale: 6, vScale: 3 });
-      if (g) this.root.add(new THREE.Mesh(g, this.mats.concrete));
-      const rail = sweep(r, [[sg * (hw - 0.3), i => 1.05 * h(i)], [sg * (hw - 0.3), i => 1.3 * h(i)], [sg * (hw - 0.1), i => 1.3 * h(i)], [sg * (hw - 0.1), i => 1.05 * h(i)]], rg, { uScale: 6, vScale: 3 });
-      if (rail) this.root.add(new THREE.Mesh(rail, this.mats.rail));
-      // gore infill: where the decks part, the narrow V between them is floored (just below the
-      // neighbour's surface, so it never z-fights) and closed underneath, until the gap opens up
-      const fw = i => (Number.isFinite(gap[i]) ? Math.min(gap[i] + 0.4, 3.0) : 0);
-      const fr = grow(rangesWhere(r, i => Number.isFinite(gap[i]) && !tunnelPred(i)));
-      const fill = sweep(r, [[sg * hw, -0.03], [i => sg * (hw + fw(i)), -0.03], [i => sg * (hw + fw(i)), bottom], [sg * hw, bottom]], fr, { uScale: 8, vScale: 8 });
-      if (fill) this.root.add(new THREE.Mesh(fill, this.mats.gore));
-      // sound walls downtown
-      const swPred = i => !open[i] && !dup[i] && !tunnelPred(i) && this._soundWallAt(r, i);
-      // (drop the trailing sample rangesWhere adds, so the glass stops square instead of leaning over the opening)
-      const sw = rangesWhere(r, swPred).map(([i0, c]) => (c > 2 && c < r.n ? [i0, c - 1] : [i0, c]));
-      const wg = sweep(r, [[sg * (hw - 0.15), 1.3], [sg * (hw - 0.15), 4.2], [sg * (hw - 0.9), 5.0]], sw, { uScale: 6, vScale: 3 });
-      if (wg) {
-        const m = new THREE.Mesh(wg, this.mats.soundwall);
-        m.renderOrder = 3;
-        this.root.add(m);
-        const frame = sweep(r, [[sg * (hw - 0.12), 4.1], [sg * (hw - 0.12), 4.3]], sw, {});
-        if (frame) this.root.add(new THREE.Mesh(frame, this.mats.steel));
+      for (const w of subtract(r.walls[sg], tunnelS, r)) {
+        const g = sweepS(r, [[sg * (hw + 0.05), 0], [sg * (hw + 0.05), (s, y) => bottom(y) + lift]], w.s0, w.s1, { uScale: 8, vScale: 8 });
+        if (g) this.root.add(new THREE.Mesh(g, this.mats.deck));
       }
     }
-    // median barrier
+    // parapets (and the rail on top), cut exactly where the boundary turns; square ends where another
+    // wall carries on, sloped ends (a concrete barrier's chamfer, down to 0.2 m) where the pavement does
+    const concrete = [], rails = [], glass = [], frames = [];
+    for (const sg of [-1, 1]) {
+      for (const w of r.walls[sg]) {
+        const cl = Math.min(CHAMFER, (w.s1 - w.s0) / 2);
+        const hf = s => {
+          let h = 1;
+          if (w.e0 === 'chamfer') h = Math.min(h, 0.2 + 0.8 * smooth((s - w.s0) / cl));
+          if (w.e1 === 'chamfer') h = Math.min(h, 0.2 + 0.8 * smooth((w.s1 - s) / cl));
+          return h;
+        };
+        const o0 = sg * (hw - PARAPET_W), o1 = sg * hw;
+        // (open at the bottom: nothing is drawn flat on the deck)
+        concrete.push(sweepS(r, [[o0, 0], [o0, s => 1.05 * hf(s)], [o1, s => 1.05 * hf(s)], [o1, 0]], w.s0, w.s1, { uScale: 6, vScale: 3, caps: !w.full }));
+        rails.push(sweepS(r, [[sg * (hw - 0.3), s => 1.05 * hf(s)], [sg * (hw - 0.3), s => 1.3 * hf(s)], [sg * (hw - 0.1), s => 1.3 * hf(s)], [sg * (hw - 0.1), s => 1.05 * hf(s)]], w.s0, w.s1, { uScale: 6, vScale: 3, caps: !w.full }));
+        // sound walls downtown, on the full-height part of the parapet
+        const a = w.s0 + (w.e0 === 'chamfer' ? cl : 0), b = w.s1 - (w.e1 === 'chamfer' ? cl : 0);
+        for (const sw of subtract([{ s0: a, s1: b }], [...tunnelS, ...invert(r, i => this._soundWallAt(r, i))], r)) {
+          if (sw.s1 - sw.s0 < 6) continue;
+          glass.push(sweepS(r, [[sg * (hw - 0.15), 1.3], [sg * (hw - 0.15), 4.2], [sg * (hw - 0.9), 5.0]], sw.s0, sw.s1, { uScale: 6, vScale: 3 }));
+          frames.push(sweepS(r, [[sg * (hw - 0.12), 4.1], [sg * (hw - 0.12), 4.3]], sw.s0, sw.s1, {}));
+        }
+      }
+      // gore infill: where this deck's walled edge runs within 3 m of another deck at the same level
+      // (the V where two decks part), the strip between them is floored flush with both decks, from this
+      // edge to 0.4 m inside the other deck, and closed underneath. Only the later deck of the two draws it
+      this._gore(r, sg, tunnelPred, bottom);
+    }
+    const addMerged = (list, mat, order, name = '') => {
+      const gs = list.filter(Boolean);
+      if (!gs.length) return;
+      const m = new THREE.Mesh(gs.length > 1 ? mergeGeometries(gs) : gs[0], mat);
+      if (order) m.renderOrder = order;
+      m.name = name;
+      this.root.add(m);
+    };
+    addMerged(concrete, this.mats.concrete, 0, 'parapet:' + r.id);
+    addMerged(rails, this.mats.rail);
+    addMerged(glass, this.mats.soundwall, 3);
+    addMerged(frames, this.mats.steel);
+    // median barrier, ending at the U-turn gaps with sloped ends
     if (r.median) {
-      const gapPred = i => !r.inMedianGap(i * r.ds);
-      const rg = rangesWhere(r, gapPred);
-      const g = sweep(r, [[-0.35, 0], [-0.24, 0.3], [-0.12, 0.9], [0.12, 0.9], [0.24, 0.3], [0.35, 0]], rg, { uScale: 6, vScale: 1 });
-      if (g) this.root.add(new THREE.Mesh(g, this.mats.concrete));
+      const gaps = r.medianGaps.map(([a, b]) => ({ s0: a, s1: b }));
+      const parts = [];
+      for (const w of subtract([{ s0: 0, s1: r.len, full: true }], gaps, r)) {
+        const cl = CHAMFER;
+        const hf = s => Math.min(1, 0.2 + 0.8 * smooth((s - w.s0) / cl), 0.2 + 0.8 * smooth((w.s1 - s) / cl));
+        const prof = [[-0.35, 0], [-0.24, 0.3], [-0.12, 0.9], [0.12, 0.9], [0.24, 0.3], [0.35, 0]].map(([o, y]) => [o, s => y * hf(s)]);
+        parts.push(sweepS(r, prof, w.s0, w.s1, { uScale: 6, vScale: 1, caps: true }));
+      }
+      addMerged(parts, this.mats.concrete, 0, 'median:' + r.id);
       // antiglare fins on top (instanced)
-      this._fins(r, rg);
+      this._fins(r, rangesWhere(r, i => !r.inMedianGap(i * r.ds)));
       // amber flashers at the gaps
-      // (set 1 m back onto the wall ends, so they sit on the barrier and never over the gap)
+      // (set on the sloped wall ends, so they sit on the barrier and never over the gap)
       for (const [s0, s1] of r.medianGaps) for (const s of [s0 - 1, s1 + 1]) this._flasher(r, s);
     }
     // tunnels
@@ -579,7 +628,7 @@ export class World {
           const P = this._pt(r, i, 0);
           this.lamps.push({ x: P.x, y: P.y + 6, z: P.z, color: TUNNEL, tunnel: true, range: 40 });
         }
-        if (k % 4 === 0) for (const sg of [-1, 1]) this._pool(r, i, sg * (hw - 5), TUNNEL, 0.1, 12);
+        if (k % 4 === 0) for (const sg of [-1, 1]) this._pool(r, i, sg * (r.edge - 3), TUNNEL, 0.1, 12);
       }
       void i1;
     }
@@ -587,30 +636,35 @@ export class World {
     if (r.kind === 'lot') this._lotDressing(r);
   }
 
-  // A straight parapet piece from sample iIn (walled) toward sample iOut (a parking bay beyond the
-  // edge), ending exactly where the bay starts: found by bisection with the same probe as the physics.
-  _parapetTo(r, sg, iIn, iOut) {
-    const res = [];
-    let a = iIn * r.ds, b = iOut * r.ds;
-    if (r.closed && Math.abs(b - a) > r.len / 2) b += b < a ? r.len : -r.len;
-    const bayAt = s => {
-      const P = r.pointAt(s, sg * (r.hw + 0.5));
-      return this.net.surfacesAt(P.x, P.z, P.y, 1.5, 0, res).some(q => q.r !== r);
-    };
-    for (let k = 0; k < 12; k++) { const m = (a + b) / 2; if (bayAt(m)) b = m; else a = m; }
-    const s0 = iIn * r.ds, s1 = b;
-    const A = r.pointAt(s0, sg * (r.hw - 0.2)), B = r.pointAt(s1, sg * (r.hw - 0.2));
-    const len = Math.hypot(B.x - A.x, B.z - A.z);
-    if (len < 0.05) return;
-    const yaw = Math.atan2(B.x - A.x, B.z - A.z), y0 = (A.y + B.y) / 2;
-    const put = (w, h, yc, mat) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, len), mat);
-      m.position.set((A.x + B.x) / 2, y0 + yc, (A.z + B.z) / 2);
-      m.rotation.y = yaw;
-      this.root.add(m);
-    };
-    put(0.4, 1.05, 0.525, this.mats.concrete);
-    put(0.2, 0.25, 1.175, this.mats.rail);
+  // Gore infill on side sg of r: floor between r's walled edge and a neighbouring deck up to 3 m away.
+  _gore(r, sg, tunnelPred, bottom) {
+    const net = this.net, res = [], n = r.n, hw = r.hw;
+    const width = new Float32Array(n).fill(NaN), yOut = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      if (tunnelPred(i) || !r.wallAt(sg, i * r.ds)) continue;
+      const E = r.pointAt(i * r.ds, sg * hw);
+      // (one query first: is an earlier deck within 3 m of this edge at all?)
+      if (!net.surfacesAt(E.x, E.z, E.y, LEVEL_TOL, 3.05, res).some(c => c.r.id < r.id)) continue;
+      for (let t = 0.05; t <= 3.01; t += 0.1) {
+        const Q = r.pointAt(i * r.ds, sg * (hw + t));
+        const q = net.surfacesAt(Q.x, Q.z, E.y, LEVEL_TOL, 0, res).find(c => c.r !== r);
+        if (!q) continue;
+        if (q.r.id < r.id) {
+          const w = t + 0.4, O = r.pointAt(i * r.ds, sg * (hw + w));
+          const q2 = net.surfacesAt(O.x, O.z, E.y, LEVEL_TOL, 0, res).find(c => c.r === q.r);
+          width[i] = w; yOut[i] = q2 ? q2.y : q.y;
+        }
+        break;
+      }
+    }
+    const rg = rangesWhere(r, i => !Number.isNaN(width[i]));
+    if (!rg.length) return;
+    const W = i => (Number.isNaN(width[i]) ? 0 : width[i]);
+    const edgeY = i => r.py[i] + sg * hw * r.cs[i];
+    // the outer vertex takes the neighbour's height exactly (offsets from this deck's own cross section)
+    const dyOut = i => (Number.isNaN(width[i]) ? 0 : yOut[i] - (r.py[i] + sg * (hw + W(i)) * r.cs[i]));
+    const g = sweep(r, [[sg * hw, 0], [i => sg * (hw + W(i)), dyOut], [i => sg * (hw + W(i)), i => bottom(edgeY(i))], [sg * hw, i => bottom(edgeY(i))]], rg, { uScale: 8, vScale: 8 });
+    if (g) this.root.add(new THREE.Mesh(g, this.mats.gore));
   }
 
   // parking bay: stall lines and the walls closing both ends (the aisle side stays open)
@@ -643,12 +697,14 @@ export class World {
     this.root.add(wm);
     const curb = new THREE.PlaneGeometry(0.18, r.len - 0.8); curb.rotateX(-Math.PI / 2);
     this.root.add(new THREE.Mesh(put(curb, r.len / 2, bay.back, 0.014), this.mats.paint));
-    // end walls: parapet + a face down to the deck underside, from the back wall to the aisle edge
+    // end walls: parapet + a face down to the deck underside, from the back wall to where the first
+    // other deck begins (network.js: the access road, or a ramp passing over the bay's corner)
     const walls = [];
-    const inner = -r.outer * (r.hw - 1.0); // where the access road begins
-    const w = Math.abs(r.outer * r.hw - inner), c = (r.outer * r.hw + inner) / 2;
     const rails = [];
-    for (const sEnd of [0.2, r.len - 0.2]) {
+    for (const [k, sEnd] of [[0, PARAPET_W / 2], [1, r.len - PARAPET_W / 2]]) {
+      // (it butts against the inner face of the back parapet, which runs the bay's full length)
+      const inner = r.endIn[k], back = r.outer * (r.hw - PARAPET_W);
+      const w = Math.abs(back - inner), c = (back + inner) / 2;
       walls.push(put(new THREE.BoxGeometry(w, 1.05 + 1.8, 0.4), sEnd, c, (1.05 - 1.8) / 2));
       rails.push(put(new THREE.BoxGeometry(w, 0.25, 0.2), sEnd, c, 1.175));
     }
@@ -663,7 +719,7 @@ export class World {
   }
 
   _pt(r, i, off) {
-    return { x: r.px[i] - r.tz[i] * off, y: r.py[i], z: r.pz[i] + r.tx[i] * off };
+    return { x: r.px[i] - r.tz[i] * off, y: r.py[i] + off * r.cs[i], z: r.pz[i] + r.tx[i] * off };
   }
 
   _fins(r, ranges) {
@@ -730,36 +786,51 @@ export class World {
       mats.push(m4.clone());
     };
     const bridge = this._bridgeRange();
+    // footprints of the supports placed so far: nothing may stand inside another
+    const placed = [];
+    const overlap = (A, B) => {
+      if (A.y1 <= B.y0 || B.y1 <= A.y0) return false;
+      const axes = [A, B].flatMap(o => [[Math.cos(o.yaw), -Math.sin(o.yaw)], [Math.sin(o.yaw), Math.cos(o.yaw)]]);
+      const half = (o, [ux, uz]) => o.hx * Math.abs(Math.cos(o.yaw) * ux - Math.sin(o.yaw) * uz) + o.hz * Math.abs(Math.sin(o.yaw) * ux + Math.cos(o.yaw) * uz);
+      return axes.every(u => Math.abs((A.x - B.x) * u[0] + (A.z - B.z) * u[1]) < half(A, u) + half(B, u) + 0.3);
+    };
     for (const r of net.ribbons) {
       const step = Math.round(38 / r.ds);
       for (let i = 0; i < r.n; i += step) {
         const y = r.py[i];
-        if (y < 6.5) continue;
+        // only under a fully elevated deck (1.8 m deep from y = 7; lower decks come down to the ground)
+        if (Math.min(y, r.py[Math.max(0, i - 1)], r.py[Math.min(r.n - 1, i + 1)]) < 7) continue;
         const sOn = i * r.ds;
         if (r.kind === 'ring' && bridge && sOn > bridge.t0 && sOn < bridge.t1) continue;
         const yaw = Math.atan2(r.tx[i], r.tz[i]);
-        const cols = r.kind === 'ring' ? [-7, 7] : [0];
+        const cols = r.kind === 'ring' ? [-r.hw / 2, r.hw / 2] : [0];
         let ok = true;
         const top = y - 1.8;
-        for (const off of cols) {
-          const P = this._pt(r, i, off);
-          // anything underneath?
-          for (let hy = 1; hy < top - 2; hy += 3) {
-            net.surfacesAt(P.x, P.z, hy, 1.6, 2.5, res);
-            if (res.some(q2 => q2.r !== r)) { ok = false; break; }
+        const inWater = r.pz[i] > 1150;
+        const b = inWater ? -1.2 : 0;
+        const C = this._pt(r, i, 0);
+        const capHx = r.hw - 0.75;
+        const boxes = cols.map(off => { const P = this._pt(r, i, off); return { x: P.x, z: P.z, hx: 0.95, hz: 0.95, yaw, y0: b, y1: top }; });
+        boxes.push({ x: C.x, z: C.z, hx: capHx, hz: 1.2, yaw, y0: top - 1.4, y1: top });
+        for (const B of boxes.slice(0, -1)) {
+          // anything underneath, up to just under this deck? (decks at this deck's own level, lying
+          // alongside or on it, are not in the way)
+          for (let hy = 1; ok && hy < top + 1.5; hy += 1.5) {
+            net.surfacesAt(B.x, B.z, Math.min(hy, top - 0.2), 1.6, 2.5, res);
+            if (res.some(q2 => q2.r !== r)) ok = false;
           }
           if (!ok) break;
         }
-        if (!ok) continue;
-        const inWater = r.pz[i] > 1150;
-        for (const off of cols) {
-          const P = this._pt(r, i, off);
-          const b = inWater ? -1.2 : 0;
-          addBox(P.x, (top + b) / 2, P.z, 1.9, top - b, 1.9, yaw);
+        // another deck passing through the cap beam's height
+        for (let o = -capHx; ok && o <= capHx + 0.01; o += capHx / 4) {
+          const Q = this._pt(r, i, o);
+          if (net.surfacesAt(Q.x, Q.z, top + 0.2, 1.6, 1.2, res).some(q2 => q2.r !== r)) ok = false;
         }
-        const C = this._pt(r, i, 0);
+        if (!ok || boxes.some(B => placed.some(A => overlap(A, B)))) continue;
+        placed.push(...boxes);
+        for (const B of boxes.slice(0, -1)) addBox(B.x, (B.y0 + B.y1) / 2, B.z, 1.9, B.y1 - B.y0, 1.9, yaw);
         // cap beam: local x is across the road after the yaw rotation
-        addBox(C.x, top - 0.7, C.z, r.hw * 2 - 1.5, 1.4, 2.4, yaw);
+        addBox(C.x, top - 0.7, C.z, capHx * 2, 1.4, 2.4, yaw);
       }
     }
     const g = new THREE.BoxGeometry(1, 1, 1);
@@ -811,7 +882,9 @@ export class World {
       for (let i = 0; i < r.n; i += step, k++) {
         if (r.kind === 'ring' && r.py[i] < 4.2) continue;
         const sg = r.kind === 'lot' ? r.outer : (k % 2 ? 1 : -1);
-        if ((sg < 0 ? r.openL : r.openR)[i]) continue;
+        // on a parapet, and on its full-height part (not a sloped end)
+        const s = i * r.ds;
+        if (![0, -CHAMFER - 1, CHAMFER + 1].every(d => r.wallAt(sg, r.wrapS(s + d)))) continue;
         const x0 = r.px[i], z0 = r.pz[i];
         const white = r.kind !== 'ring' || x0 > -300 || r.py[i] > 20;
         const col = white ? LED : SODIUM;
@@ -819,7 +892,9 @@ export class World {
         const head = this._pt(r, i, sg * (r.hw - 3.0));
         // a pole must not stand in, or poke up through, another carriageway: skip it when any other
         // road surface lies within its height span (plus a margin) above the base or the lamp head
-        const blocked = [base, head].some(p => this.net.surfacesAt(p.x, p.z, p.y + 6, 7, 1.5, []).some(q => q.r !== r && q.y > p.y - 0.5 && q.y < p.y + 12));
+        const midArm = { x: (base.x + head.x) / 2, y: base.y, z: (base.z + head.z) / 2 };
+        // (the pole stands on the parapet, 1.05 m up, and is 9.6 m tall; a deck above is 1.8 m deep)
+        const blocked = [base, midArm, head].some(p => this.net.surfacesAt(p.x, p.z, p.y + 7, 7.5, 2.0, []).some(q => q.r !== r && q.y > p.y - 0.5 && q.y < p.y + 1.05 + 9.6 + 1.8 + 0.5));
         if (blocked) continue;
         const yaw = Math.atan2(r.tx[i], r.tz[i]);
         poles.push({ x: base.x, y: base.y, z: base.z, yaw, sg });
@@ -858,7 +933,7 @@ export class World {
     // pools
     const pg = new THREE.PlaneGeometry(1, 1);
     pg.rotateX(-Math.PI / 2);
-    this.poolMat = new THREE.MeshBasicMaterial({ map: this.tex.pool, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 });
+    this.poolMat = new THREE.MeshBasicMaterial({ map: this.tex.pool, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -2 * this.net.layers - 2 });
     const pools = this._pools || [];
     const pim = new THREE.InstancedMesh(pg, this.poolMat, pools.length);
     pools.forEach((P, k) => {
