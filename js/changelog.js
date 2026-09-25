@@ -1,6 +1,15 @@
 // "Novidades" screen: one entry per release, newest first. Plain text, 3 to 5 lines each.
 export const CHANGELOG = [
   {
+    version: '1.7.0', date: '2026-09-25',
+    lines: [
+      'As pistas amarelas (ligação C2 e suas rampas) saíram do mapa; o anel K1 agora é contínuo, sem essas entradas e saídas.',
+      'Bem menos placas: ficam só os nomes das regiões e a sinalização do estacionamento Nishi PA.',
+      'Entrada e saída do PA redesenhadas nos dois sentidos: curvas longas e suaves que dão para fazer em alta velocidade, sem grampo nem retorno.',
+      'Quem vem pelo sentido externo passa por baixo do anel e entra pela outra ponta do PA; a pista do PA é mão dupla.',
+    ],
+  },
+  {
     version: '1.6.0', date: '2026-09-25',
     lines: [
       'Pistas sem acostamento: só uma faixa estreita entre a última faixa e a mureta, no anel, no C2, nas rampas e no PA.',
