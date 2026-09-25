@@ -60,6 +60,8 @@ Night Cruise is a relaxed driving game inspired by Tokyo's expressways (the Shut
 | Arquivo | Uso |
 |---|---|
 | `keyart-1920x1080.jpg` | Imagem principal (key art): capa, página do jogo, divulgação |
+| `keyart-vertical-1080x1920.jpg` | Key art vertical 9:16: stories, papel de parede de celular |
+| `keyart-vertical-1080x1350.jpg` | Key art vertical 4:5: feed do Instagram |
 | `x-header-1500x500.jpg` | Capa (header) do perfil no X/Twitter |
 | `x-post-1600x900-1/2/3.jpg` | Posts no X/Twitter |
 | `og-image-1200x630.jpg` | Prévia de link (WhatsApp, Discord, X, Facebook); já configurada no site |
