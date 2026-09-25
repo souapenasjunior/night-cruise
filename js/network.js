@@ -602,6 +602,15 @@ export function buildNetwork() {
   })));
   paIn.pa = paOut.pa = true;
   net.pa = { road: paRoad, lots, slots, bays: perLot, stallW: STALL_W, stallD: STALL_D, sExit: S(sP + dIn - S_LEN - TAPER), paIn, paOut };
+  // signs inside the PA (placed by signage.js): at each end of the access road a gantry naming the way
+  // out for drivers heading that way, and a NO ENTRY sign at the mouth of the branch that only comes in
+  const sPa = d => { const Q = at(d, -PA_D); return paRoad.projectGlobal(Q.x, Q.z).s; };
+  net.pa.signs = [
+    { kind: 'paexit', r: paRoad, s: sPa(dOut - 20), d: 1, dest: 1, arrow: 45 },
+    { kind: 'paexit', r: paRoad, s: sPa(dIn + 20), d: -1, dest: -1, arrow: 0 },
+    { kind: 'noentry', r: paIn, s: paIn.len - (-E_START + 35), d: -1 },
+    { kind: 'noentry', r: paRoad, s: sPa(dIn - 35), d: -1 },
+  ];
 
   // median U-turn gaps
   const g1 = nearestS(1350, -985), g2 = nearestS(-1150, 1130);

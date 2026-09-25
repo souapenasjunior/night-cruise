@@ -155,14 +155,6 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .cred span { color: var(--dim); font-size: 13px; }
 .cred a { grid-column: 1 / -1; color: #9fb6ff; font-size: 12px; word-break: break-all; }
 #pause nav { display: grid; gap: 2px; padding: 16px 22px 22px; }
-#news .panel { width: min(680px, 100%); }
-.news-list { overflow-y: auto; padding: 4px 22px 14px; }
-.news { padding: 14px 0; border-bottom: 1px solid var(--line); }
-.news:last-child { border-bottom: 0; }
-.news h3 { margin: 0 0 8px; display: flex; align-items: baseline; gap: 12px; font: 700 22px/1 var(--display); letter-spacing: 0.04em; text-transform: none; }
-.news h3 span { font: 500 12px/1 var(--mono); letter-spacing: 0; color: var(--dim); }
-.news ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; color: #cfd4e2; font-size: 14px; }
-.news li::marker { color: var(--sodium); }
 /* version tag: title (top right corner) and pause (under the buttons) */
 .ver { font: 500 11px/1 var(--mono); color: var(--dim); opacity: 0.7; letter-spacing: 0.02em; white-space: nowrap; pointer-events: none; user-select: none; }
 #title .ver { position: absolute; right: clamp(16px, 3vw, 40px); top: calc(clamp(16px, 3vh, 30px) + env(safe-area-inset-top, 0px)); }
@@ -236,7 +228,6 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   <nav id="title-nav">
     <button class="menu-btn primary" id="btn-play">Jogar</button>
     <button class="menu-btn" id="btn-settings">Configurações</button>
-    <button class="menu-btn" id="btn-news">Novidades</button>
     <button class="menu-btn" id="btn-credits">Créditos</button>
   </nav>
   <div class="ver" id="title-ver"></div>
@@ -293,13 +284,6 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <div><i class="dot" style="background:#17744a;border:1.5px solid #e4efe8"></i>Regiões</div>
   </div>
 </div>
-<div id="news" class="screen scrim" hidden>
-  <div class="panel" role="dialog" aria-labelledby="news-title">
-    <header><h2 id="news-title">Novidades</h2><span class="chipinfo">O que mudou em cada versão</span></header>
-    <div class="news-list" id="news-list"></div>
-    <footer><span class="chipinfo"><kbd>↑</kbd> <kbd>↓</kbd> rolar · <kbd>Esc</kbd> fechar</span><button class="btn go small" id="news-close">Fechar</button></footer>
-  </div>
-</div>
 
 <div id="credits" class="screen scrim" hidden>
   <div class="panel" role="dialog" aria-labelledby="cred-title">
@@ -352,8 +336,8 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.7.0';
-  var MODULES = ['audio', 'cars', 'changelog', 'glbcars', 'hud', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
+  var V = '1.8.0';
+  var MODULES = ['audio', 'cars', 'glbcars', 'hud', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',

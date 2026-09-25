@@ -17,7 +17,6 @@ import { AudioSys } from './audio.js';
 import { Input, ACTION_LABELS, PAD_FIXED_LABELS, padName, keyName } from './input.js';
 import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
-import { CHANGELOG } from './changelog.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 
 const $ = id => document.getElementById(id);
@@ -400,32 +399,8 @@ function closeCredits() { $('credits').hidden = true; $('btn-credits').focus(); 
 $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
-// news: the changelog, opened only from its title button (no automatic update notice anywhere)
-function openNews() {
-  const el = $('news-list');
-  el.innerHTML = '';
-  for (const r of CHANGELOG) {
-    const sec = document.createElement('section');
-    sec.className = 'news';
-    const h = document.createElement('h3'); h.textContent = 'v' + r.version;
-    const d = document.createElement('span'); d.textContent = r.date;
-    h.appendChild(d);
-    const ul = document.createElement('ul');
-    for (const line of r.lines) { const li = document.createElement('li'); li.textContent = line; ul.appendChild(li); }
-    sec.append(h, ul);
-    el.appendChild(sec);
-  }
-  audio.uiTick(true); // keyboard / pad; a mouse press already played it
-  $('news').hidden = false;
-  el.scrollTop = 0;
-  setTimeout(() => $('news-close').focus(), 30);
-}
-function closeNews() { audio.uiTick(false); $('news').hidden = true; $('btn-news').focus(); }
-function scrollNews(d) { $('news-list').scrollBy({ top: d * 90, behavior: 'smooth' }); }
-$('btn-news').onclick = openNews;
-$('news-close').onclick = closeNews;
-// credits / news sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('news').hidden ? $('news') : !$('credits').hidden ? $('credits') : null; }
+// credits sit over the title screen: menu navigation stays inside them while open
+function overlayOpen() { return !$('credits').hidden ? $('credits') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -922,12 +897,6 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeCredits(); }
     return;
   }
-  if (!$('news').hidden) {
-    if (e.code === 'Escape') { e.preventDefault(); closeNews(); }
-    if (e.code === 'ArrowDown') { e.preventDefault(); scrollNews(1); }
-    if (e.code === 'ArrowUp') { e.preventDefault(); scrollNews(-1); }
-    return;
-  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -968,11 +937,6 @@ function padMenus() {
     if (b) $('sel-back').click();
     return;
   }
-  if (!$('news').hidden) {
-    if (up || down) scrollNews(down ? 1 : -1);
-    if (a || b) closeNews();
-    return;
-  }
   if (up) moveFocus(-1);
   if (down) moveFocus(1);
   const el = document.activeElement;
@@ -981,6 +945,7 @@ function padMenus() {
   if (a && el && el.click) el.click();
   if (b) {
     if (settingsOpen) closeSettings();
+    else if (!$('credits').hidden) closeCredits();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();

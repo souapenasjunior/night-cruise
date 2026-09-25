@@ -63,6 +63,7 @@ export class AudioSys {
     this.sfxBus.connect(this.revSend);
     this.noise = this._noiseBuffer(2);
     this.brown = this._brownBuffer(4);
+    this.pink = this._pinkBuffer(3);
     this._buildEngineChain();
     this._buildLoops();
     this._buildTrafficVoices();
@@ -78,6 +79,20 @@ export class AudioSys {
   _noiseBuffer(sec) {
     const ctx = this.ctx, b = ctx.createBuffer(1, ctx.sampleRate * sec, ctx.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  // pink noise (-3 dB/octave, Paul Kellet's filter): the natural colour of tyre and road roar,
+  // without white noise's hiss
+  _pinkBuffer(sec) {
+    const ctx = this.ctx, b = ctx.createBuffer(1, ctx.sampleRate * sec, ctx.sampleRate), d = b.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < d.length; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.969 * b2 + w * 0.153852;
+      b3 = 0.8665 * b3 + w * 0.3104856; b4 = 0.55 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.016898;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
     return b;
   }
   _brownBuffer(sec) {
@@ -179,8 +194,9 @@ export class AudioSys {
       o1.connect(lp); o2.connect(g2).connect(lp);
       lp.connect(eng).connect(out);
       o1.start(); o2.start();
-      const roar = this._loop(this.noise, 0.7 + i * 0.1);
-      const rf = ctx.createBiquadFilter(); rf.type = 'bandpass'; rf.frequency.value = 520; rf.Q.value = 0.7;
+      // tyre roar: pink noise, low-passed (a soft rumble that brightens a little with speed, not a hiss)
+      const roar = this._loop(this.pink, 0.9 + i * 0.05);
+      const rf = ctx.createBiquadFilter(); rf.type = 'lowpass'; rf.frequency.value = 400; rf.Q.value = 0.5;
       const rg = ctx.createGain(); rg.gain.value = 0;
       roar.connect(rf).connect(rg).connect(out);
       this.tVoices.push({ key: null, out, pan, eng, lp, o1, o2, rf, rg, level: 0 });
@@ -208,10 +224,10 @@ export class AudioSys {
       v.o1.frequency.setTargetAtTime(fire, t, k);
       v.o2.frequency.setTargetAtTime(fire * 0.5, t, k);
       v.lp.frequency.setTargetAtTime((heavy ? 260 : 420) + push * 500 + kmh * 2, t, 0.1);
-      v.rf.frequency.setTargetAtTime((380 + kmh * 4) * doppler, t, 0.1);
+      v.rf.frequency.setTargetAtTime((260 + kmh * 3.2) * doppler, t, 0.1);
       v.eng.gain.setTargetAtTime((heavy ? 0.1 : 0.06) * (0.55 + 0.45 * push), t, 0.1);
-      v.rg.gain.setTargetAtTime(Math.pow(clamp(kmh / 110, 0, 1.2), 2) * (heavy ? 0.1 : 0.07), t, 0.1);
-      v.level = att * 0.8;
+      v.rg.gain.setTargetAtTime(Math.pow(clamp(kmh / 110, 0, 1.2), 1.5) * (heavy ? 0.16 : 0.11), t, 0.1);
+      v.level = att * 0.36;
       v.out.gain.setTargetAtTime(v.level, t, fresh ? 0.08 : 0.06);
       if (v.pan.pan) v.pan.pan.setTargetAtTime(clamp(c.pan, -1, 1), t, 0.05);
     }
@@ -246,7 +262,12 @@ export class AudioSys {
     this.wind = mk(this.noise, 'lowpass', 700, 0.4, this.ambBus);
     this.windHi = mk(this.noise, 'bandpass', 2400, 0.8, this.ambBus);
     this.city = mk(this.brown, 'lowpass', 320, 0.5, this.ambBus);
-    this.traffic = mk(this.noise, 'bandpass', 420, 0.7, this.ambBus);
+    // traffic around: a distant low rumble (was band-passed white noise: a hiss)
+    this.traffic = mk(this.brown, 'lowpass', 200, 0.5, this.ambBus);
+    // tyres on asphalt: pink noise around the tread's roar band, plus a hint of the coarse texture
+    this.tread = mk(this.pink, 'bandpass', 500, 0.6, this.sfxBus);
+    this.treadHi = mk(this.pink, 'highpass', 1800, 0.5, this.sfxBus);
+    this.treadWob = 1; this.jointD = 0;
     this.tunnelHum = mk(this.brown, 'bandpass', 110, 1.5, this.ambBus);
     // horn: two detuned squares through a horn-like band
     this.horn = ctx.createGain(); this.horn.gain.value = 0;
@@ -404,7 +425,24 @@ export class AudioSys {
     this.sq[0].frequency.setTargetAtTime(760 + sq * 220 + wob, t, 0.03);
     this.sq[1].frequency.setTargetAtTime(772 + sq * 230 - wob, t, 0.03);
     this.roll.g.gain.setTargetAtTime(clamp(kmh / 250, 0, 0.3), t, 0.1);
-    this.roll.fl.frequency.setTargetAtTime(90 + kmh * 0.9, t, 0.1);
+    this.roll.fl.frequency.setTargetAtTime(110 + kmh * 1.1, t, 0.1);
+    // tyre roar on the asphalt: rises with speed, its band moves up; a slow random wobble stands for
+    // the changing surface
+    this.treadWob = clamp(this.treadWob + (Math.random() - 0.5) * dt * 1.2, 0.85, 1.15);
+    const tr = Math.pow(clamp(kmh / 160, 0, 1.4), 1.3);
+    this.tread.g.gain.setTargetAtTime(tr * 0.12 * this.treadWob * (1 + this.inTunnel * 0.3), t, 0.08);
+    this.tread.fl.frequency.setTargetAtTime(Math.min(1300, 380 + kmh * 3.5), t, 0.1);
+    this.treadHi.g.gain.setTargetAtTime(tr * 0.01, t, 0.1);
+    // expansion joints of the elevated road: a soft double thump (front, then rear axle) every 40 m
+    if (kmh > 25 && !p.reverse) {
+      this.jointD += (kmh / 3.6) * dt;
+      if (this.jointD > 40) {
+        this.jointD = 0;
+        const g = clamp(kmh / 140, 0.25, 1) * 0.07;
+        this._burst(0.07, 'lowpass', 150, 0.9, g);
+        setTimeout(() => { if (this.ready) this._burst(0.07, 'lowpass', 140, 0.9, g * 0.8); }, clamp(2700 / (kmh / 3.6), 15, 200));
+      }
+    }
     // wind
     const v = kmh / 100;
     this.wind.g.gain.setTargetAtTime(clamp(v * v * 0.09, 0, 0.32) * (1 - this.inTunnel * 0.4), t, 0.1);
@@ -412,7 +450,7 @@ export class AudioSys {
     this.windHi.g.gain.setTargetAtTime(clamp((v - 1) * 0.03, 0, 0.05), t, 0.2);
     // ambience
     this.city.g.gain.setTargetAtTime(0.14 * (1 - this.inTunnel * 0.7), t, 0.4);
-    this.traffic.g.gain.setTargetAtTime(clamp(p.trafficNear * 0.05, 0, 0.14), t, 0.2);
+    this.traffic.g.gain.setTargetAtTime(clamp(p.trafficNear * 0.008, 0, 0.03), t, 0.4);
     this.inTunnel = lerp(this.inTunnel, p.tunnel ? 1 : 0, 1 - Math.exp(-dt * 3));
     this.revSend.gain.setTargetAtTime(this.inTunnel * 0.55, t, 0.1);
     this.tunnelHum.g.gain.setTargetAtTime(this.inTunnel * 0.08, t, 0.3);
@@ -450,10 +488,10 @@ export class AudioSys {
     this._updateTrafficVoices(p.traffic, t);
   }
 
-  _burst(dur, type, f, q, gain, bus = this.sfxBus, sweepTo = null, attack = 0.002) {
+  _burst(dur, type, f, q, gain, bus = this.sfxBus, sweepTo = null, attack = 0.002, buffer = this.noise) {
     const ctx = this.ctx, t = ctx.currentTime;
     const s = ctx.createBufferSource();
-    s.buffer = this.noise;
+    s.buffer = buffer;
     const fl = ctx.createBiquadFilter();
     fl.type = type; fl.frequency.value = f; fl.Q.value = q;
     if (sweepTo) fl.frequency.exponentialRampToValueAtTime(sweepTo, t + dur);
@@ -516,8 +554,8 @@ export class AudioSys {
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
     if (p.pan) { p.pan.value = clamp(pan, -1, 1); p.pan.linearRampToValueAtTime(clamp(-pan, -1, 1), ctx.currentTime + 0.8); }
     p.connect(this.ambBus);
-    this._burst(1.0, 'bandpass', 1100, 1.0, 0.09 * intensity, p, 300, 0.25);
-    this._burst(0.9, 'lowpass', 260, 0.8, 0.12 * intensity, p, 120, 0.25);
+    this._burst(0.9, 'bandpass', 650, 0.6, 0.035 * intensity, p, 280, 0.2, this.pink);
+    this._burst(0.9, 'lowpass', 240, 0.8, 0.08 * intensity, p, 110, 0.25, this.pink);
   }
   // standard menu tick: a short, soft sine note (C6) with a quiet octave on top, quick attack and decay.
   // The same sound everywhere, a hair higher when moving forward.
