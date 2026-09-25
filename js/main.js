@@ -16,6 +16,8 @@ import { BigMap } from './map.js';
 import { AudioSys } from './audio.js';
 import { Input, ACTION_LABELS, PAD_LABELS, keyName } from './input.js';
 import * as SET from './settings.js';
+import { VERSION, versionLabel } from './version.js';
+import { CHANGELOG } from './changelog.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 
 const $ = id => document.getElementById(id);
@@ -348,7 +350,7 @@ function showScreen(name) {
   if (f && name !== 'drive') setTimeout(() => f.focus({ preventScroll: true }), 30);
 }
 function focusables() {
-  const root = settingsOpen ? $('settings') : $(state === 'pause' ? 'pause' : state);
+  const root = settingsOpen ? $('settings') : overlayOpen() || $(state === 'pause' ? 'pause' : state);
   if (!root || root.hidden) return [];
   return [...root.querySelectorAll('button, input')].filter(e => !e.disabled && e.offsetParent !== null);
 }
@@ -397,6 +399,43 @@ function openCredits() {
 function closeCredits() { $('credits').hidden = true; $('btn-credits').focus(); }
 $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
+
+// news: the changelog, opened only from its title button (no automatic update notice anywhere)
+function openNews() {
+  const el = $('news-list');
+  el.innerHTML = '';
+  for (const r of CHANGELOG) {
+    const sec = document.createElement('section');
+    sec.className = 'news';
+    const h = document.createElement('h3'); h.textContent = 'v' + r.version;
+    const d = document.createElement('span'); d.textContent = r.date;
+    h.appendChild(d);
+    const ul = document.createElement('ul');
+    for (const line of r.lines) { const li = document.createElement('li'); li.textContent = line; ul.appendChild(li); }
+    sec.append(h, ul);
+    el.appendChild(sec);
+  }
+  audio.uiTick(true); // keyboard / pad; a mouse press already played it
+  $('news').hidden = false;
+  el.scrollTop = 0;
+  setTimeout(() => $('news-close').focus(), 30);
+}
+function closeNews() { audio.uiTick(false); $('news').hidden = true; $('btn-news').focus(); }
+function scrollNews(d) { $('news-list').scrollBy({ top: d * 90, behavior: 'smooth' }); }
+$('btn-news').onclick = openNews;
+$('news-close').onclick = closeNews;
+// credits / news sit over the title screen: menu navigation stays inside them while open
+function overlayOpen() { return !$('news').hidden ? $('news') : !$('credits').hidden ? $('credits') : null; }
+
+// version tag (title and pause)
+$('title-ver').textContent = $('pause-ver').textContent = versionLabel();
+{
+  // cache busting check: index.html loads the game with ?v= and maps every module to it (see its loader)
+  const v = new URL(import.meta.url).searchParams.get('v');
+  if (v !== VERSION) console.warn(`Night Cruise: index.html loads v=${v}, js/version.js says ${VERSION} (update both)`);
+  const miss = performance.getEntriesByType('resource').map(e => e.name).filter(n => /\/js\/[^/?]+\.js$/.test(n));
+  if (miss.length) console.warn('Night Cruise: modules loaded without ?v (add them to MODULES in index.html):', miss);
+}
 
 // select: body colour (5 per car; the first is the model's original paint)
 const paintIdx = spec => Math.min((S.paintIdx && S.paintIdx[spec.id]) || 0, PAINTS.length - 1);
@@ -822,6 +861,12 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeCredits(); }
     return;
   }
+  if (!$('news').hidden) {
+    if (e.code === 'Escape') { e.preventDefault(); closeNews(); }
+    if (e.code === 'ArrowDown') { e.preventDefault(); scrollNews(1); }
+    if (e.code === 'ArrowUp') { e.preventDefault(); scrollNews(-1); }
+    return;
+  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -859,6 +904,11 @@ function padMenus() {
     if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
     if (a || start) startDrive();
     if (b) $('sel-back').click();
+    return;
+  }
+  if (!$('news').hidden) {
+    if (up || down) scrollNews(down ? 1 : -1);
+    if (a || b) closeNews();
     return;
   }
   if (up) moveFocus(-1);

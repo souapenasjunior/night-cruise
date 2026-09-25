@@ -132,7 +132,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .padlab { color: var(--dim); font: 500 12px/1 var(--mono); }
 .panel footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .chipinfo { font-size: 12px; color: var(--dim); }
-#pause .panel { width: min(420px, 100%); grid-template-rows: auto 1fr; }
+#pause .panel { width: min(420px, 100%); }
 #credits .panel { width: min(680px, 100%); }
 .cred-list { overflow-y: auto; padding: 8px 22px 14px; display: grid; gap: 2px; }
 .cred { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
@@ -141,6 +141,18 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .cred span { color: var(--dim); font-size: 13px; }
 .cred a { grid-column: 1 / -1; color: #9fb6ff; font-size: 12px; word-break: break-all; }
 #pause nav { display: grid; gap: 2px; padding: 16px 22px 22px; }
+#news .panel { width: min(680px, 100%); }
+.news-list { overflow-y: auto; padding: 4px 22px 14px; }
+.news { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.news:last-child { border-bottom: 0; }
+.news h3 { margin: 0 0 8px; display: flex; align-items: baseline; gap: 12px; font: 700 22px/1 var(--display); letter-spacing: 0.04em; text-transform: none; }
+.news h3 span { font: 500 12px/1 var(--mono); letter-spacing: 0; color: var(--dim); }
+.news ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; color: #cfd4e2; font-size: 14px; }
+.news li::marker { color: var(--sodium); }
+/* version tag: title (top right corner) and pause (under the buttons) */
+.ver { font: 500 11px/1 var(--mono); color: var(--dim); opacity: 0.7; letter-spacing: 0.02em; white-space: nowrap; pointer-events: none; user-select: none; }
+#title .ver { position: absolute; right: clamp(16px, 3vw, 40px); top: calc(clamp(16px, 3vh, 30px) + env(safe-area-inset-top, 0px)); }
+#pause .ver { padding: 0 22px 14px; text-align: right; }
 
 /* ---------- HUD */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
@@ -216,6 +228,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   <nav id="title-nav">
     <button class="menu-btn primary" id="btn-play">Jogar</button>
     <button class="menu-btn" id="btn-settings">Configurações</button>
+    <button class="menu-btn" id="btn-news">Novidades</button>
     <button class="menu-btn" id="btn-credits">Créditos</button>
   </nav>
   <div class="foot">
@@ -227,6 +240,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <span><kbd>C</kbd> olhar para trás</span>
     <span>Controle compatível</span>
   </div>
+  <div class="ver" id="title-ver"></div>
 </div>
 
 <div id="select" class="screen" hidden>
@@ -282,6 +296,14 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <div><i class="dot" style="background:#17744a;border:1.5px solid #e4efe8"></i>Regiões</div>
   </div>
 </div>
+<div id="news" class="screen scrim" hidden>
+  <div class="panel" role="dialog" aria-labelledby="news-title">
+    <header><h2 id="news-title">Novidades</h2><span class="chipinfo">O que mudou em cada versão</span></header>
+    <div class="news-list" id="news-list"></div>
+    <footer><span class="chipinfo"><kbd>↑</kbd> <kbd>↓</kbd> rolar · <kbd>Esc</kbd> fechar</span><button class="btn go small" id="news-close">Fechar</button></footer>
+  </div>
+</div>
+
 <div id="credits" class="screen scrim" hidden>
   <div class="panel" role="dialog" aria-labelledby="cred-title">
     <header><h2 id="cred-title">Créditos</h2><span class="chipinfo">Modelos 3D dos carros · licença CC BY 4.0</span></header>
@@ -300,6 +322,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
       <button class="menu-btn" id="p-settings">Configurações</button>
       <button class="menu-btn" id="p-title">Menu inicial</button>
     </nav>
+    <div class="ver" id="pause-ver"></div>
   </div>
 </div>
 
@@ -317,5 +340,30 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   </div>
 </div>
 
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
-<script type="module" src="js/main.js"></script>
+<script>
+// Loader with cache busting. V must match VERSION in js/version.js (see README).
+// A relative import such as './world.js' inside js/main.js?v=1.4.0 resolves to js/world.js with no query,
+// so the ?v would stop at main.js. The import map built here maps every game module to its ?v=V URL:
+// the browser applies it to all imports (static and dynamic) in every module, so no import in js/ ever
+// needs editing. A new file in js/ only has to be added to MODULES (main.js warns in the console if one
+// loads without ?v). Models in models/ use their own key, MODELS_REV
+// in js/version.js; the audio worklet copies the ?v of audio.js.
+(function () {
+  var V = '1.4.0';
+  var MODULES = ['audio', 'cars', 'changelog', 'glbcars', 'hud', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
+    'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
+  var imports = {
+    'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',
+    'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/',
+  };
+  for (var i = 0; i < MODULES.length; i++) imports['./js/' + MODULES[i] + '.js'] = './js/' + MODULES[i] + '.js?v=' + V;
+  var map = document.createElement('script');
+  map.type = 'importmap';
+  map.textContent = JSON.stringify({ imports: imports });
+  document.body.appendChild(map);
+  var main = document.createElement('script');
+  main.type = 'module';
+  main.src = 'js/main.js?v=' + V;
+  document.body.appendChild(main);
+})();
+</script>

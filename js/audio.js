@@ -67,6 +67,7 @@ export class AudioSys {
     // the worklet engine replaces the fallback oscillators once loaded
     if (ctx.audioWorklet) {
       const url = new URL('./engine-worklet.js', import.meta.url);
+      url.search = new URL(import.meta.url).search; // same cache key (?v=) as this module
       ctx.audioWorklet.addModule(url).then(() => this._attachWorklet()).catch(() => { this.fallback = true; });
     } else this.fallback = true;
   }

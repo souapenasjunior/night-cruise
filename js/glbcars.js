@@ -6,11 +6,15 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MODELS_REV } from './version.js';
 
 const templates = new Map();
 
 export async function loadGlbCars(specs, onEach) {
-  const loader = new GLTFLoader();
+  // cache key for models/ (the .json and the textures it points to): MODELS_REV changes when a model does
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier(url => (/(^|\/)models\//.test(url) && !/^(data|blob):/.test(url) ? url + (url.includes('?') ? '&' : '?') + 'v=' + MODELS_REV : url));
+  const loader = new GLTFLoader(manager);
   loader.setMeshoptDecoder(MeshoptDecoder);
   await Promise.all(specs.filter(s => s.glb).map(async s => {
     const gltf = await loader.loadAsync(s.glb.file);
