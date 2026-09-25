@@ -62,7 +62,11 @@ Night Cruise is a relaxed driving game inspired by Tokyo's expressways (the Shut
 | `keyart-1920x1080.jpg` | Imagem principal (key art): capa, página do jogo, divulgação |
 | `keyart-vertical-1080x1920.jpg` | Key art vertical 9:16: stories, papel de parede de celular |
 | `keyart-vertical-1080x1350.jpg` | Key art vertical 4:5: feed do Instagram |
-| `x-header-1500x500.jpg` | Capa (header) do perfil no X/Twitter |
+| `x-capa-1500x500.jpg` | **Capa do perfil no X/Twitter** (o título fica fora da área da foto de perfil e do corte do celular) |
+| `x-perfil-1000x1000.png` | **Foto de perfil do X**: monograma NC, legível mesmo pequeno |
+| `x-perfil-foto-1000x1000.png` | Foto de perfil alternativa (monograma sobre a ponte desfocada) |
+| `x-perfil-preview.jpg`, `x-perfil-foto-preview.jpg` | Prévia de como o perfil fica com cada opção |
+| `x-header-1500x500.jpg` | Capa alternativa do X (baía à noite) |
 | `x-post-1600x900-1/2/3.jpg` | Posts no X/Twitter |
 | `og-image-1200x630.jpg` | Prévia de link (WhatsApp, Discord, X, Facebook); já configurada no site |
 | `github-social-1280x640.jpg` | Prévia do repositório no GitHub (Settings › Social preview) |
