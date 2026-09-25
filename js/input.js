@@ -6,11 +6,11 @@ export const ACTION_LABELS = {
   lights: 'Faróis', lookLeft: 'Olhar à esquerda', lookRight: 'Olhar à direita', camera: 'Câmera',
   lookback: 'Olhar para trás', reset: 'Reposicionar', map: 'Mapa', pause: 'Pausa',
 };
-export const PAD_LABELS = {
-  accel: 'RT', brake: 'LT', left: 'Analógico esq.', right: 'Analógico esq.', horn: 'B', lights: 'Y',
-  lookLeft: 'LB', lookRight: 'RB', camera: 'View / Select', lookback: 'R3', reset: 'D-pad ↑', map: 'L3', pause: 'Start',
-};
-const PAD_BUTTON = { horn: 1, lights: 3, camera: 8, pause: 9, lookback: 11, reset: 12, map: 10 };
+// standard-mapping button names
+export const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →', 'Guia'];
+// the fixed controls (not remappable): driving on the triggers, the left stick and the d-pad's sides
+export const PAD_FIXED_LABELS = { accel: 'RT', brake: 'LT', left: 'Analógico / D-pad ←', right: 'Analógico / D-pad →' };
+export const padName = b => PAD_NAMES[b] || `Botão ${b}`;
 
 export function keyName(code) {
   if (!code) return '—';
@@ -23,8 +23,10 @@ export function keyName(code) {
 }
 
 export class Input {
-  constructor(bindings) {
+  constructor(bindings, padBindings) {
     this.bindings = bindings;
+    this.padBindings = padBindings; // action -> [button index] (settings.js DEFAULT_PAD)
+    this.padCapture = null; // callback(button) while remapping a controller button
     this.down = new Set();
     this.edges = new Set();
     this.padPrev = [];
@@ -35,6 +37,7 @@ export class Input {
     this.lastDevice = 'keyboard';
     window.addEventListener('keydown', e => {
       if (this.capture) { e.preventDefault(); e.stopImmediatePropagation(); const cb = this.capture; this.capture = null; cb(e.code); return; }
+      if (this.padCapture) { e.preventDefault(); e.stopImmediatePropagation(); const cb = this.padCapture; this.padCapture = null; cb(e.code === 'Delete' || e.code === 'Backspace' ? 'remove' : null); return; }
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) && this.enabled) e.preventDefault();
       if (!this.down.has(e.code)) this.edges.add(e.code);
       this.down.add(e.code);
@@ -45,11 +48,9 @@ export class Input {
   }
   isDown(action) { return (this.bindings[action] || []).some(c => this.down.has(c)); }
   keyPressed(action) { return (this.bindings[action] || []).some(c => this.edges.has(c)); }
-  pressed(action) {
-    if (this.keyPressed(action)) return true;
-    const b = PAD_BUTTON[action];
-    return b !== undefined && this._padEdge(b);
-  }
+  pressed(action) { return this.keyPressed(action) || this.padActionPressed(action); }
+  padActionPressed(action) { return (this.padBindings[action] || []).some(b => this._padEdge(b)); }
+  _padDown(action) { const p = this.pad; return !!p && (this.padBindings[action] || []).some(b => p.buttons[b] && p.buttons[b].pressed); }
   _padEdge(b) {
     const p = this.pad;
     if (!p || !p.buttons[b]) return false;
@@ -66,6 +67,11 @@ export class Input {
     // a newly seen pad starts with its current button state, so held buttons are not "presses"
     if (pad && (!this.pad || this.pad.index !== pad.index)) this.padPrev = pad.buttons.map(b => b.pressed);
     this.pad = pad;
+    // remapping: the next button pressed (not one of the fixed driving controls) is the answer
+    if (this.padCapture && pad) {
+      const b = pad.buttons.findIndex((x, i) => x.pressed && !this.padPrev[i] && ![6, 7, 14, 15].includes(i));
+      if (b >= 0) { const cb = this.padCapture; this.padCapture = null; cb(b); }
+    }
     const st = this.state;
     let thr = this.isDown('accel') ? 1 : 0;
     let brk = this.isDown('brake') ? 1 : 0;
@@ -87,10 +93,10 @@ export class Input {
       if (Math.abs(ax) > 0.01) { steer = ax; st.analogSteer = true; }
       if (pad.buttons[14] && pad.buttons[14].pressed) steer = -1;
       if (pad.buttons[15] && pad.buttons[15].pressed) steer = 1;
-      horn = horn || !!(pad.buttons[1] && pad.buttons[1].pressed);
-      look = look || !!(pad.buttons[11] && pad.buttons[11].pressed);
-      if (pad.buttons[4] && pad.buttons[4].pressed) side = -1;
-      if (pad.buttons[5] && pad.buttons[5].pressed) side = 1;
+      horn = horn || this._padDown('horn');
+      look = look || this._padDown('lookback');
+      if (this._padDown('lookLeft')) side = -1;
+      if (this._padDown('lookRight')) side = 1;
     }
     st.throttle = clamp(thr, 0, 1);
     st.brake = clamp(brk, 0, 1);

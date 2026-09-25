@@ -1,7 +1,6 @@
 // HUD: speedometer, minimap, indicators, route sign and toasts.
 import { clamp, wrapDelta } from './util.js';
 import { drawParkingBadge, PA_ROAD, PA_BAY } from './map.js';
-import { keyName, PAD_LABELS } from './input.js';
 
 const ARC_LEN = 251; // path length of the gauge arc in the SVG
 
@@ -56,26 +55,6 @@ export class Hud {
   }
   show(v) { this.el.hidden = !v; }
 
-  // compact list of the car's controls next to the speedometer; lit when active
-  updateKeys(player, input, bindings) {
-    const pad = input.lastDevice === 'gamepad' && input.hasPad;
-    const key = a => (pad ? PAD_LABELS[a] : keyName((bindings[a] || [])[0]));
-    const L = player.lights, st = input.state;
-    const items = [
-      ['lights', 'Faróis', L.head],
-      ['horn', 'Buzina', st.horn],
-      ['sides', 'Olhar lados', st.lookSide !== 0],
-    ];
-    items.push(['lookback', 'Olhar p/ trás', st.lookback], ['map', 'Mapa', false], ['camera', 'Câmera', false], ['pause', 'Pausa', false]);
-    const html = items.map(([a, label, on]) => {
-      const k = a === 'sides' ? (pad ? 'LB RB' : keyName(bindings.lookLeft[0]) + ' ' + keyName(bindings.lookRight[0])) : key(a);
-      return `<span class="k${on ? ' on' : ''}"><kbd>${k}</kbd>${label}</span>`;
-    }).join('');
-    if (html !== this._keysHtml) {
-      this._keysHtml = html;
-      document.getElementById('keys-hud').innerHTML = html;
-    }
-  }
   toast(msg) {
     this.toastEl.textContent = msg;
     this.toastEl.classList.add('on');

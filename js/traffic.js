@@ -134,8 +134,9 @@ export class Traffic {
     this._v = new THREE.Vector3();
     this._s = new THREE.Vector3(1, 1, 1);
     this._c = new THREE.Color();
-    // no AI traffic in the parking area (road or bays)
-    this.ribWeights = net.ribbons.map(r => r.pa ? 0 : r.len * (r.kind === 'ring' ? 2 : 1));
+    // AI traffic keeps to the loop: it never enters the C2, the ramps or the parking area (their tight
+    // curves and merges are the player's; cars there got stuck or cut corners)
+    this.ribWeights = net.ribbons.map(r => (r.kind === 'ring' ? r.len : 0));
   }
 
   setCounts(count, cruisers) {
@@ -210,7 +211,7 @@ export class Traffic {
     a.targetOff = a.off;
     a.pendingLane = -1;
     a.latV = 0; a.bump = 0; a.blink = 0; a.hazardT = 0; a.shaken = 0; a.merging = 0; a.accel = null;
-    a.wantExit = Math.random() < (a.kind === 'cruiser' ? 0.35 : 0.15);
+    a.wantExit = false; // (the loop only: no car takes an exit)
     a.active = true;
     a.passSide = 0;
     if (a.kind === 'traffic') {
@@ -320,7 +321,7 @@ export class Traffic {
         const back = 260 + Math.random() * 140;
         let s = player.s - dirP * back;
         if (r.closed) s = wrap(s, r.len);
-        if (s > 30 && s < r.len - 60 || r.closed) {
+        if (r.kind === 'ring') {
           const lanes = r.lanes[dirP];
           const li = Math.floor(Math.random() * lanes.length);
           if (this._laneFree(r, dirP, s, lanes[li], 30)) {
@@ -646,7 +647,7 @@ export class Traffic {
         a.mode = 'leave';
         a.modeT = 30;
         const r = Math.random();
-        if (r < 0.4) { a.wantExit = true; a.v0 = a.baseV0; }
+        if (r < 0.4) a.v0 = a.baseV0;
         else if (r < 0.8) a.v0 = Math.min(a.spec.stats.top / 3.6, player.speed + 18);
         else a.v0 = 22;
       }

@@ -14,7 +14,7 @@ import { Traffic } from './traffic.js';
 import { Hud } from './hud.js';
 import { BigMap } from './map.js';
 import { AudioSys } from './audio.js';
-import { Input, ACTION_LABELS, PAD_LABELS, keyName } from './input.js';
+import { Input, ACTION_LABELS, PAD_FIXED_LABELS, padName, keyName } from './input.js';
 import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { CHANGELOG } from './changelog.js';
@@ -59,7 +59,7 @@ composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
 // ------------------------------------------------------------------ systems
-const input = new Input(S.bindings);
+const input = new Input(S.bindings, S.pad);
 const audio = new AudioSys();
 let net, world, traffic, hud, player = null, bigMap;
 let state = 'loading';
@@ -516,10 +516,9 @@ function goSelect() {
   state = 'select';
   showScreen('select');
   updateSelect();
-  audio.mute(false);
   setTimeout(() => { const c = $('sel-chips').children[selIndex]; if (c) c.focus({ preventScroll: true }); }, 40);
 }
-$('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); } else goTitle(); };
+$('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else goTitle(); };
 $('sel-go').onclick = () => startDrive();
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
@@ -530,23 +529,36 @@ function goTitle() {
   scene.add(idleLights);
   state = 'title';
   showScreen('title');
-  audio.mute(true);
   rig.snapNext = true;
 }
 
 // pause
+// the commands, from the bindings actually in force (remapped or removed ones included): keyboard, and
+// the controller when one is connected; an action with nothing bound is left out
+function renderPauseKeys() {
+  const pad = input.hasPad;
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const kbd = list => list.map(t => `<kbd>${esc(t)}</kbd>`).join('');
+  let html = `<thead><tr><th>Ação</th><th>Teclado</th>${pad ? '<th>Controle</th>' : ''}</tr></thead><tbody>`;
+  for (const action of Object.keys(ACTION_LABELS)) {
+    const keys = (S.bindings[action] || []).map(keyName);
+    const btn = PAD_FIXED_LABELS[action] ? [PAD_FIXED_LABELS[action]] : (S.pad[action] || []).map(padName);
+    if (!keys.length && !(pad && btn.length)) continue;
+    html += `<tr><td>${esc(ACTION_LABELS[action])}</td><td>${kbd(keys)}</td>${pad ? `<td>${kbd(btn)}</td>` : ''}</tr>`;
+  }
+  $('pause-keys').innerHTML = html + '</tbody>';
+}
 function pauseGame() {
   if (state !== 'drive') return;
   state = 'pause';
   showScreen('pause');
+  renderPauseKeys();
   $('pause-info').textContent = `${player.spec.name} · ${Math.round(player.odo / 1000 * 10) / 10} km rodados`;
-  audio.mute(true);
 }
 function resumeGame() {
   if (state !== 'pause') return;
   state = 'drive';
   showScreen('drive');
-  audio.mute(false);
   lastTime = performance.now();
 }
 // full-screen map: the drive pauses underneath while it is open
@@ -555,14 +567,12 @@ function openMap() {
   state = 'map';
   showScreen('map');
   bigMap.open(player);
-  audio.mute(true);
 }
 function closeMap() {
   if (state !== 'map') return;
   bigMap.close();
   state = 'drive';
   showScreen('drive');
-  audio.mute(false);
   input.edges.clear(); // the key that closed the map must not reopen it on the next frame
   lastTime = performance.now();
 }
@@ -623,7 +633,6 @@ function startDrive() {
   if (!spawn) traffic.populate(player.pos);
   audio.init();
   audio.setCar({ ...spec.sound, top: spec.stats.top });
-  audio.mute(false);
   camMode = 0;
   rig.snapNext = true;
   state = 'drive';
@@ -684,6 +693,8 @@ function openSettings() {
 }
 function closeSettings() {
   settingsOpen = false;
+  input.capture = input.padCapture = null; // (a remap left waiting)
+  if (state === 'pause') renderPauseKeys(); // (the list shows the bindings just edited)
   $('settings').hidden = true;
   SET.save(S);
   const f = focusables()[0];
@@ -777,39 +788,84 @@ function renderOpts() {
   }
   if (keepFocus) { const f = el.querySelector(`[data-fid="${CSS.escape(keepFocus)}"]`); if (f) f.focus(); }
 }
+// Controls: every action with its keyboard keys (two slots) and its controller button, each remappable;
+// ✕ removes the action from that device altogether. Accelerate, brake and steering on the controller are
+// fixed (triggers, left stick, d-pad sides).
+const PAD_ACTIONS = Object.keys(SET.DEFAULT_PAD);
 function renderControls(el) {
   const t = document.createElement('table');
   t.className = 'keys';
   t.innerHTML = '<thead><tr><th>Ação</th><th>Teclado</th><th>Controle</th></tr></thead>';
   const tb = document.createElement('tbody');
+  const refocus = sel => { const again = el.querySelector(sel); if (again) again.focus(); };
+  const mk = (text, label, fid, onclick, cls = 'keybtn') => {
+    const b = document.createElement('button');
+    b.className = cls; b.textContent = text; b.setAttribute('aria-label', label); b.dataset.fid = fid; b.onclick = onclick;
+    return b;
+  };
   for (const action of Object.keys(ACTION_LABELS)) {
+    const name = ACTION_LABELS[action];
     const tr = document.createElement('tr');
-    const keys = S.bindings[action];
     const td1 = document.createElement('td');
-    td1.textContent = ACTION_LABELS[action];
+    td1.textContent = name;
+    // keyboard: two slots
     const td2 = document.createElement('td');
-    const kb = document.createElement('button');
-    kb.className = 'keybtn';
-    kb.textContent = keyName(keys[0]) + (keys[1] ? `  /  ${keyName(keys[1])}` : '');
-    kb.setAttribute('aria-label', `Remapear ${ACTION_LABELS[action]}`);
-    kb.onclick = () => {
-      kb.classList.add('wait');
-      kb.textContent = 'Pressione…';
-      input.capture = code => {
-        if (code !== 'Escape' || action === 'pause') {
-          for (const a of Object.keys(S.bindings)) if (a !== action) S.bindings[a] = S.bindings[a].filter(c => c !== code);
-          S.bindings[action] = [code, ...(S.bindings[action].slice(1).filter(c => c !== code))];
+    const wrap = document.createElement('span'); wrap.className = 'binds';
+    for (const slot of [0, 1]) {
+      const code = S.bindings[action][slot];
+      const kb = mk(code ? keyName(code) : '—', `${name}: tecla ${slot + 1}`, `k:${action}:${slot}`, () => {
+        kb.classList.add('wait');
+        kb.textContent = 'Tecla…';
+        input.capture = c => {
+          if (c === 'Delete' || c === 'Backspace') {
+            S.bindings[action] = S.bindings[action].filter((_, i) => i !== slot);
+          } else if (c !== 'Escape' || action === 'pause') {
+            for (const a of Object.keys(S.bindings)) if (a !== action) S.bindings[a] = S.bindings[a].filter(x => x !== c);
+            const list = S.bindings[action].filter(x => x !== c);
+            list.splice(Math.min(slot, list.length), slot < list.length ? 1 : 0, c);
+            S.bindings[action] = list.slice(0, 2);
+          }
           SET.save(S);
-        }
-        renderOpts();
-        const again = el.querySelectorAll('.keybtn')[Object.keys(ACTION_LABELS).indexOf(action)];
-        if (again) again.focus();
-      };
-    };
-    td2.appendChild(kb);
+          renderOpts();
+          refocus(`[data-fid="k:${action}:${slot}"]`);
+        };
+      });
+      wrap.appendChild(kb);
+    }
+    wrap.appendChild(mk('✕', `Remover ${name} do teclado`, `kx:${action}`, () => {
+      S.bindings[action] = [];
+      SET.save(S); renderOpts(); refocus(`[data-fid="kx:${action}"]`);
+    }, 'keybtn unbind'));
+    td2.appendChild(wrap);
+    // controller: one button, or the fixed driving control
     const td3 = document.createElement('td');
-    td3.className = 'padlab';
-    td3.textContent = PAD_LABELS[action];
+    if (PAD_ACTIONS.includes(action)) {
+      const w2 = document.createElement('span'); w2.className = 'binds';
+      const cur = S.pad[action][0];
+      const pb = mk(cur !== undefined ? padName(cur) : '—', `${name}: botão do controle`, `p:${action}`, () => {
+        pb.classList.add('wait');
+        pb.textContent = 'Botão…';
+        input.padCapture = btn => {
+          if (btn === 'remove') S.pad[action] = [];
+          else if (Number.isInteger(btn)) {
+            for (const a of PAD_ACTIONS) if (a !== action) S.pad[a] = S.pad[a].filter(x => x !== btn);
+            S.pad[action] = [btn];
+          }
+          SET.save(S);
+          renderOpts();
+          refocus(`[data-fid="p:${action}"]`);
+        };
+      });
+      w2.appendChild(pb);
+      w2.appendChild(mk('✕', `Remover ${name} do controle`, `px:${action}`, () => {
+        S.pad[action] = [];
+        SET.save(S); renderOpts(); refocus(`[data-fid="px:${action}"]`);
+      }, 'keybtn unbind'));
+      td3.appendChild(w2);
+    } else {
+      td3.className = 'padlab';
+      td3.textContent = PAD_FIXED_LABELS[action];
+    }
     tr.append(td1, td2, td3);
     tb.appendChild(tr);
   }
@@ -817,11 +873,15 @@ function renderControls(el) {
   el.appendChild(t);
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:14px;flex-wrap:wrap';
-  row.innerHTML = '<span class="chipinfo">Clique em uma tecla para remapear. A tecla secundária (setas) continua valendo.</span>';
+  row.innerHTML = '<span class="chipinfo">Clique numa tecla ou botão e pressione o novo. <kbd>Del</kbd> apaga, <kbd>Esc</kbd> cancela, ✕ remove o comando.</span>';
   const rb = document.createElement('button');
   rb.className = 'btn small';
-  rb.textContent = 'Restaurar teclas';
-  rb.onclick = () => { S.bindings = JSON.parse(JSON.stringify(SET.DEFAULT_BINDINGS)); input.bindings = S.bindings; SET.save(S); renderOpts(); };
+  rb.textContent = 'Restaurar controles';
+  rb.onclick = () => {
+    S.bindings = JSON.parse(JSON.stringify(SET.DEFAULT_BINDINGS)); S.pad = JSON.parse(JSON.stringify(SET.DEFAULT_PAD));
+    input.bindings = S.bindings; input.padBindings = S.pad;
+    SET.save(S); renderOpts();
+  };
   row.appendChild(rb);
   el.appendChild(row);
 }
@@ -832,6 +892,7 @@ $('set-reset').onclick = () => {
   for (const k of Object.keys(d)) S[k] = d[k];
   S.lastCar = keepCar;
   input.bindings = S.bindings;
+  input.padBindings = S.pad;
   const q = SET.detectQuality(renderer);
   SET.applyPreset(S, q.quality);
   S.graphics.preset = 'auto';
@@ -892,9 +953,10 @@ function padMenus() {
   const p = input.pad;
   if (!p) return;
   const up = input.padPressed(12), down = input.padPressed(13), left = input.padPressed(14), right = input.padPressed(15);
-  const a = input.padPressed(0), b = input.padPressed(1), start = input.padPressed(9);
+  if (input.padCapture) return; // remapping a button: the next press is the answer, not navigation
+  const a = input.padPressed(0), b = input.padPressed(1), start = input.padPressed(9) || input.padActionPressed('pause');
   if (state === 'map') {
-    if (b || start || input.padPressed(10)) closeMap();
+    if (b || start || input.padActionPressed('map')) closeMap();
     else if (input.padPressed(3)) bigMap.center(player);
     return;
   }
@@ -935,7 +997,8 @@ const tmpVel = new THREE.Vector3();
 function driveStep(dt) {
   const inp = input.poll();
   // toggles
-  if (input.pressed('pause')) { pauseGame(); return; }
+  // (Esc always pauses, even with the pause command removed: it cannot be given to any other action)
+  if (input.pressed('pause') || input.edges.has('Escape')) { pauseGame(); return; }
   if (input.pressed('map')) { openMap(); return; }
   if (input.pressed('lights')) { player.lights.head = !player.lights.head; hud.toast(player.lights.head ? 'Faróis ligados' : 'Faróis desligados'); }
   if (input.pressed('camera')) { camMode = (camMode + 1) % 4; rig.snapNext = true; hud.toast(['Câmera: perseguição', 'Câmera: perto', 'Câmera: distante', 'Câmera: capô'][camMode]); }
@@ -989,7 +1052,6 @@ function driveStep(dt) {
     other: traffic.nearestCruiser, traffic: traffic.nearestTraffic,
   });
   hud.update(dt, player, traffic);
-  hud.updateKeys(player, input, S.bindings);
   updateLampLights(dt, Math.sin(player.yaw), Math.cos(player.yaw), player.pos.x, player.pos.z);
   hemi.intensity = damp(hemi.intensity, tunnel ? 0.3 : 0.62, 3, dt);
   hemi.color.set(tunnel ? 0x8a6a40 : 0x5b6aa6);
@@ -1053,6 +1115,10 @@ function tick(now) {
     input.poll();
     padMenus();
   }
+  // the game's sound plays only while driving: menus (title, car select, pause, map, settings) hear
+  // their own clicks and nothing of the road
+  const mute = state !== 'drive' || settingsOpen;
+  if (mute !== audio.muted) audio.mute(mute);
   if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map') {
     if (state === 'title') { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
     if (state !== 'pause' && state !== 'map') world.update(dt, camera);

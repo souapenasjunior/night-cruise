@@ -22,6 +22,9 @@ export class AudioSys {
     this.ctx = null;
     this.ready = false;
     this.vol = { master: 0.8, engine: 0.8, sfx: 0.8, ambient: 0.6 };
+    // the game's sound (engine, road, traffic, city) is off until driving starts; menu clicks have
+    // their own bus and always play
+    this.muted = true;
     this.gear = 0;
     this.rpm = 900;
     this.shiftT = 0;
@@ -42,6 +45,7 @@ export class AudioSys {
     if (!AC) return;
     const ctx = (this.ctx = new AC());
     this.master = ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : this.vol.master;
     this.comp = ctx.createDynamicsCompressor();
     this.comp.threshold.value = -12;
     this.comp.ratio.value = 3.5;
@@ -267,7 +271,7 @@ export class AudioSys {
     this.vol = { ...v };
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.master.gain.setTargetAtTime(v.master, t, 0.05);
+    this.master.gain.setTargetAtTime(this.muted ? 0 : v.master, t, 0.05);
     this.engineBus.gain.setTargetAtTime(v.engine * 0.95, t, 0.05);
     this.sfxBus.gain.setTargetAtTime(v.sfx, t, 0.05);
     this.ambBus.gain.setTargetAtTime(v.ambient, t, 0.05);
@@ -304,7 +308,10 @@ export class AudioSys {
     void oscs;
   }
   suspend(on) { if (this.ctx) { if (on) this.ctx.suspend(); else this.ctx.resume(); } }
-  mute(on) { if (this.ctx) this.master.gain.setTargetAtTime(on ? 0 : this.vol.master, this.ctx.currentTime, 0.08); }
+  mute(on) {
+    this.muted = !!on;
+    if (this.ctx) this.master.gain.setTargetAtTime(on ? 0 : this.vol.master, this.ctx.currentTime, 0.08);
+  }
 
   // --------------------------------------------------------------- per frame
   update(dt, p) {

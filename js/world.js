@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rng, clamp, lerp } from './util.js';
 import * as TX from './textures.js';
-import { CHAMFER, PARAPET_W, LEVEL_TOL } from './network.js';
+import { CHAMFER, PARAPET_W, LEVEL_TOL, RING_HW, RAMP_HW } from './network.js';
 import { buildSignage } from './signage.js';
 import { buildMarkings } from './markings.js';
 
@@ -418,6 +418,18 @@ export class World {
       steel: new THREE.MeshStandardMaterial({ color: 0x4d535c, roughness: 0.5, metalness: 0.7 }),
       pillar: new THREE.MeshStandardMaterial({ map: this.tex.concrete, color: 0x75767c, roughness: 0.9 }),
     };
+    // fine asphalt grain on every road surface (a bump map tiled about every 1.2 m): crisp up close,
+    // where the colour texture alone is magnified, and it catches the headlights
+    const grain = TX.grainTexture(this.aniso);
+    const lotHw = (net.ribbons.find(r => r.kind === 'lot') || { hw: 5.3 }).hw;
+    // (u runs across the whole width, v along: one unit per 20 m)
+    for (const [m, width] of [[this.mats.ring, 2 * RING_HW], [this.mats.link, 2 * RAMP_HW], [this.mats.lot, 2 * lotHw], [this.mats.gore, 2 * TX.LOT_ROAD.hw]]) {
+      const t = grain.clone();
+      t.repeat.set(width / 1.2, 20 / 1.2);
+      t.needsUpdate = true;
+      m.bumpMap = t;
+      m.bumpScale = 0.6;
+    }
     this._build();
   }
 
@@ -717,7 +729,11 @@ export class World {
     // the outer vertex takes the neighbour's height exactly (offsets from this deck's own cross section)
     const dyOut = i => (Number.isNaN(width[i]) ? 0 : yOut[i] - (r.py[i] + sg * (hw + W(i)) * r.cs[i]));
     const g = sweep(r, [[sg * hw, 0], [i => sg * (hw + W(i)), dyOut], [i => sg * (hw + W(i)), i => bottom(edgeY(i))], [sg * hw, i => bottom(edgeY(i))]], rg, { uScale: 8, vScale: 8 });
-    if (g) this.root.add(new THREE.Mesh(g, this.mats.gore));
+    if (!g) return;
+    // mapped from above in world space, at the bays' asphalt scale (the sweep's own UVs stretch it)
+    const P = g.attributes.position, UV = g.attributes.uv;
+    for (let k = 0; k < P.count; k++) UV.setXY(k, P.getX(k) / (2 * TX.LOT_ROAD.hw), P.getZ(k) / 20);
+    this.root.add(new THREE.Mesh(g, this.mats.gore));
   }
 
   // parking bay: stall lines and the walls closing both ends (the aisle side stays open)

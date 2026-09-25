@@ -7,18 +7,17 @@ import { clamp, wrap, lerp } from './util.js';
 export const LANE_W = 3.6;
 export const PARAPET_W = 0.4;   // edge parapet, standing on the deck's outermost 0.4 m
 export const BARRIER_HW = 0.35; // median barrier, half its base
-// loop: a shoulder on each side of the three lanes, wide enough for a stopped car either way: 3.1 m
-// clear from the median barrier to the yellow line, and 3.5 m from the edge line to the parapet (3.1 m
-// clear of it)
-const RING_YELLOW = BARRIER_HW + 3.1;
+// loop: median barrier, 1.2 m clear to the yellow line, three lanes, and 1.0 m from the edge line to the
+// parapet: no shoulder (the edge strip only keeps a car from scraping the wall)
+const RING_YELLOW = BARRIER_HW + 1.2;
 export const RING_X = {
   yellow: RING_YELLOW,
   lanes: [0, 1, 2].map(k => RING_YELLOW + LANE_W * (k + 0.5)), // fast lane first
   edge: RING_YELLOW + 3 * LANE_W, // edge line
-  hw: RING_YELLOW + 3 * LANE_W + 3.5,
+  hw: RING_YELLOW + 3 * LANE_W + 1.0,
 };
-// C2, ramps and the PA: 2 lanes, 2.8 m shoulder each side
-export const LINK_X = { lanes: [LANE_W / 2, -LANE_W / 2], edge: LANE_W, hw: LANE_W + 2.8 };
+// C2, ramps and the PA: 2 lanes and a 1.0 m edge strip each side
+export const LINK_X = { lanes: [LANE_W / 2, -LANE_W / 2], edge: LANE_W, hw: LANE_W + 1.0 };
 export const RING_HW = RING_X.hw;
 export const RAMP_HW = LINK_X.hw;
 // ramp centre when its two lanes lie on the loop's two outer lanes (the end of every taper)
