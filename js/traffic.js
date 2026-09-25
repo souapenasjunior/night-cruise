@@ -209,7 +209,7 @@ export class Traffic {
     a.off = sp.rib.lanes[sp.dir][sp.li];
     a.targetOff = a.off;
     a.pendingLane = -1;
-    a.latV = 0; a.bump = 0; a.blink = 0; a.hazardT = 0; a.shaken = 0; a.merging = 0;
+    a.latV = 0; a.bump = 0; a.blink = 0; a.hazardT = 0; a.shaken = 0; a.merging = 0; a.accel = null;
     a.wantExit = Math.random() < (a.kind === 'cruiser' ? 0.35 : 0.15);
     a.active = true;
     a.passSide = 0;
@@ -513,6 +513,8 @@ export class Traffic {
     if (a.merging > 0) {
       a.merging -= dt;
       const off = lanes[a.li];
+      // (while waiting, keep to the acceleration lane: see _move)
+      if (a.accel && a.accel.lane !== undefined) a.targetOff = a.accel.lane;
       const ah = this._gapAhead(a, rib, a.s, a.dir, off, a.halfW, pObs, 60);
       const bh = this._gapBehind(a, rib, a.s, a.dir, off, pObs);
       // never force the merge: wait at the end of the acceleration lane until the gap is safe
@@ -661,6 +663,22 @@ export class Traffic {
     if (a.shaken > 0) a.shaken -= dt;
     if (a.hazardT > 0) a.hazardT -= dt;
     a.s += a.v * dt * a.dir;
+    // on an acceleration lane (just switched onto the road it joins): the lane slides in toward the
+    // outer lane faster than a car changes lanes, so the car rides along with it (its lane offset seen
+    // from this road), on top of its own lateral motion; it never ends up on the shoulder or off the deck
+    if (a.accel) {
+      const A = a.accel, Q = rib.pointAt(rib.wrapS(a.s), A.lane !== undefined ? A.lane : a.off, this._P);
+      const pr = A.r.projectLocal(Q.x, Q.z, A.i, 8, {});
+      A.i = pr.i;
+      const L = A.r.pointAt(pr.s, A.off), h = rib.projectLocal(L.x, L.z, Math.floor(rib.wrapS(a.s) / rib.ds), 6, {});
+      if (A.lane !== undefined) {
+        const d = h.off - A.lane;
+        // (moving toward the road: carry the car and a target that is still the lane itself)
+        if (Math.sign(d) === Math.sign(a.targetOff - a.off) || a.merging > 0) { a.off += d; if (a.merging > 0) a.targetOff += d; }
+      }
+      A.lane = h.off;
+      if (pr.s >= A.r.len - 1 || (!(a.merging > 0) && Math.abs(a.off - a.targetOff) < 0.3)) a.accel = null;
+    }
     // lateral
     const maxLat = a.lat * (0.55 + Math.min(1, a.v / 25) * 0.6);
     const want = clamp((a.targetOff - a.off) * 1.3, -maxLat, maxLat);
@@ -685,8 +703,10 @@ export class Traffic {
       if (m.from !== rib) continue;
       if (a.s > m.sFrom) {
         const lanes = m.to.lanes[m.dir];
+        const accel = { r: rib, off: a.off, i: Math.floor(a.s / rib.ds) }; // the ramp lane it was in
         this._switch(a, m.to, m.dir, m.li !== undefined ? m.li : lanes.length - 1);
         a.targetOff = a.off; // hold on the acceleration lane until the outer lane is clear
+        a.accel = accel;
         a.merging = 6;
         a.wantExit = Math.random() < 0.2;
       }
