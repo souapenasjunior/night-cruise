@@ -1125,7 +1125,7 @@ function tick(now) {
   if (mute !== audio.muted) audio.mute(mute);
   // menu music: main menu and car select (settings / credits opened from there included)
   music.setVolume(S.audio.master * S.audio.music);
-  music.update(dt, state === 'title' || state === 'select');
+  music.update(state === 'title' || state === 'select');
   if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map') {
     if (state === 'title') { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
     if (state !== 'pause' && state !== 'map') world.update(dt, camera);
@@ -1200,7 +1200,7 @@ async function boot() {
   if (location.hash === '#debug') {
     let fake = performance.now();
     window.__nc = {
-      scene, net, world, traffic, get player() { return player; }, camera, renderer, S, input, applySettings, openSettings, composer, bloom, audio,
+      scene, net, world, traffic, get player() { return player; }, camera, renderer, S, input, applySettings, openSettings, composer, bloom, audio, music,
       get state() { return state; },
       step(n = 1, ms = 16.7) { for (let i = 0; i < n; i++) { fake = Math.max(fake + ms, performance.now()); tick(fake); } },
       startDrive: () => startDrive(), goSelect: () => goSelect(), parkAtSlot,

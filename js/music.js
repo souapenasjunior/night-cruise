@@ -31,8 +31,11 @@ export class MenuMusic {
     const p = this.el.play();
     if (p && p.then) p.then(() => { this.blocked = false; }, () => { this.blocked = true; });
   }
-  // every frame: fade toward the wanted volume (1.5 s in, 0.8 s out); pause once silent
-  update(dt, want) {
+  // every frame: fade toward the wanted volume (1.5 s in, 0.8 s out); pause once silent.
+  // Timed on the real clock: the game's dt is capped per frame, which would drag the fade on a slow PC.
+  update(want) {
+    const now = performance.now(), dt = Math.min(2, this.last ? (now - this.last) / 1000 : 0);
+    this.last = now;
     this.want = want && !document.hidden;
     const target = this.want ? this.vol : 0;
     if (this.want && this.vol > 0 && this.el.paused && !this.blocked) this._play();
@@ -40,6 +43,6 @@ export class MenuMusic {
     this.cur = target > this.cur ? Math.min(target, this.cur + rate) : Math.max(target, this.cur - rate);
     // (perceived loudness: a squared curve makes the fade even to the ear)
     this.el.volume = clamp(this.cur * this.cur, 0, 1);
-    if (!this.want && this.cur <= 0 && !this.el.paused) this.el.pause();
+    if (target <= 0 && this.cur <= 0 && !this.el.paused) this.el.pause();
   }
 }
