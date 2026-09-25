@@ -1,10 +1,18 @@
 // "Novidades" screen: one entry per release, newest first. Plain text, 3 to 5 lines each.
 export const CHANGELOG = [
   {
+    version: '1.5.1', date: '2026-09-25',
+    lines: [
+      'Acostamento dos dois lados do anel: agora também há 3,1 m livres junto à mureta central, e um carro parado cabe inteiro em qualquer lado.',
+      'Faixas pintadas no chão não piscam mais onde uma rampa entra ou sai do anel e na entrada dos boxes do PA.',
+      'Carros do trânsito só mudam da faixa de aceleração para a pista quando ela já corre ao lado, sem cruzar o acostamento.',
+    ],
+  },
+  {
     version: '1.5.0', date: '2026-09-25',
     lines: [
-      'Acostamento largo no mapa inteiro: 3,1 m livres dos dois lados do anel e 2,4 m no C2, nas rampas e no PA; um carro parado cabe inteiro.',
-      'Junções niveladas: onde duas pistas se encontram o chão é um só, sem degrau, tranco nem faixa pintada piscando.',
+      'Acostamento largo no mapa inteiro: 3,1 m livres no anel e 2,4 m no C2, nas rampas e no PA; dá para parar ou passar por ele.',
+      'Junções niveladas: onde duas pistas se encontram o chão é um só, sem degrau, tranco nem piso tremendo.',
       'Muretas refeitas: exatamente na borda da pista, sem sobreposição nem lascas, pontas inclinadas nos bicos.',
       'Toda mureta que se vê tem colisão, e o carro não atravessa mais nenhuma, nem com a frente nas curvas fechadas.',
       'Pilares, postes e placas não atravessam mais pistas, e toda passagem inferior tem ao menos 4,5 m de altura livre.',
