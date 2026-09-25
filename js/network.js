@@ -7,8 +7,10 @@ import { clamp, wrap, lerp } from './util.js';
 export const LANE_W = 3.6;
 export const PARAPET_W = 0.4;   // edge parapet, standing on the deck's outermost 0.4 m
 export const BARRIER_HW = 0.35; // median barrier, half its base
-// loop: median barrier, 1.2 m clear to the yellow line, 3 lanes, 3.5 m shoulder (3.1 m clear of the parapet)
-const RING_YELLOW = BARRIER_HW + 1.2;
+// loop: a shoulder on each side of the three lanes, wide enough for a stopped car either way: 3.1 m
+// clear from the median barrier to the yellow line, and 3.5 m from the edge line to the parapet (3.1 m
+// clear of it)
+const RING_YELLOW = BARRIER_HW + 3.1;
 export const RING_X = {
   yellow: RING_YELLOW,
   lanes: [0, 1, 2].map(k => RING_YELLOW + LANE_W * (k + 0.5)), // fast lane first

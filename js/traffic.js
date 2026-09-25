@@ -513,14 +513,17 @@ export class Traffic {
     if (a.merging > 0) {
       a.merging -= dt;
       const off = lanes[a.li];
-      // (while waiting, keep to the acceleration lane: see _move)
+      // (while waiting, keep to the acceleration lane: see _move). Its lane first has to come alongside
+      // the outer lane: until then the car just rides it (no crossing the shoulders between, no braking)
       if (a.accel && a.accel.lane !== undefined) a.targetOff = a.accel.lane;
+      const alongside = !a.accel || a.accel.lane === undefined || Math.abs(a.accel.lane - off) <= 3.8;
+      if (!alongside) a.merging = Math.max(a.merging, 3.2);
       const ah = this._gapAhead(a, rib, a.s, a.dir, off, a.halfW, pObs, 60);
       const bh = this._gapBehind(a, rib, a.s, a.dir, off, pObs);
       // never force the merge: wait at the end of the acceleration lane until the gap is safe
       const fAcc = bh.b ? this._idm(bh.b.player ? null : bh.b, bh.v, bh.v + 4, bh.gap, a.v) : 0;
       const playerNear = this._playerBehind(a, off, pObs, 40 + Math.max(0, (pObs ? pObs.vAlong * a.dir : 0) - a.v) * 3, -99);
-      if (!playerNear && ah.gap > (a.v < 2 ? 6 : 10) && bh.gap > 4 && fAcc > -3) { a.targetOff = off; a.merging = 0; }
+      if (alongside && !playerNear && ah.gap > (a.v < 2 ? 6 : 10) && bh.gap > 4 && fAcc > -3) { a.targetOff = off; a.merging = 0; }
       else if (a.merging < 0.5) a.merging = 0.5;
     }
     // courtesy: let cars coming off an acceleration lane merge in front
