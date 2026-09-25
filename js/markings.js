@@ -1,25 +1,23 @@
 // Road markings painted where roads part and join: arrows in the exit lane over its last ~200 m, a
 // zebra-striped V between the diverging (or merging) lane and the through lanes, and a thick broken
 // line along the lane that becomes the exit (or that the ramp becomes). Geometry, not textures: every
-// vertex is dropped onto the road surface actually drawn at that spot (following curves, slopes and the
-// ramps sunk under the loop), then lifted 2 cm. One merged mesh, drawn with the paint material's
+// vertex is dropped onto the road surface at that spot (following curves and slopes; where decks overlap
+// they share one surface), then lifted 2 cm. One merged mesh, drawn with the paint material's
 // polygon offset so it wins over any deck beneath it.
 import * as THREE from 'three';
 import { clamp, lerp, wrap } from './util.js';
+import { LANE_W } from './network.js';
 
 const LIFT = 0.02;
 
 export function buildMarkings(world, topo) {
   const net = world.net, res = [];
   const pos = [];
-  // top of the drawn road at (x, z) near height y (the gore infill sits 3 cm under the decks' level)
+  // top of the road at (x, z) near height y (the gore infill between two decks is flush with both)
   const topY = (x, z, y) => {
     let best = -Infinity;
-    for (const q of net.surfacesAt(x, z, y, 0.8, 0.02, res)) {
-      const sk = q.r.sink ? lerp(q.r.sink[q.i], q.r.sink[q.r.next(q.i)], clamp(q.t, 0, 1)) : 0;
-      if (q.y + sk > best) best = q.y + sk;
-    }
-    return (best > -Infinity ? best : y - 0.03) + LIFT;
+    for (const q of net.surfacesAt(x, z, y, 0.8, 0.02, res)) if (q.y > best) best = q.y;
+    return (best > -Infinity ? best : y) + LIFT;
   };
   // wound to face up (front side) whatever order the corners come in
   const tri = (a, b, c) => {
@@ -27,7 +25,7 @@ export function buildMarkings(world, topo) {
     for (const p of [a, b, c]) pos.push(p.x, topY(p.x, p.z, p.y), p.z);
   };
   const quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
-  const edgeLine = r => (r.kind === 'ring' ? 11.9 : 3.6); // the solid line at the edge of the lanes
+  const edgeLine = r => r.edge; // the solid line at the edge of the lanes
   const S = (r, s) => (r.closed ? wrap(s, r.len) : clamp(s, 0, r.len));
 
   // a point on road r, `a` metres along travel dir d from s0 and `b` metres to the drivers' right of offset `off`
@@ -60,7 +58,7 @@ export function buildMarkings(world, topo) {
     const stepS = isExit ? -0.5 : 0.5;
     for (let s = e.sep.s, n = 0; n < 1200; s += stepS, n++) {
       if (s < 0 || s > r.len) break;
-      const E1 = r.pointAt(s, hs * 3.6);
+      const E1 = r.pointAt(s, hs * r.edge);
       const pr = hintI === null ? h.projectGlobal(E1.x, E1.z) : h.projectLocal(E1.x, E1.z, hintI, 8);
       hintI = pr.i;
       const sg = Math.sign(pr.off) || 1;
@@ -119,7 +117,7 @@ export function buildMarkings(world, topo) {
     // arrows over the last ~200 m before the lane starts to peel off
     for (const t of [185, 115, 45]) arrowAt(h, d, e.sAt - d * t, lane, e.side);
     const sg = -Math.sign(lane) || 1;
-    const boundary = h.kind === 'ring' ? lane + sg * 1.8 : 0;
+    const boundary = h.kind === 'ring' ? lane + sg * LANE_W / 2 : 0;
     if (z) broken(h, d, e.sAt - d * 150, z.tipS, boundary);
   }
   for (const e of topo.merges) {
@@ -129,7 +127,7 @@ export function buildMarkings(world, topo) {
     if (h.kind === 'pa') continue;
     const lane = laneOn(h, d, e.side);
     const sg = -Math.sign(lane) || 1;
-    const boundary = h.kind === 'ring' ? lane + sg * 1.8 : 0;
+    const boundary = h.kind === 'ring' ? lane + sg * LANE_W / 2 : 0;
     if (z) broken(h, d, z.tipS, e.sAt, boundary);
   }
   if (!pos.length) return null;

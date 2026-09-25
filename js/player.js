@@ -1,6 +1,7 @@
 // Player vehicle: arcade physics on the ribbon network, walls, lights and signals.
 import * as THREE from 'three';
 import { clamp, lerp, damp } from './util.js';
+import { PARAPET_W, BARRIER_HW } from './network.js';
 
 const G = 9.81;
 
@@ -80,10 +81,12 @@ export class Player {
     this._sync(0);
   }
 
-  // Put the car back on the nearest lane, facing the legal direction.
+  // Put the car back on the nearest lane (never the shoulder), facing the legal direction. In a parking
+  // bay that is the PA's access road.
   reset() {
-    const r = this.rib;
-    const P = r.projectLocal(this.pos.x, this.pos.z, this.iHint, 20, {});
+    let r = this.rib;
+    let P = r.projectLocal(this.pos.x, this.pos.z, this.iHint, 20, {});
+    if (r.kind === 'lot' && this.net.pa) { r = this.net.pa.road; P = r.projectGlobal(this.pos.x, this.pos.z, {}); }
     let dir = 1, lanes;
     if (r.lanes[-1]) { dir = P.off < 0 ? 1 : -1; }
     lanes = r.lanes[dir];
@@ -191,25 +194,71 @@ export class Player {
       // off every surface: collide with the current ribbon edge
       const P = this.rib.projectLocal(this.pos.x, this.pos.z, this.iHint, 10, {});
       cur = { r: this.rib, ...P };
-    }
+    } else cur = { ...cur }; // (surfacesAt hands out shared objects)
     const r = cur.r;
     this.rib = r;
+    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    let hit = 0;
+    // walls: the parapets of every deck at this level. They stand where network.js buildWalls put them
+    // (the same intervals the world draws). The car is a box (corners slightly rounded): each of its
+    // corner, side and bumper points is placed on the deck at its own spot, so a curving wall is met
+    // where it really is, and a point inside a wall is moved out the shorter way: back across the deck,
+    // or, at a wall's sloped end (a gore nose), back along it. Nothing else stops the car at an edge:
+    // where no parapet is drawn, the pavement goes on.
+    const near = this.net.surfacesAt(this.pos.x, this.pos.z, this.y, 1.0, 2.6, []).map(q => ({ ...q }));
+    const crx = -fz, crz = fx, L = this.halfL, W = this.halfW, P = this._wp || (this._wp = {});
+    const body = this._body || (this._body = [[L - 0.25, W * 0.95], [L - 0.25, -W * 0.95], [-(L - 0.25), W * 0.95], [-(L - 0.25), -W * 0.95], [0, W], [0, -W], [L - 0.05, 0], [-(L - 0.05), 0]]);
+    for (const q of near) {
+      // (only from the deck's own side: a car on a neighbouring deck is behind this wall, not in it)
+      if (Math.abs(q.off) > q.r.hw + 0.3) continue;
+      const face = q.r.hw - PARAPET_W;
+      for (let pass = 0; pass < 2; pass++) {
+        let best = null;
+        for (const [u, v] of body) {
+          q.r.projectLocal(this.pos.x + fx * u + crx * v, this.pos.z + fz * u + crz * v, q.i, 3, P);
+          const sg = Math.sign(P.off) || 1, pen = Math.abs(P.off) - face;
+          if (pen <= 0 || pen > PARAPET_W + 0.6) continue;
+          const span = q.r.wallSpan(sg, P.s);
+          if (!span) continue;
+          // the shorter way out: across, or off a sloped end
+          let d = pen, ax = -P.tz * -sg, az = P.tx * -sg; // (unit vector out of the wall)
+          const w = span.w;
+          if (w.e0 === 'chamfer' && span.s - w.s0 < d) { d = span.s - w.s0 + 0.01; ax = -P.tx; az = -P.tz; }
+          if (w.e1 === 'chamfer' && w.s1 - span.s < d) { d = w.s1 - span.s + 0.01; ax = P.tx; az = P.tz; }
+          if (!best || d > best.d) best = { d, ax, az };
+        }
+        if (!best) break;
+        this.pos.x += best.ax * best.d; this.pos.z += best.az * best.d;
+        this._pushWall(best.d, -best.ax, -best.az, 1);
+        hit = 1;
+      }
+    }
+    // parking bays: their end walls (0.4 m thick, from the back wall to where the next deck begins)
+    for (const q of near) {
+      if (q.r.kind !== 'lot') continue;
+      const ext = this.halfL * Math.abs(fx * q.tx + fz * q.tz) + this.halfW * Math.abs(-fz * q.tx + fx * q.tz);
+      for (const [lim, sg, k] of [[PARAPET_W + ext, -1, 0], [q.r.len - PARAPET_W - ext, 1, 1]]) {
+        if (q.off * q.r.outer < q.r.endIn[k] * q.r.outer) continue;
+        const d = lim - q.s;
+        if (d * sg >= 0) continue;
+        this.pos.x += q.tx * d; this.pos.z += q.tz * d;
+        this._pushWall(-d, q.tx, q.tz, sg);
+        hit = 1;
+      }
+    }
+    if (hit) {
+      const P = r.projectLocal(this.pos.x, this.pos.z, cur.i, 4, {});
+      Object.assign(cur, P);
+    }
     this.s = cur.s;
     this.iHint = cur.i;
     let off = cur.off;
     const tx = r.tx[cur.i], tz = r.tz[cur.i];
     const rx = -tz, rz = tx;
-    const wall = r.hw - 0.42 - this.halfW * 0.92;
-    let hit = 0;
-    // edge walls (unless another ribbon continues past the edge)
-    if (Math.abs(off) > wall) {
+    // an edge with no parapet and no pavement beyond (never built that way): hold the car on the deck
+    if (Math.abs(off) > r.hw + 0.6 && !near.some(q => q.r !== r)) {
       const sg = Math.sign(off);
-      const probe = this.net.surfacesAt(this.pos.x + rx * sg * (this.halfW + 0.8), this.pos.z + rz * sg * (this.halfW + 0.8), this.y, 1.5, 0, []);
-      const open = probe.some(q => q.r !== r);
-      if (!open || Math.abs(off) > r.hw + 0.6) {
-        const lim = open ? r.hw + 0.6 : wall;
-        if (Math.abs(off) > lim) { hit = sg; this._pushWall(off - sg * lim, rx, rz, sg); off = sg * lim; }
-      }
+      hit = sg; this._pushWall(off - sg * (r.hw + 0.6), rx, rz, sg); off = sg * (r.hw + 0.6);
     }
     // ribbon ends
     if (!r.closed && (cur.t < 0 && cur.i === 0 || cur.t > 1 && cur.i >= r.n - 2)) {
@@ -222,9 +271,11 @@ export class Player {
         if (vt * endT > 0) { this.vx -= tx * vt * 1.3; this.vz -= tz * vt * 1.3; this._impact(Math.abs(vt)); }
       }
     }
-    // median barrier
-    if (r.median && !r.inMedianGap(this.s)) {
-      const lim = 0.36 + this.halfW * 0.92;
+    // median barrier (it ends exactly at the U-turn gaps, where it is drawn to end)
+    const caM = Math.abs(fx * tx + fz * tz), saM = Math.sqrt(Math.max(0, 1 - caM * caM));
+    const extM = (this.halfL - 0.3) * caM;
+    if (r.median && ![0, extM, -extM].every(e => r.inMedianGap(r.wrapS(this.s + e)))) {
+      const lim = BARRIER_HW + 0.01 + this.halfW * 0.92 * caM + (this.halfL - 0.3) * saM;
       if (Math.abs(off) < lim) {
         const prevSide = Math.sign(this.off || off) || 1;
         this._pushWall(off - prevSide * lim, rx, rz, -prevSide);

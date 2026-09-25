@@ -342,14 +342,14 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 
 <script>
 // Loader with cache busting. V must match VERSION in js/version.js (see README).
-// A relative import such as './world.js' inside js/main.js?v=1.4.0 resolves to js/world.js with no query,
+// A relative import such as './world.js' inside js/main.js?v=1.5.0 resolves to js/world.js with no query,
 // so the ?v would stop at main.js. The import map built here maps every game module to its ?v=V URL:
 // the browser applies it to all imports (static and dynamic) in every module, so no import in js/ ever
 // needs editing. A new file in js/ only has to be added to MODULES (main.js warns in the console if one
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.4.0';
+  var V = '1.5.0';
   var MODULES = ['audio', 'cars', 'changelog', 'glbcars', 'hud', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

@@ -2,9 +2,27 @@
 import * as THREE from 'three';
 import { clamp, wrap, lerp } from './util.js';
 
+// ------------------------------------------------------------------ cross-sections
+// Every width derives from these: lanes stay 3.6 m, the shoulders set the rest. Offsets from the centre line.
 export const LANE_W = 3.6;
-export const RING_HW = 13.9; // median 1.1 + 3 lanes + 2.0 shoulder
-export const RAMP_HW = 5.6;  // 2 lanes + shoulders
+export const PARAPET_W = 0.4;   // edge parapet, standing on the deck's outermost 0.4 m
+export const BARRIER_HW = 0.35; // median barrier, half its base
+// loop: median barrier, 1.2 m clear to the yellow line, 3 lanes, 3.5 m shoulder (3.1 m clear of the parapet)
+const RING_YELLOW = BARRIER_HW + 1.2;
+export const RING_X = {
+  yellow: RING_YELLOW,
+  lanes: [0, 1, 2].map(k => RING_YELLOW + LANE_W * (k + 0.5)), // fast lane first
+  edge: RING_YELLOW + 3 * LANE_W, // edge line
+  hw: RING_YELLOW + 3 * LANE_W + 3.5,
+};
+// C2, ramps and the PA: 2 lanes, 2.8 m shoulder each side
+export const LINK_X = { lanes: [LANE_W / 2, -LANE_W / 2], edge: LANE_W, hw: LANE_W + 2.8 };
+export const RING_HW = RING_X.hw;
+export const RAMP_HW = LINK_X.hw;
+// ramp centre when its two lanes lie on the loop's two outer lanes (the end of every taper)
+export const MERGED = (RING_X.lanes[1] + RING_X.lanes[2]) / 2;
+// decks that run alongside overlap by this much (edge to edge), so the seam between them is pavement
+const OVERLAP = 1.0;
 
 export class Ribbon {
   constructor(opts) {
@@ -17,7 +35,13 @@ export class Ribbon {
     this.median = !!opts.median;
     this.medianGaps = opts.medianGaps || [];
     this.lanes = opts.lanes; // {1:[offsets], -1:[offsets]}; index 0 = fast lane
+    this.edge = opts.edge; // edge line: outer edge of the outermost lane
     const curve = new THREE.CatmullRomCurve3(opts.points, this.closed, 'centripetal', 0.5);
+    // arc length measured finely (a few times per metre; three's default is 200 divisions per curve, 25 m
+    // apart on a 5 km road), so the samples really are ds apart: uneven spacing made the grade jump
+    let rough = 0;
+    for (let k = 1; k < opts.points.length; k++) rough += opts.points[k].distanceTo(opts.points[k - 1]);
+    curve.arcLengthDivisions = Math.max(200, Math.ceil(rough * 3));
     const len = curve.getLength();
     const step = opts.step || 4;
     const segs = Math.max(2, Math.round(len / step));
@@ -32,6 +56,9 @@ export class Ribbon {
     this.tx = new Float32Array(n);
     this.tz = new Float32Array(n);
     this.sl = new Float32Array(n);
+    // cross slope (dy per metre of lateral offset): zero, except where a deck lies on a road it crosses
+    // at an angle and takes that road's surface (see drape)
+    this.cs = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       this.px[i] = pts[i].x;
       this.py[i] = pts[i].y;
@@ -84,7 +111,7 @@ export class Ribbon {
     tx /= l; tz /= l;
     out.x = lerp(this.px[i], this.px[j], t) - tz * off;
     out.z = lerp(this.pz[i], this.pz[j], t) + tx * off;
-    out.y = lerp(this.py[i], this.py[j], t);
+    out.y = lerp(this.py[i], this.py[j], t) + off * lerp(this.cs[i], this.cs[j], t);
     out.tx = tx; out.tz = tz;
     out.slope = lerp(this.sl[i], this.sl[j], t);
     out.i = i;
@@ -105,7 +132,7 @@ export class Ribbon {
     out.t = t;
     out.i = i;
     out.s = (i + tc) * this.ds;
-    out.y = lerp(this.py[i], this.py[j], tc);
+    out.y = lerp(this.py[i], this.py[j], tc) + out.off * lerp(this.cs[i], this.cs[j], tc);
     out.tx = dx / L; out.tz = dz / L;
     return t;
   }
@@ -136,6 +163,206 @@ export class Ribbon {
   inMedianGap(s) {
     for (const g of this.medianGaps) if (s >= g[0] && s <= g[1]) return true;
     return false;
+  }
+  // the parapet on side sg (-1 / +1) at s, if any (intervals from buildWalls; on a closed ribbon an
+  // interval may run past len, and s is then reported in its frame)
+  wallSpan(sg, s) {
+    const list = this.walls && this.walls[sg];
+    if (!list) return null;
+    if (this.closed) s = wrap(s, this.len);
+    for (const w of list) {
+      if (s >= w.s0 && s <= w.s1) return { w, s };
+      if (this.closed && s + this.len <= w.s1) return { w, s: s + this.len };
+    }
+    return null;
+  }
+  wallAt(sg, s) { return !!this.wallSpan(sg, s); }
+}
+
+// ------------------------------------------------------------------ levels
+// Decks whose surfaces meet within this height at a point are one surface there (a ramp on the loop,
+// a ramp blending into C2, the PA's roads on the bays); anything further apart is another level.
+export const LEVEL_TOL = 0.6;
+const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+
+// Vertical alignment: a spline through control points that also turn hard in plan spreads the climb
+// unevenly (a ripple in the grade at a control point). Each link's height profile is smoothed with a
+// Gaussian (sigma in metres) before anything is fitted to it; flat or even grades are left unchanged.
+function smoothProfile(r, sigma) {
+  const n = r.n, w = Math.ceil((2.5 * sigma) / r.ds), y = Float64Array.from(r.py);
+  const k = Array.from({ length: 2 * w + 1 }, (_, j) => Math.exp(-0.5 * (((j - w) * r.ds) / sigma) ** 2));
+  for (let i = 0; i < n; i++) {
+    // (symmetric window, shrinking at the ends so they keep their height and grade)
+    const h = Math.min(w, i, n - 1 - i);
+    let a = 0, b = 0;
+    for (let j = -h; j <= h; j++) { a += k[j + w] * y[i + j]; b += k[j + w]; }
+    r.py[i] = a / b;
+  }
+  r._frames();
+}
+
+// Where a deck lies on an earlier one (lower id: the loop, then C2, then the PA's access road...), it
+// takes that deck's surface exactly: its height and, where it crosses at an angle, the cross slope of
+// that deck's plane along this deck's cross-section. Outside the overlap the correction fades out over
+// DRAPE_BLEND metres, carrying its own rate of change at the boundary (Hermite), so the grade flows on
+// with no kink. Two decks sharing a spot therefore never differ in height (no step for the wheels, no
+// lip in the drawing), and each deck records the decks it lies on, which sets its drawing layer.
+const DRAPE_BLEND = 40;
+function drape(net) {
+  const res = [];
+  for (const r of net.ribbons) {
+    r.layer = 0;
+    r.hosts = new Set();
+    if (r.id === 0) continue;
+    const n = r.n, da = new Float64Array(n).fill(NaN), db = new Float64Array(n).fill(NaN);
+    for (let i = 0; i < n; i++) {
+      // (most samples are nowhere near an earlier deck: one query across the whole width rules it out)
+      if (!net.surfacesAt(r.px[i], r.pz[i], r.py[i], LEVEL_TOL + 0.5, r.hw, res).some(c => c.r.id < r.id)) continue;
+      const lx = -r.tz[i], lz = r.tx[i]; // this deck's lateral axis
+      let m = 0, sa = 0, sb = 0;
+      for (let k = -4; k <= 4; k++) {
+        const o = (k / 4) * r.hw;
+        const x = r.px[i] + lx * o, z = r.pz[i] + lz * o;
+        let q = null;
+        for (const c of net.surfacesAt(x, z, r.py[i] + o * r.cs[i], LEVEL_TOL, 0, res)) if (c.r.id < r.id && (!q || c.r.id < q.r.id)) q = c;
+        if (!q) continue;
+        r.hosts.add(q.r.id);
+        // the host's plane along this deck's lateral axis: its grade times the part of the axis along
+        // it, plus its own cross slope times the part across it
+        const h = q.r, j = h.next(q.i), t = clamp(q.t, 0, 1);
+        const b = lerp(h.sl[q.i], h.sl[j], t) * (lx * q.tx + lz * q.tz) + lerp(h.cs[q.i], h.cs[j], t) * (lx * -q.tz + lz * q.tx);
+        m++; sb += b; sa += q.y - b * o;
+      }
+      if (!m) continue;
+      da[i] = sa / m - r.py[i];
+      db[i] = sb / m - r.cs[i];
+    }
+    const blend = arr => {
+      const out = Float64Array.from(arr), ds = r.ds;
+      const slope = (i, d) => (i - d >= 0 && i - d < n && !Number.isNaN(arr[i - d]) ? (arr[i] - arr[i - d]) / (d * ds) : 0);
+      let i = 0;
+      while (i < n) {
+        if (!Number.isNaN(arr[i])) { i++; continue; }
+        let j = i;
+        while (j < n && Number.isNaN(arr[j])) j++;
+        const l = i - 1, rr = j < n ? j : -1; // defined neighbours
+        const cl = l >= 0 ? arr[l] : 0, gl = l >= 0 ? slope(l, 1) : 0;
+        const cr = rr >= 0 ? arr[rr] : 0, gr = rr >= 0 ? slope(rr, -1) : 0; // (rates: per metre, increasing s)
+        const D = (rr >= 0 && l >= 0) ? (rr - l) * ds : Infinity;
+        for (let k = i; k < j; k++) {
+          if (D < 2 * DRAPE_BLEND) {
+            // cubic Hermite between the two ends (values and rates)
+            const t = (k - l) * ds / D, t2 = t * t, t3 = t2 * t;
+            out[k] = (2 * t3 - 3 * t2 + 1) * cl + (t3 - 2 * t2 + t) * D * gl + (-2 * t3 + 3 * t2) * cr + (t3 - t2) * D * gr;
+          } else {
+            const dl = (k - l) * ds, dr = (rr - k) * ds;
+            out[k] = (l >= 0 ? (cl + gl * dl) * (1 - smooth(dl / DRAPE_BLEND)) : 0) + (rr >= 0 ? (cr - gr * dr) * (1 - smooth(dr / DRAPE_BLEND)) : 0);
+          }
+        }
+        i = j;
+      }
+      return out;
+    };
+    const ca = blend(da), cb = blend(db);
+    for (let i = 0; i < n; i++) { r.py[i] += ca[i]; r.cs[i] += cb[i]; }
+    r._frames();
+    // drawn under every deck it lies on: overlapping decks never share a layer
+    for (const h of r.hosts) r.layer = Math.max(r.layer, net.ribbons[h].layer + 1);
+  }
+  net.layers = Math.max(...net.ribbons.map(r => r.layer)) + 1;
+}
+
+// ------------------------------------------------------------------ walls
+// The drivable area is the union of the decks at one level. A parapet stands exactly on its boundary:
+// along a deck's edge wherever that edge is not inside another deck at the same level, cut where the
+// edge enters or leaves the other deck (found by bisection, to the millimetre). The drawing (world.js)
+// and the car's collision (player.js) both read these intervals, so every wall seen is a wall felt and
+// every wall felt is seen; two decks never both wall the same stretch, and walls never stand in a lane.
+// A wall end is square where another deck's wall carries on from it (a taper: the loop's parapet hands
+// over to the ramp's), or where it meets a parking bay's end wall; otherwise it slopes down (chamfer).
+export const CHAMFER = 4;
+const EDGE_EPS = 0.01;
+function buildWalls(net) {
+  const res = [];
+  // the edge point of r at s on side sg lies inside another deck: no wall there
+  const covered = (r, sg, s) => {
+    const E = r.pointAt(r.wrapS(s), sg * r.hw);
+    for (const q of net.surfacesAt(E.x, E.z, E.y, LEVEL_TOL, EDGE_EPS, res)) {
+      if (q.r === r) continue;
+      // a parking bay's two ends are its end walls (0.4 m thick), not pavement
+      if (q.r.kind === 'lot' && (q.s < PARAPET_W || q.s > q.r.len - PARAPET_W)) continue;
+      const a = Math.abs(q.off);
+      // edges running exactly together: the earlier deck keeps the wall
+      if (a < q.r.hw - EDGE_EPS || q.r.id < r.id) return q.r;
+    }
+    return null;
+  };
+  for (const r of net.ribbons) {
+    r.walls = { [-1]: [], 1: [] };
+    for (const sg of [-1, 1]) {
+      const n = r.n, open = new Uint8Array(n);
+      for (let i = 0; i < n; i++) open[i] = covered(r, sg, i * r.ds) ? 1 : 0;
+      if (!open.some(v => v)) { r.walls[sg].push({ s0: 0, s1: r.closed ? r.len : r.len, full: r.closed }); continue; }
+      // bisect a boundary between s = a (state of a) and b
+      const cut = (a, b) => {
+        const va = !!covered(r, sg, a);
+        for (let k = 0; k < 18; k++) { const m = (a + b) / 2; if (!!covered(r, sg, m) === va) a = m; else b = m; }
+        return (a + b) / 2;
+      };
+      // walk the samples (closed: start just after an open one)
+      const i0 = r.closed ? open.indexOf(1) : 0;
+      const cnt = r.closed ? n : n;
+      let cur = null;
+      for (let k = 0; k < cnt; k++) {
+        const i = r.closed ? (i0 + k) % n : k;
+        const sI = (r.closed ? i0 + k : k) * r.ds;
+        const prevOpen = k === 0 ? (r.closed ? 1 : null) : open[r.closed ? (i0 + k - 1) % n : k - 1];
+        if (!open[i] && !cur) cur = { s0: prevOpen === null ? 0 : cut(sI - r.ds, sI) };
+        if (open[i] && cur) { cur.s1 = cut(sI - r.ds, sI); r.walls[sg].push(cur); cur = null; }
+      }
+      if (cur) {
+        if (r.closed) { cur.s1 = cut((i0 + n) * r.ds - r.ds, (i0 + n) * r.ds); } else cur.s1 = r.len;
+        r.walls[sg].push(cur);
+      }
+      for (const w of r.walls[sg]) if (r.closed && w.s0 >= r.len) { w.s0 -= r.len; w.s1 -= r.len; }
+    }
+  }
+  // parking bays: each end wall runs from the back wall across the bay to where the first other deck
+  // begins (the access road, or a ramp passing over the bay's corner). endIn[k]: that lateral offset
+  // at end k (0: s = 0, 1: s = len), for the drawing and the collision alike
+  for (const r of net.ribbons) {
+    if (r.kind !== 'lot') continue;
+    r.endIn = [PARAPET_W / 2, r.len - PARAPET_W / 2].map(sE => {
+      for (let o = r.outer * r.hw; o * r.outer > -r.hw; o -= r.outer * 0.02) {
+        const P = r.pointAt(sE, o);
+        if (net.surfacesAt(P.x, P.z, P.y, LEVEL_TOL, 0, res).some(q => q.r !== r && q.r.kind !== 'lot')) return o;
+      }
+      return -r.outer * (r.hw - OVERLAP);
+    });
+  }
+  // end shapes (second pass: needs every deck's walls)
+  for (const r of net.ribbons) {
+    for (const sg of [-1, 1]) {
+      for (const w of r.walls[sg]) {
+        if (w.full) { w.e0 = w.e1 = 'square'; continue; }
+        for (const [end, out] of [['e0', -1], ['e1', 1]]) {
+          const sE = end === 'e0' ? w.s0 : w.s1;
+          if (!r.closed && (sE <= 1e-3 || sE >= r.len - 1e-3)) { w[end] = 'square'; continue; }
+          // what covers the edge just past the end
+          const q = covered(r, sg, sE + out * 0.6);
+          if (q && q.kind === 'lot') { w[end] = 'square'; continue; }
+          // does another deck's wall carry on from here? (its edge passes the end point, walled beyond it)
+          const X = r.pointAt(r.wrapS(sE), sg * r.hw), Y = r.pointAt(r.wrapS(sE + out * 1.5), sg * r.hw);
+          let cont = false;
+          for (const c of net.surfacesAt(X.x, X.z, X.y, LEVEL_TOL, 0.6, res)) {
+            if (c.r === r || Math.abs(Math.abs(c.off) - c.r.hw) > 0.5) continue;
+            const pr = c.r.projectLocal(Y.x, Y.z, c.i, 6, {});
+            if (c.r.wallAt(Math.sign(c.off), pr.s)) { cont = true; break; }
+          }
+          w[end] = cont ? 'square' : 'chamfer';
+        }
+      }
+    }
   }
 }
 
@@ -234,8 +461,8 @@ export function buildNetwork() {
   if (rx * (cx - test.px[0]) + rz * (cz - test.pz[0]) > 0) pts = pts.reverse();
 
   const ring = new Ribbon({
-    name: 'ring', label: 'K1', closed: true, hw: RING_HW, kind: 'ring', median: true, points: pts,
-    lanes: { 1: [-2.9, -6.5, -10.1], [-1]: [2.9, 6.5, 10.1] },
+    name: 'ring', label: 'K1', closed: true, hw: RING_HW, kind: 'ring', median: true, points: pts, edge: RING_X.edge,
+    lanes: { 1: RING_X.lanes.map(o => -o), [-1]: RING_X.lanes.slice() },
   });
   net.add(ring);
   net.ring = ring;
@@ -251,7 +478,7 @@ export function buildNetwork() {
   const S = v => wrap(v, L);
   const sA = S(nearestS(-1925, 0) - 760);
   const sB = S(nearestS(1890, 60) + 760);
-  const side = RING_HW + RAMP_HW - 1.0;
+  const side = RING_HW + RAMP_HW - OVERLAP; // ramp centre when it runs alongside the loop
 
   // central link centerline
   const c0 = rp(S(sA + 760), -250, 15);
@@ -295,7 +522,7 @@ export function buildNetwork() {
     }
     return out;
   };
-  const merged = RING_HW - RAMP_HW; // ramp centre when fully on the loop: its lanes = the loop's two outer lanes
+  const merged = MERGED; // ramp centre when fully on the loop: its lanes = the loop's two outer lanes
 
   // C+ : leaves dir+ at A (interior side), crosses the city, merges into dir+ at B
   const cPlusPts = [
@@ -331,8 +558,9 @@ export function buildNetwork() {
     rp(S(sA + 660), side + 10, ya - 0.6),
     ...par(S(sA + 610), -1, side, 8, 30, merged),
   ];
-  const cPlus = net.add(new Ribbon({ name: 'c2e', label: 'C2', hw: RAMP_HW, kind: 'link', points: cPlusPts, lanes: { 1: [1.8, -1.8] } }));
-  const cMinus = net.add(new Ribbon({ name: 'c2w', label: 'C2', hw: RAMP_HW, kind: 'link', points: cMinusPts, lanes: { 1: [1.8, -1.8] } }));
+  const link = (o) => ({ hw: RAMP_HW, edge: LINK_X.edge, lanes: { 1: LINK_X.lanes.slice() }, ...o });
+  const cPlus = net.add(new Ribbon(link({ name: 'c2e', label: 'C2', kind: 'link', points: cPlusPts })));
+  const cMinus = net.add(new Ribbon(link({ name: 'c2w', label: 'C2', kind: 'link', points: cMinusPts })));
 
   // Nishi PA: a parking area off the loop on the dir+ (interior) side, between Nishi Straight and
   // Minato Bayside, where the loop is elevated, flat and gently curved. A deceleration lane peels off,
@@ -342,8 +570,8 @@ export function buildNetwork() {
   // bay cross-section from the back: parapet 0.4, walkway 3.2 (keeps the chase camera inside), stall 5.2,
   // 0.8 to the aisle, 1.0 overlapping the access road
   const PA_D = 56, LOT_HW = 5.3, LOT_LEN = 52, WALK = 3.2;
-  const paRoad = net.add(new Ribbon({
-    name: 'pa', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
+  const paRoad = net.add(new Ribbon(link({
+    name: 'pa', label: 'PA', kind: 'pa', step: 2,
     points: [
       ...par(sP, 1, -side, 5, 30, null, -merged),
       rp(S(sP + 165), -30), rp(S(sP + 200), -46),
@@ -351,11 +579,11 @@ export function buildNetwork() {
       rp(S(sP + 390), -44), rp(S(sP + 440), -27),
       ...par(S(sP + 500), 1, -side, 7, 30, -merged),
     ],
-  }));
+  })));
   paRoad.pa = true;
   // the bays overlap the access road by 1 m, so the edge between them is open (no parapet, drive straight in)
   const lots = [-1, 1].map(k => {
-    const off = -PA_D + k * (RAMP_HW + LOT_HW - 1);
+    const off = -PA_D + k * (RAMP_HW + LOT_HW - OVERLAP);
     const pts = [];
     for (let d = -LOT_LEN / 2; d <= LOT_LEN / 2 + 0.01; d += LOT_LEN / 4) pts.push(rp(S(sP + 280 + d), off));
     const lot = net.add(new Ribbon({ name: 'lot', label: 'PA', hw: LOT_HW, kind: 'lot', lanes: { 1: [0] }, points: pts, step: 2 }));
@@ -393,19 +621,21 @@ export function buildNetwork() {
     Q.y = paRoad.pointAt(pr.s, 0).y + dy;
     return Q;
   };
-  const paIn = net.add(new Ribbon({
-    name: 'paIn', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
+  const paIn = net.add(new Ribbon(link({
+    name: 'paIn', label: 'PA', kind: 'pa', step: 2,
     points: [
       ...par(S(sP + 900), -1, side, 5, 30, null, merged),
       pp(700, 50, 9.6), pp(640, 80, 7.9), pp(580, 95, 6.7), pp(480, 97, 6.0), pp(380, 97, 5.8),
       pp(280, 97, 5.7), pp(180, 95, 5.6), pp(100, 85, 5.5), pp(40, 60, 5.4), pp(5, 30, 5.3),
       pp(-8, 0, 5.3), pp(-5, -30, 5.4), pp(15, -52, 5.9), pp(50, -66, 6.9), pp(95, -72, 8.3),
-      // climbs to the access road's level before the two decks touch, then blends in on top of it
-      pp(140, -71, 10.3), ppOn(175, -67.5, -0.25), ppOn(200, -63.5), ppOn(222, -60), ppOn(238, -57.5), ppOn(250, -56), ppOn(258, -56),
+      // climbs to the access road's level before the two decks touch, then blends in on top of it,
+      // keeping 0.6-1 m toward the bays until it is over them: its edge covers the access road's edge
+      // right up to the first bay's end wall (no stub of parapet left between the two)
+      pp(140, -71, 10.3), ppOn(175, -67.5, -0.25), ppOn(200, -63.5), ppOn(222, -60), ppOn(238, -58), ppOn(250, -57), ppOn(258, -56.6),
     ],
-  }));
-  const paOut = net.add(new Ribbon({
-    name: 'paOut', label: 'PA', hw: RAMP_HW, kind: 'pa', lanes: { 1: [1.8, -1.8] }, step: 2,
+  })));
+  const paOut = net.add(new Ribbon(link({
+    name: 'paOut', label: 'PA', kind: 'pa', step: 2,
     points: [
       // leaves on top of the access road, and only drops once the two decks have parted
       // (both overlap the bays by a few metres, so no stub of access-road parapet is left between)
@@ -415,7 +645,7 @@ export function buildNetwork() {
       pp(450, 46, 9.9), pp(422, 32, 10.9), pp(396, 22, 11.6),
       ...par(S(sP + 370), -1, side, 7, 30, merged),
     ],
-  }));
+  })));
   paIn.pa = paOut.pa = true;
   net.pa = { road: paRoad, lots, slots, bays: perLot, stallW: STALL_W, stallD: STALL_D, sExit: sP, paIn, paOut };
 
@@ -439,8 +669,8 @@ export function buildNetwork() {
     for (let s = from; st > 0 ? s <= to : s >= to; s += st) { const Q = r.pointAt(s, 0); if (ring.projectGlobal(Q.x, Q.z).off <= offMax) return s; }
     return to;
   };
-  const beside = 2 * RAMP_HW - 1; // ramp centre when it sits alongside a link, overlapping its edge by 1 m
-  const rampOpts = (name, points) => ({ name, label: 'C2', hw: RAMP_HW, kind: 'link', lanes: { 1: [1.8, -1.8] }, points });
+  const beside = 2 * RAMP_HW - OVERLAP; // ramp centre when it sits alongside a link, overlapping its edge by 1 m
+  const rampOpts = (name, points) => link({ name, label: 'C2', kind: 'link', points });
 
   // A1  loop dir- (outside) -> C2 east: leaves before sA, hairpins under the loop and c2e's own exit,
   //     climbs inside and blends into c2e where it heads into the city
@@ -448,8 +678,8 @@ export function buildNetwork() {
   const a1Side = sideToward(cPlus, a1Join, rp(S(sA + 300), -240));
   const rampA1 = net.add(new Ribbon(rampOpts('c2eIn', [
     ...par(S(sA + 366), -1, side, 5, 30, null, merged),
-    rp(S(sA + 200), 38, ringY(S(sA + 200)) - 1.6), rp(S(sA + 135), 48, 9.2), rp(S(sA + 90), 36, 6.9),
-    rp(S(sA + 70), 8, 5.5), rp(S(sA + 76), -22, 5.4), rp(S(sA + 100), -50, 5.8), rp(S(sA + 145), -80, 7.0),
+    rp(S(sA + 200), 38, ringY(S(sA + 200)) - 1.6), rp(S(sA + 135), 48, 9.2), rp(S(sA + 90), 36, 6.6),
+    rp(S(sA + 70), 8, 5.2), rp(S(sA + 76), -22, 5.2), rp(S(sA + 100), -50, 5.6), rp(S(sA + 145), -80, 7.0),
     rp(S(sA + 215), -104, 8.7), rp(S(sA + 290), -124, 10.4),
     ...along(cPlus, a1Join - 110, a1Join, a1Side * beside, 0, 5),
   ])));
@@ -543,5 +773,8 @@ export function buildNetwork() {
   ];
 
   net.buildGrid();
+  for (const r of net.ribbons) if (!r.closed && r.kind !== 'lot') smoothProfile(r, 10);
+  drape(net);
+  buildWalls(net);
   return net;
 }

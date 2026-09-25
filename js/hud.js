@@ -135,8 +135,9 @@ export class Hud {
     const order = this.net.ribbons.map((r, i) => i).sort((a, b) => (this.net.ribbons[a].kind === 'ring' ? 1 : 0) - (this.net.ribbons[b].kind === 'ring' ? 1 : 0));
     for (const i of order) {
       const r = this.net.ribbons[i];
-      // widths are exaggerated for legibility; the parking bays keep their real width (square ends)
-      const w = r.kind === 'ring' ? 44 : r.kind === 'lot' ? r.hw * 2 : 26;
+      // widths are exaggerated for legibility (in proportion to the real ones); the parking bays keep
+      // their real width (square ends)
+      const w = r.kind === 'ring' ? r.hw * 2 * 1.6 : r.kind === 'lot' ? r.hw * 2 : r.hw * 2 * 2.3;
       c.lineCap = r.kind === 'lot' ? 'butt' : 'round';
       c.strokeStyle = 'rgba(4,6,12,0.95)';
       c.lineWidth = w + 18;
