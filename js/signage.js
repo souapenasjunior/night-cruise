@@ -342,6 +342,27 @@ export function buildSignage(world) {
       break;
     }
   }
+  // ---- inside the PA (its access road is two-way): the way out at each end, NO ENTRY into the entry roads
+  const paSigns = [];
+  for (const w of (net.pa && net.pa.signs) || []) {
+    // nearest spot (within 12 m) where the steel fits
+    for (let k = 0; k <= 12; k++) {
+      const s = w.s + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2;
+      if (s < 5 || s > w.r.len - 5) continue;
+      if (w.kind === 'paexit') {
+        const legs = gantryLegs(w.r, s);
+        if (!legs) continue;
+        const it = { kind: 'paexit', type: 'gantry', r: w.r, d: w.d, s, legs, dest: K1(w.dest), arrowDeg: w.arrow };
+        items.push(it); paSigns.push(it);
+      } else {
+        if (!sideOk(w.r, s, w.d)) continue;
+        const it = { kind: 'noentry', type: 'side', r: w.r, d: w.d, s };
+        items.push(it); paSigns.push(it);
+      }
+      break;
+    }
+  }
+
   // ---- contents
   const zonesAhead = (d, s, n) => net.zones.filter(z => z.r === ring).map(z => ({ z, t: ahead(ring, d, s, z.s) })).filter(o => o.t > 300).sort((a, b) => a.t - b.t).slice(0, n);
   const exitsAhead = (r, d, s, n, maxT = 3200) => exitsOn(r, d).map(e => ({ e, t: ahead(r, d, s, e.sAt) })).filter(o => o.t > 0 && o.t <= maxT).sort((a, b) => a.t - b.t).slice(0, n);
@@ -403,6 +424,16 @@ export function buildSignage(world) {
           destRow(g, x + h * 0.08, y + h * 0.55, w - h * 0.16, h * 0.38, { dest, dist: fmtDist(nx.t), arrowDeg: arrowFor(nx.e.side), arrowSide: nx.e.side, bg });
         } else if (nz) destRow(g, x + h * 0.1, y + h * 0.52, w - h * 0.1, h * 0.42, { dest: { shield: '', jp: nz.z.jp, en: nz.z.name }, dist: fmtDist(nz.t), bg: GREEN });
       });
+    } else if (it.kind === 'paexit') {
+      const w = Math.min(7.5, u1 - u0);
+      addPanel(r, d, s, mid - w / 2, mid + w / 2, Y, 3.0, HI, (g, x, y, W, H) => {
+        plate(g, x, y, W, H, GREEN);
+        g.fillStyle = WHITE; rrect(g, x + H * 0.08, y + H * 0.08, W - H * 0.16, H * 0.26, H * 0.04); g.fill();
+        g.fillStyle = GREEN; g.textAlign = 'center'; g.textBaseline = 'middle';
+        fit(g, '出口  EXIT', 800, H * 0.19, JP, W - H * 0.4);
+        g.fillText('出口  EXIT', x + W / 2, y + H * 0.215);
+        destRow(g, x, y + H * 0.38, W, H * 0.58, { dest: it.dest, arrowDeg: it.arrowDeg, arrowSide: 1, bg: GREEN });
+      });
     } else if (it.kind === 'adv') {
       const list = exitsAhead(r, d, s, 2);
       if (!list.length) return;
@@ -451,7 +482,29 @@ export function buildSignage(world) {
     if (it.type === 'side') {
       // post on the parapet, plate over the edge
       const sg = -d, P = r.pointAt(s, sg * (r.hw - 0.2)), yaw = Math.atan2(P.tx, P.tz);
-      box(P.x, P.y + 1.8, P.z, 0.16, 3.6, 0.16, yaw);
+      const postH = it.kind === 'noentry' ? 4.4 : 3.6;
+      box(P.x, P.y + postH / 2, P.z, 0.16, postH, 0.16, yaw);
+      if (it.kind === 'noentry') {
+        // red disc with a white bar over a white plate: 進入禁止 NO ENTRY / 出口ではありません (not the exit)
+        const w = 1.8, h = 2.5, uc = -(r.hw - 0.2 + w / 2);
+        addPanel(r, d, s, uc - w / 2, uc + w / 2, 1.9, h, SMALL, (g, x, y, W, H) => {
+          g.fillStyle = '#22262d'; rrect(g, x, y, W, H, W * 0.06); g.fill();
+          const R = W * 0.4, cx = x + W / 2, cy = y + W * 0.47;
+          g.fillStyle = WHITE; g.beginPath(); g.arc(cx, cy, R * 1.06, 0, Math.PI * 2); g.fill();
+          g.fillStyle = '#c8202a'; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
+          g.fillStyle = WHITE; g.fillRect(cx - R * 0.72, cy - R * 0.16, R * 1.44, R * 0.32);
+          const py = y + W * 0.95;
+          g.fillStyle = WHITE; rrect(g, x + W * 0.06, py, W * 0.88, H - (py - y) - W * 0.06, W * 0.04); g.fill();
+          g.fillStyle = '#c8202a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+          const ph = H - (py - y) - W * 0.06;
+          fit(g, '進入禁止', 800, ph * 0.3, JP, W * 0.8); g.fillText('進入禁止', cx, py + ph * 0.22);
+          fit(g, 'NO ENTRY', 800, ph * 0.2, EN, W * 0.8); g.fillText('NO ENTRY', cx, py + ph * 0.5);
+          g.fillStyle = '#22262d';
+          fit(g, '出口ではありません', 700, ph * 0.13, JP, W * 0.82); g.fillText('出口ではありません', cx, py + ph * 0.72);
+          fit(g, 'NOT AN EXIT', 600, ph * 0.12, EN, W * 0.8); g.fillText('NOT AN EXIT', cx, py + ph * 0.88);
+        }, 0.9, 0.12);
+        continue;
+      }
       const z = it.z;
       const w = 3.4, h = 1.3;
       // u (drivers' right) of the plate: from the post on the parapet outward, clear of the shoulder
@@ -552,6 +605,6 @@ export function buildSignage(world) {
   if (steel.length) out.add(new THREE.Mesh(mergeGeometries(steel), world.mats.steel));
   world.root.add(out);
   // for audits
-  world.signage = { topo, sites, items, panels, pages: atlas.pages.length };
+  world.signage = { topo, sites, items, panels, pages: atlas.pages.length, paSigns };
   return world.signage;
 }

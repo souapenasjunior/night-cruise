@@ -36,9 +36,8 @@ Passo a passo (exemplo para a versão `1.5.0`):
 
 1. **Número da versão.** Em `js/version.js` troque `VERSION` para `'1.5.0'` e, em `index.html`, troque `var V = '1.4.0'` para `var V = '1.5.0'`.
 2. **Data.** Em `js/version.js` troque `DATE` para a data da publicação, no formato `AAAA-MM-DD`.
-   Deixe `COMMIT = ''` por enquanto (é preenchido no passo 5).
-3. **Novidades.** Acrescente a versão no topo da lista em `js/changelog.js` (versão, data e 3 a 5 linhas).
-4. **Cache.**
+   Deixe `COMMIT = ''` por enquanto (é preenchido no passo 4).
+3. **Cache.**
    - Arquivos em `js/`: nada a fazer além do passo 1. O `index.html` carrega `js/main.js?v=1.5.0` e cria
      um *import map* que aponta cada módulo do jogo para `js/<arquivo>.js?v=1.5.0`. O navegador aplica
      esse mapa a todos os `import` dentro dos módulos, então nenhum `import` precisa ser editado.
@@ -46,7 +45,7 @@ Passo a passo (exemplo para a versão `1.5.0`):
      (se esquecer, o jogo funciona, mas o console avisa que o arquivo carregou sem `?v`).
    - Modelos em `models/`: só se algum arquivo lá mudou, aumente `MODELS_REV` em `js/version.js`
      (por exemplo de `'1'` para `'2'`). Assim os jogadores só baixam os modelos de novo quando eles mudam.
-5. **Commits.** Um commit não consegue conter o próprio código, por isso são dois:
+4. **Commits.** Um commit não consegue conter o próprio código, por isso são dois:
    ```sh
    git add -A
    git commit -m "v1.5.0: <resumo>"
@@ -57,11 +56,11 @@ Passo a passo (exemplo para a versão `1.5.0`):
    git add js/version.js
    git commit -m "v1.5.0: registra o commit abc1234 na versão"
    ```
-6. **Push.**
+5. **Push.**
    ```sh
    git push origin main
    ```
-7. **Conferir.** O GitHub Pages publica em alguns minutos (acompanhe em *Actions* no GitHub).
+6. **Conferir.** O GitHub Pages publica em alguns minutos (acompanhe em *Actions* no GitHub).
    Abra https://souapenasjunior.github.io/night-cruise/ (se precisar, `Ctrl+F5`) e confira no canto
    superior direito do menu inicial, e no menu de pausa, o texto `v1.5.0 · <data> · <código>`.
    No console do navegador (F12) não deve aparecer nenhum aviso `Night Cruise:` sobre a versão.
