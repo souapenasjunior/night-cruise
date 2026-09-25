@@ -75,3 +75,8 @@ Feito com [three.js](https://threejs.org/).
 Modelos 3D dos carros do Sketchfab, licença [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/),
 otimizados e adaptados para o jogo. A lista completa de autores está na tela **Créditos** do jogo.
 Nomes e marcas dos veículos pertencem aos respectivos fabricantes.
+
+Música do menu: Warriyo - Mortals (feat. Laura Brehm) [NCS Release]
+Music provided by NoCopyrightSounds
+Free Download/Stream: http://ncs.io/mortals
+Watch: http://youtu.be/yJg-Y5byMMw

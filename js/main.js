@@ -14,6 +14,7 @@ import { Traffic } from './traffic.js';
 import { Hud } from './hud.js';
 import { BigMap } from './map.js';
 import { AudioSys } from './audio.js';
+import { MenuMusic, MUSIC_CREDIT } from './music.js';
 import { Input, ACTION_LABELS, PAD_FIXED_LABELS, padName, keyName } from './input.js';
 import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
@@ -63,6 +64,7 @@ composer.addPass(new OutputPass());
 // ------------------------------------------------------------------ systems
 const input = new Input(S.bindings, S.pad);
 const audio = new AudioSys();
+const music = new MenuMusic();
 let net, world, traffic, hud, player = null, bigMap;
 let state = 'loading';
 let settingsOpen = false;
@@ -370,6 +372,7 @@ function moveFocus(d) {
 // keyboard / pad navigation plays it from its own handlers
 document.addEventListener('pointerdown', (e) => {
   const b = e.target && e.target.closest ? e.target.closest('button, input[type=range]') : null;
+  music.unlock(); // (the first click anywhere may start the menu music)
   if (!b || (state === 'drive' && !settingsOpen)) return;
   audio.init(); audio.setVolumes(S.audio);
   audio.holdTick = false;
@@ -384,6 +387,21 @@ $('btn-settings').onclick = () => { audio.init(); openSettings(); };
 function openCredits() {
   const el = $('cred-list');
   el.innerHTML = '';
+  // the menu music (NoCopyrightSounds: credit required, in this form)
+  {
+    const row = document.createElement('div');
+    row.className = 'cred';
+    const ti = document.createElement('b'); ti.textContent = `${t('cred.music')}: ${MUSIC_CREDIT.title}`;
+    const a = document.createElement('span'); a.textContent = MUSIC_CREDIT.by;
+    const links = document.createElement('span');
+    for (const [label, href] of [['Free Download/Stream', MUSIC_CREDIT.url], ['Watch', MUSIC_CREDIT.watch]]) {
+      const l = document.createElement('a'); l.href = href; l.target = '_blank'; l.rel = 'noopener'; l.textContent = `${label}: ${href}`;
+      links.append(l, ' ');
+      links.style.gridColumn = '1 / -1';
+    }
+    row.append(ti, a, links);
+    el.appendChild(row);
+  }
   for (const c of CREDITS) {
     const row = document.createElement('div');
     row.className = 'cred';
@@ -646,6 +664,7 @@ const SCHEMA = {
     { path: 'audio.engine', label: 'opt.engine', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct },
     { path: 'audio.sfx', label: 'opt.sfx', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => t('opt.sfxNote') },
     { path: 'audio.ambient', label: 'opt.ambient', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => t('opt.ambientNote') },
+    { path: 'audio.music', label: 'opt.music', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => t('opt.musicNote') },
   ],
   gameplay: [
     { path: 'lang', label: 'opt.lang', type: 'seg', opts: [['auto', 'lang.auto'], ['pt', 'lang.pt'], ['en', 'lang.en']], note: () => t('lang.note') },
@@ -906,6 +925,7 @@ document.addEventListener('fullscreenchange', () => { S.display.mode = document.
 
 // ------------------------------------------------------------------ keyboard / pad menu navigation
 window.addEventListener('keydown', e => {
+  music.unlock();
   if (input.capture) return;
   if (settingsOpen) {
     if (e.code === 'Escape') { e.preventDefault(); closeSettings(); }
@@ -942,6 +962,7 @@ function padMenus() {
   const up = input.padPressed(12), down = input.padPressed(13), left = input.padPressed(14), right = input.padPressed(15);
   if (input.padCapture) return; // remapping a button: the next press is the answer, not navigation
   const a = input.padPressed(0), b = input.padPressed(1), start = input.padPressed(9) || input.padActionPressed('pause');
+  if (a || b || start || up || down || left || right) music.unlock();
   if (state === 'map') {
     if (b || start || input.padActionPressed('map')) closeMap();
     else if (input.padPressed(3)) bigMap.center(player);
@@ -1102,6 +1123,9 @@ function tick(now) {
   // their own clicks and nothing of the road
   const mute = state !== 'drive' || settingsOpen;
   if (mute !== audio.muted) audio.mute(mute);
+  // menu music: main menu and car select (settings / credits opened from there included)
+  music.setVolume(S.audio.master * S.audio.music);
+  music.update(state === 'title' || state === 'select');
   if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map') {
     if (state === 'title') { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
     if (state !== 'pause' && state !== 'map') world.update(dt, camera);
@@ -1176,7 +1200,7 @@ async function boot() {
   if (location.hash === '#debug') {
     let fake = performance.now();
     window.__nc = {
-      scene, net, world, traffic, get player() { return player; }, camera, renderer, S, input, applySettings, openSettings, composer, bloom, audio,
+      scene, net, world, traffic, get player() { return player; }, camera, renderer, S, input, applySettings, openSettings, composer, bloom, audio, music,
       get state() { return state; },
       step(n = 1, ms = 16.7) { for (let i = 0; i < n; i++) { fake = Math.max(fake + ms, performance.now()); tick(fake); } },
       startDrive: () => startDrive(), goSelect: () => goSelect(), parkAtSlot,

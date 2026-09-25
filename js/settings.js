@@ -23,7 +23,7 @@ export function defaults() {
   return {
     graphics: { preset: 'auto', quality: 'high', ...PRESETS.high, fpsCap: 60, vsync: true },
     display: { mode: 'window' },
-    audio: { master: 0.8, engine: 0.8, sfx: 0.8, ambient: 0.6 },
+    audio: { master: 0.8, engine: 0.8, sfx: 0.8, ambient: 0.6, music: 0.7 },
     gameplay: { units: 'kmh', minimap: true, hud: true, camDist: 1, camSmooth: 0.5, vibration: true, mirror: true },
     bindings: JSON.parse(JSON.stringify(DEFAULT_BINDINGS)),
     pad: JSON.parse(JSON.stringify(DEFAULT_PAD)),
@@ -66,7 +66,7 @@ function sanitize(s) {
   }
   num(G, g, 'renderDist', 400, 1600);
   if (!['window', 'fullscreen'].includes(s.display.mode)) s.display.mode = d.display.mode;
-  for (const k of ['master', 'engine', 'sfx', 'ambient']) num(s.audio, d.audio, k, 0, 1);
+  for (const k of ['master', 'engine', 'sfx', 'ambient', 'music']) num(s.audio, d.audio, k, 0, 1);
   const P = s.gameplay, p = d.gameplay;
   if (!['kmh', 'mph'].includes(P.units)) P.units = p.units;
   for (const k of ['minimap', 'hud', 'mirror', 'vibration']) bool(P, p, k);
