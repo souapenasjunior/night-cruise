@@ -4,7 +4,8 @@
 //   WS   /api/online/room/<id>       -> the room itself (a Durable Object per room, up to 20 players)
 //   everything else                   -> the static site (assets)
 //
-// Only signed-in players play online. The first message on the socket is { t: 'hello', token, car }:
+// Only signed-in players play online. The first message on the socket is { t: 'hello', token, car }
+// (plus create: true and max: 2-20 from whoever creates a private room, its player limit):
 // the room checks the Supabase access token (signature against the project's public keys, expiry,
 // issuer), reads the player's name from the database with that token, and checks that the car is
 // theirs. Nothing the browser says about who it is is taken on trust.
@@ -179,12 +180,20 @@ export class Room extends DurableObject {
     if (!(await ownsCar(this.env, m.token, m.car))) { this.send(ws, { t: 'err', e: 'car' }); ws.close(4004, 'car'); return; }
     // the same account again (a second tab): the older connection leaves
     for (const [w, q] of this.players) if (q.uid === uid) { this.send(w, { t: 'err', e: 'elsewhere' }); w.close(4005, 'elsewhere'); this.leave(w); }
-    if (this.players.size >= MAX_PLAYERS) { this.send(ws, { t: 'err', e: 'full' }); ws.close(4009, 'full'); return; }
+    // a private room's player limit: set by whoever creates it (while it is empty), kept for the others
+    const room = await this.roomName();
+    if (this.max === undefined) this.max = (await this.ctx.storage.get('max')) || MAX_PLAYERS;
+    if (/^p-/.test(room) && m.create === true && !this.players.size) {
+      this.max = Math.min(MAX_PLAYERS, Math.max(2, Number.isInteger(m.max) ? m.max : MAX_PLAYERS));
+      await this.ctx.storage.put('max', this.max);
+    }
+    if (!/^p-/.test(room)) this.max = MAX_PLAYERS;
+    if (this.players.size >= this.max) { this.send(ws, { t: 'err', e: 'full' }); ws.close(4009, 'full'); return; }
     const id = crypto.randomUUID().slice(0, 8);
     const p = { id, uid, name, car: m.car, state: null, win: 0, cnt: 0 };
     ws.serializeAttachment({ id, uid, name, car: m.car });
     this.players.set(ws, p);
-    this.send(ws, { t: 'welcome', id, room: await this.roomName(), max: MAX_PLAYERS, players: [...this.players.values()].filter(q => q.id !== id).map(q => this.pub(q)) });
+    this.send(ws, { t: 'welcome', id, room, max: this.max, players: [...this.players.values()].filter(q => q.id !== id).map(q => this.pub(q)) });
     this.others(ws, { t: 'join', p: this.pub(p) });
     this.report();
   }

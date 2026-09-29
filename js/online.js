@@ -57,14 +57,18 @@ export class Online {
     this.clock = 0;
     this.want = null;         // the room we are (re)connecting to
     this.retry = 0;
+    this.max = 20;            // the room's player limit (from the server)
+    this.create = null;
   }
   get connected() { return !!(this.ws && this.ws.readyState === 1 && this.myId); }
   get count() { return this.remotes.size + (this.myId ? 1 : 0); }
 
-  // room: 'auto' (a public room with space), or a private code (6 letters/digits)
-  async join(room, carId) {
+  // room: 'auto' (a public room with space), or a private code (6 letters/digits); create: the player
+  // limit of a private room we are creating (2-20)
+  async join(room, carId, create = null) {
     this.leave();
     this.car = carId;
+    this.create = create;
     let id = room;
     if (room === 'auto') {
       const r = await fetch(`${ONLINE_ORIGIN}/api/online/join`).then(x => x.json()).catch(() => null);
@@ -83,7 +87,7 @@ export class Online {
     const ws = new WebSocket(`${ONLINE_ORIGIN.replace(/^http/, 'ws')}/api/online/room/${id}`);
     this.ws = ws;
     this.hooks.status('connecting', roomLabel(id));
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token, car: this.car }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token, car: this.car, ...(this.create ? { create: true, max: this.create } : {}) }));
     ws.onmessage = e => { try { this.onMessage(JSON.parse(e.data)); } catch (err) { /* ignore a bad message */ } };
     ws.onclose = e => {
       if (this.ws !== ws) return; // replaced or left on purpose
@@ -122,6 +126,7 @@ export class Online {
     if (m.t === 'welcome') {
       this.myId = m.id;
       this.room = m.room;
+      this.max = m.max || 20;
       this.retry = 0;
       for (const p of m.players) this.addRemote(p);
       this.hooks.status('joined', { room: roomLabel(m.room), count: this.count, max: m.max });

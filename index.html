@@ -145,6 +145,21 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 .on-code-row input:focus { outline: none; border-color: var(--sodium); }
 .on-msg { margin: 0; min-height: 1.2em; color: #ffd28a; font-size: 13.5px; }
 .on-msg:empty { display: none; }
+/* creating a private room: the code right away, then its settings */
+.on-private { display: grid; gap: 14px; }
+.on-private[hidden], .on-lead[hidden] { display: none; }
+.on-pcode-box { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 18px 16px; border: 1px solid rgba(255, 178, 63, 0.45); background: rgba(255, 178, 63, 0.06); }
+.on-plabel { color: var(--dim); font: 700 11px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
+.on-pcode { font: 900 clamp(40px, 9vw, 58px)/1 var(--display); letter-spacing: 0.22em; padding-left: 0.22em; color: var(--sodium); user-select: all; }
+.on-phint { color: #c3c8d6; font-size: 13px; }
+.on-prow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.on-prow.end { justify-content: space-between; }
+.on-setting { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); }
+.on-setting b { display: block; font: 800 17px/1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
+.on-setting span { color: var(--dim); font-size: 12.5px; }
+.on-stepper { display: flex; align-items: center; gap: 6px; flex: none; }
+.on-stepper .btn { min-width: 38px; padding-left: 0; padding-right: 0; font-size: 18px; }
+.on-stepper output { min-width: 2.2ch; text-align: center; font: 800 26px/1 var(--display); font-variant-numeric: tabular-nums; }
 #online-badge { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(8, 10, 20, 0.62); border: 1px solid rgba(90, 220, 140, 0.35); font: 700 12px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #cff5dd; pointer-events: none; }
 #online-badge[hidden] { display: none; }
 #online-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fe07a; box-shadow: 0 0 8px #3fe07a; }
@@ -473,7 +488,7 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
   <div class="panel" role="dialog" aria-labelledby="on-title">
     <header><h2 id="on-title" data-i18n="on.title">Online</h2><span class="chipinfo" data-i18n="on.sub">Dirija com outros jogadores</span></header>
     <div class="on-body">
-      <p class="on-lead" data-i18n="on.lead">Salas de até 20 jogadores rodando juntos pela via expressa. Você vê o carro e o nome de cada um.</p>
+      <p class="on-lead" id="on-lead" data-i18n="on.lead">Salas de até 20 jogadores rodando juntos pela via expressa. Você vê o carro e o nome de cada um.</p>
       <div id="on-signin" hidden>
         <p class="on-lead" data-i18n="on.needAccount">O online é para quem tem conta: entre (ou crie uma) para jogar com os outros.</p>
         <button class="btn go" id="on-login" data-i18n="on.login">Entrar</button>
@@ -485,6 +500,29 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
           <b data-i18n="on.joinCode">Entrar com código</b>
           <div class="on-code-row"><input id="on-code" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123" aria-label="Código da sala" data-i18n-aria="on.code"><button class="btn small" type="submit" data-i18n="on.enter">Entrar</button></div>
         </form>
+      </div>
+      <div class="on-private" id="on-private" hidden>
+        <div class="on-pcode-box">
+          <span class="on-plabel" data-i18n="on.pCode">Código da sua sala</span>
+          <div class="on-pcode" id="on-pcode">ABC123</div>
+          <div class="on-prow">
+            <button class="btn small" id="on-copy" data-i18n="on.copy">Copiar código</button>
+            <button class="btn small" id="on-newcode" data-i18n="on.newCode">Gerar outro</button>
+          </div>
+          <span class="on-phint" data-i18n="on.pHint">Passe esse código para os amigos. Eles entram em Online › Entrar com código.</span>
+        </div>
+        <div class="on-setting">
+          <div><b data-i18n="on.maxT">Limite de jogadores</b><span data-i18n="on.maxDesc">Quantas pessoas cabem na sala, contando você</span></div>
+          <div class="on-stepper">
+            <button class="btn small" id="on-max-dec" aria-label="Menos" data-i18n-aria="on.less">−</button>
+            <output id="on-max">8</output>
+            <button class="btn small" id="on-max-inc" aria-label="Mais" data-i18n-aria="on.more">+</button>
+          </div>
+        </div>
+        <div class="on-prow end">
+          <button class="btn small" id="on-pback" data-i18n="sel.back">Voltar</button>
+          <button class="btn go" id="on-pgo" data-i18n="on.pGo">Escolher carro e abrir a sala</button>
+        </div>
       </div>
       <p class="on-msg" id="on-msg" role="status" aria-live="polite"></p>
     </div>
@@ -647,7 +685,7 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.20.0';
+  var V = '1.21.0';
   var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

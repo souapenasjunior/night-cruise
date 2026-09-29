@@ -616,7 +616,7 @@ function leaveOnline() {
 function onlineHud() {
   let text = '';
   if (onlineWant) {
-    if (online.connected) text = t('on.badge', { room: roomLabel(online.room), n: online.count });
+    if (online.connected) text = t('on.badge', { room: roomLabel(online.room), n: online.count, max: online.max });
     else if (online.want) text = t('on.badgeConnecting');
   }
   if (text === onlineBadge) return;
@@ -637,7 +637,7 @@ function playersPanel(dt) {
   const dist = m => (m >= 1000 ? `${num(m / 1000, 1)} km` : `${Math.round(m / 10) * 10} m`);
   const kmh = v => `${Math.round((S.gameplay.units === 'mph' ? 2.237 : 3.6) * v)} ${S.gameplay.units === 'mph' ? 'mph' : 'km/h'}`;
   const rows = online.others().map(o => ({ ...o, d: o.x === null ? Infinity : Math.hypot(o.x - player.pos.x, o.z - player.pos.z) })).sort((a, b) => a.d - b.d);
-  $('players-room').textContent = t('on.playersRoom', { room: roomLabel(online.room), n: online.count, max: 20 });
+  $('players-room').textContent = t('on.playersRoom', { room: roomLabel(online.room), n: online.count, max: online.max });
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let html = `<tr class="me"><td>${esc(myName() || t('on.you'))} <em>${t('on.you')}</em></td><td>${esc(player.spec.name)}</td><td>—</td><td>${kmh(Math.abs(player.vf || 0))}</td></tr>`;
   for (const r of rows) html += `<tr><td>${esc(r.name)}</td><td>${esc(carName(r.car))}</td><td>${r.d === Infinity ? '…' : dist(r.d)}</td><td>${kmh(r.speed)}</td></tr>`;
@@ -646,24 +646,56 @@ function playersPanel(dt) {
 function openOnline() {
   const signed = isSignedIn();
   $('on-signin').hidden = signed;
-  $('on-choices').hidden = !signed;
-  $('on-msg').textContent = '';
+  showOnlineChoices(signed);
   $('online').hidden = false;
   setTimeout(() => (signed ? $('on-auto') : $('on-login')).focus(), 30);
 }
+function showOnlineChoices(signed = true) {
+  $('on-private').hidden = true;
+  $('on-lead').hidden = false;
+  $('on-choices').hidden = !signed;
+  $('on-msg').textContent = '';
+}
 function closeOnline() { $('online').hidden = true; $('btn-online').focus(); }
 const isOnlineOpen = () => !$('online').hidden;
-function playOnline(want) {
+// Esc on the private room step goes back to the choices; elsewhere it closes the panel
+function backOnline() { if (!$('on-private').hidden) { showOnlineChoices(); $('on-create').focus(); } else closeOnline(); }
+let onlineCreate = null; // the player limit of the private room being created (sent when it opens)
+function playOnline(want, create = null) {
   onlineWant = want;
+  onlineCreate = create;
   $('online').hidden = true;
   audio.init(); audio.setVolumes(S.audio);
   goSelect();
 }
+// creating a private room: the code shows right away (copy it, or draw another), then the settings
+let privCode = '', privMax = 8;
+function openPrivate() {
+  privCode = newPrivateCode();
+  $('on-pcode').textContent = privCode;
+  $('on-max').textContent = privMax;
+  $('on-choices').hidden = true;
+  $('on-lead').hidden = true;
+  $('on-private').hidden = false;
+  $('on-msg').textContent = '';
+  setTimeout(() => $('on-pgo').focus(), 30);
+}
+function setPrivMax(n) { privMax = clamp(n, 2, 20); $('on-max').textContent = privMax; }
 $('btn-online').onclick = openOnline;
 $('on-close').onclick = closeOnline;
 $('on-login').onclick = () => { $('online').hidden = true; openAccount('login', t('on.needAccount')); };
 $('on-auto').onclick = () => playOnline('auto');
-$('on-create').onclick = () => playOnline(newPrivateCode());
+$('on-create').onclick = openPrivate;
+$('on-newcode').onclick = () => { privCode = newPrivateCode(); $('on-pcode').textContent = privCode; $('on-msg').textContent = ''; };
+$('on-copy').onclick = async () => {
+  let ok = false;
+  try { await navigator.clipboard.writeText(privCode); ok = true; } catch (e) { /* no clipboard access */ }
+  $('on-msg').textContent = t(ok ? 'on.copied' : 'on.copyFail', { code: privCode });
+};
+$('on-max-dec').onclick = () => setPrivMax(privMax - 1);
+$('on-max-inc').onclick = () => setPrivMax(privMax + 1);
+$('on-pback').onclick = () => { showOnlineChoices(); $('on-create').focus(); };
+$('on-pgo').onclick = () => playOnline(privCode, privMax);
 $('on-code').oninput = e => { e.target.value = normaliseCode(e.target.value); };
 $('on-code-form').onsubmit = e => {
   e.preventDefault();
@@ -830,7 +862,7 @@ function startDrive() {
   hud.toast(t('toast.go', { car: spec.name }));
   driveStarted(spec.id); // (signed in: the server opens a drive to count distance and time)
   // online: join the room picked on the title screen, or tell the room about the new car
-  if (onlineWant && !online.want && !online.connected) online.join(onlineWant, spec.id);
+  if (onlineWant && !online.want && !online.connected) { online.join(onlineWant, spec.id, onlineCreate); onlineCreate = null; }
   else if (online.connected) online.setCar(spec.id);
   driveClock = 0; fpsSamples = []; adaptDone = 0;
   lastTime = performance.now();
@@ -1134,7 +1166,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (isOnlineOpen()) {
-    if (e.code === 'Escape') { e.preventDefault(); closeOnline(); }
+    if (e.code === 'Escape') { e.preventDefault(); backOnline(); }
     return;
   }
   if (state === 'title') {
@@ -1187,7 +1219,7 @@ function padMenus() {
     if (settingsOpen) closeSettings();
     else if (!$('credits').hidden) closeCredits();
     else if (isAccountOpen()) closeAccount();
-    else if (isOnlineOpen()) closeOnline();
+    else if (isOnlineOpen()) backOnline();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
