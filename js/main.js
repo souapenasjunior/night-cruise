@@ -19,7 +19,8 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
-import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles } from './account.js';
+import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken } from './account.js';
+import { Online, newPrivateCode, normaliseCode, isCode, roomLabel } from './online.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -444,7 +445,7 @@ $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
 // credits and the account panel sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : null; }
+function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('online').hidden ? $('online') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -582,6 +583,75 @@ function coinsHud(dt) {
   $('coins-bonus').textContent = c.bonus > 1 ? t('coins.bonus', { x: String(c.bonus).replace('.', t('acc.locale') === 'pt-BR' ? ',' : '.') }) : '';
 }
 
+// ------------------------------------------------------------------ online
+// Signed-in players pick a room on the title screen (a public one with space, a new private one, or a
+// private one by its code); the room is joined when the drive starts. See js/online.js and worker/.
+let online = null;      // Online (made at boot)
+let onlineWant = null;  // 'auto' or a private code, while playing online
+let onlineBadge = '';
+function makeOnline() {
+  online = new Online(scene, {
+    token: accessToken,
+    spec: id => HERO_SPECS.find(s => s.id === id),
+    load: spec => (glbReady(spec.id) ? Promise.resolve(true) : loadCar(spec)),
+    model: spec => new CarModel(spec, { hq: false, paint: paintOf(spec) }),
+    status: (kind, info) => {
+      if (kind === 'joined') hud.toast(t(isCode(onlineWant) ? 'on.joinedPrivate' : 'on.joined', { room: info.room, n: info.count }));
+      else if (kind === 'player') hud.toast(t(info.joined ? 'on.playerIn' : 'on.playerOut', { name: info.name }));
+      else if (kind === 'reconnecting') hud.toast(t('on.reconnecting'));
+      else if (kind === 'error') {
+        hud.toast(t('on.err.' + (['auth', 'car', 'elsewhere', 'full', 'net'].includes(info) ? info : 'net')));
+        if (!online.want) onlineWant = null;
+      }
+    },
+  });
+}
+function leaveOnline() {
+  if (online) online.leave();
+  onlineWant = null;
+}
+// the badge on the HUD: room and players, or the connection state
+function onlineHud() {
+  let text = '';
+  if (onlineWant) {
+    if (online.connected) text = t('on.badge', { room: roomLabel(online.room), n: online.count });
+    else if (online.want) text = t('on.badgeConnecting');
+  }
+  if (text === onlineBadge) return;
+  onlineBadge = text;
+  $('online-badge').hidden = !text;
+  $('online-badge-text').textContent = text;
+}
+function openOnline() {
+  const signed = isSignedIn();
+  $('on-signin').hidden = signed;
+  $('on-choices').hidden = !signed;
+  $('on-msg').textContent = '';
+  $('online').hidden = false;
+  setTimeout(() => (signed ? $('on-auto') : $('on-login')).focus(), 30);
+}
+function closeOnline() { $('online').hidden = true; $('btn-online').focus(); }
+const isOnlineOpen = () => !$('online').hidden;
+function playOnline(want) {
+  onlineWant = want;
+  $('online').hidden = true;
+  audio.init(); audio.setVolumes(S.audio);
+  goSelect();
+}
+$('btn-online').onclick = openOnline;
+$('on-close').onclick = closeOnline;
+$('on-login').onclick = () => { $('online').hidden = true; openAccount('login', t('on.needAccount')); };
+$('on-auto').onclick = () => playOnline('auto');
+$('on-create').onclick = () => playOnline(newPrivateCode());
+$('on-code').oninput = e => { e.target.value = normaliseCode(e.target.value); };
+$('on-code-form').onsubmit = e => {
+  e.preventDefault();
+  const code = normaliseCode($('on-code').value);
+  if (!isCode(code)) { $('on-msg').textContent = t('on.badCode'); return; }
+  playOnline(code);
+};
+$('p-online').onclick = () => { leaveOnline(); $('p-online').hidden = true; onlineHud(); hud.toast(t('on.left')); resumeGame(); };
+
 // ------------------------------------------------------------------ buying cars with yen
 // No real money anywhere: the yen are earned by driving (report_drive on the server) and each car is
 // bought on its own, right here on the car select. Two presses: the first asks to confirm the price.
@@ -617,6 +687,7 @@ canvas.addEventListener('pointerup', () => { show.drag = null; });
 
 function goTitle() {
   driveStopped();
+  leaveOnline();
   if (player) { player.dispose(); player = null; }
   scene.add(idleLights);
   state = 'title';
@@ -644,6 +715,7 @@ function pauseGame() {
   if (state !== 'drive') return;
   state = 'pause';
   driveStopped();
+  $('p-online').hidden = !onlineWant;
   showScreen('pause');
   renderPauseKeys();
   $('pause-info').textContent = t('pause.info', { car: player.spec.name, km: num(Math.round(player.odo / 100) / 10) });
@@ -736,6 +808,9 @@ function startDrive() {
   hud.lastZone = null;
   hud.toast(t('toast.go', { car: spec.name }));
   driveStarted(spec.id); // (signed in: the server opens a drive to count distance and time)
+  // online: join the room picked on the title screen, or tell the room about the new car
+  if (onlineWant && !online.want && !online.connected) online.join(onlineWant, spec.id);
+  else if (online.connected) online.setCar(spec.id);
   driveClock = 0; fpsSamples = []; adaptDone = 0;
   lastTime = performance.now();
 }
@@ -1037,6 +1112,10 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeAccount(); }
     return;
   }
+  if (isOnlineOpen()) {
+    if (e.code === 'Escape') { e.preventDefault(); closeOnline(); }
+    return;
+  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -1069,7 +1148,7 @@ function padMenus() {
     else if (input.padPressed(3)) bigMap.center(player);
     return;
   }
-  if (state === 'select' && !settingsOpen && !isAccountOpen()) {
+  if (state === 'select' && !settingsOpen && !isAccountOpen() && !isOnlineOpen()) {
     if (right || left) { selIndex = (selIndex + (right ? 1 : -1) + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); audio.selectChime(selIndex, right); }
     const lb = input.padPressed(4), rb = input.padPressed(5);
     if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
@@ -1087,6 +1166,7 @@ function padMenus() {
     if (settingsOpen) closeSettings();
     else if (!$('credits').hidden) closeCredits();
     else if (isAccountOpen()) closeAccount();
+    else if (isOnlineOpen()) closeOnline();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
@@ -1227,6 +1307,8 @@ function tick(now) {
   // their own clicks and nothing of the road
   const mute = state !== 'drive' || settingsOpen;
   if (mute !== audio.muted) audio.mute(mute);
+  // online: the other players keep moving while we pause (ours is sent only while driving)
+  if (online && (state === 'drive' || state === 'pause' || state === 'map')) { online.update(dt, state === 'drive' && !settingsOpen ? player : null); onlineHud(); }
   if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map') {
     if (state === 'title') { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
     if (state !== 'pause' && state !== 'map') world.update(dt, camera);
@@ -1295,6 +1377,7 @@ async function boot() {
   renderer.compile(scene, camera);
   for (const g of warm) scene.remove(g);
   await step(100, 'Pronto.');
+  makeOnline();
   state = 'title';
   showScreen('title');
   lastTime = performance.now();

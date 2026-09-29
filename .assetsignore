@@ -5,6 +5,7 @@ node_modules
 .wrangler
 supabase
 docs
+worker
 package.json
 package-lock.json
 wrangler.jsonc

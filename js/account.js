@@ -94,6 +94,13 @@ async function loadProfile() {
 let owned = new Set();
 let prices = new Map(); // car id -> price in yen (the catalogue, public)
 export const isSignedIn = () => !!user;
+// the current access token (online: the room checks it with Supabase's public keys)
+export async function accessToken() {
+  if (!sb || !user) return null;
+  const { data } = await sb.auth.getSession();
+  return data && data.session ? data.session.access_token : null;
+}
+export const myName = () => (profile ? profile.username : '');
 export const ownsCar = id => owned.has(id);
 export const priceOf = id => prices.get(id) || 0;
 export const coinBalance = () => (stats ? Number(stats.coins) || 0 : 0);
@@ -133,12 +140,13 @@ function cruiseBonus() {
   return s >= 3600 ? 2 : s >= 1800 ? 1.5 : s >= 600 ? 1.25 : 1;
 }
 
-// Premium car files are in the private Storage bucket 'premium' (one folder per car), readable only by
-// players who own the car. Returns Map(file name -> signed URL) or null. The URLs last 7 days and are
-// kept in this browser meanwhile, so the same links (and the browser's cache of the files) are reused.
+// Premium car files are in the private Storage bucket 'premium' (one folder per car), readable by
+// signed-in players (online, everyone draws everyone's car; driving one needs owning it). Returns
+// Map(file name -> signed URL) or null. The URLs last 7 days and are kept in this browser meanwhile, so
+// the same links (and the browser's cache of the files) are reused.
 const SIGN_FOR = 7 * 24 * 3600;
 export async function premiumFiles(carId) {
-  if (!sb || !user || !owned.has(carId)) return null;
+  if (!sb || !user) return null;
   const key = `nc.prem.${user.id}.${carId}`;
   try {
     const c = JSON.parse(localStorage.getItem(key) || 'null');

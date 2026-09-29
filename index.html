@@ -120,6 +120,26 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .lock small:empty { display: none; }
 #sel-go.buy { background: linear-gradient(180deg, #ffc35c, #ff9f1c); color: #1a1206; box-shadow: 0 0 24px rgba(255, 170, 40, 0.35); }
 #sel-go.short { opacity: 0.75; }
+/* online: room picker and the HUD badge */
+#online .panel { width: min(640px, 100%); }
+.on-body { overflow-y: auto; padding: 18px 22px 20px; display: grid; gap: 14px; align-content: start; }
+.on-lead { margin: 0; color: #c3c8d6; font-size: 14px; }
+#on-signin { display: grid; gap: 12px; justify-items: start; }
+#on-signin[hidden], .on-choices[hidden] { display: none; }
+.on-choices { display: grid; gap: 10px; }
+.on-card { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); }
+.on-card b { font: 800 20px/1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
+.on-card span { color: var(--dim); font-size: 13px; }
+button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium); background: rgba(255, 178, 63, 0.08); outline: none; }
+.on-code { cursor: default; }
+.on-code-row { display: flex; gap: 8px; margin-top: 6px; }
+.on-code-row input { flex: 1; min-width: 0; font: 800 22px/1 var(--display); letter-spacing: 0.3em; text-transform: uppercase; padding: 8px 12px; background: #0a0d17; color: var(--text); border: 1px solid var(--line); }
+.on-code-row input:focus { outline: none; border-color: var(--sodium); }
+.on-msg { margin: 0; min-height: 1.2em; color: #ffd28a; font-size: 13.5px; }
+.on-msg:empty { display: none; }
+#online-badge { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(8, 10, 20, 0.62); border: 1px solid rgba(90, 220, 140, 0.35); font: 700 12px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #cff5dd; pointer-events: none; }
+#online-badge[hidden] { display: none; }
+#online-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fe07a; box-shadow: 0 0 8px #3fe07a; }
 /* yen on the HUD while driving */
 #coins { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); right: clamp(16px, 3vw, 36px); display: grid; justify-items: end; gap: 3px; pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
 #coins[hidden] { display: none; }
@@ -344,6 +364,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   <p class="tag" data-i18n="title.tag">Anel K1, meia-noite. Sem corrida e sem missão: escolha um carro, entre na via expressa e dirija.</p>
   <nav id="title-nav">
     <button class="menu-btn primary" id="btn-play" data-i18n="title.play">Jogar</button>
+    <button class="menu-btn" id="btn-online" data-i18n="title.online">Online</button>
     <button class="menu-btn" id="btn-settings" data-i18n="title.settings">Configurações</button>
     <button class="menu-btn" id="btn-account" hidden>Entrar</button>
     <button class="menu-btn" id="btn-credits" data-i18n="title.credits">Créditos</button>
@@ -396,6 +417,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   </div>
   <div id="toast"></div>
   <div id="coins" hidden><b id="coins-bal">¥ 0</b><small id="coins-bonus"></small></div>
+  <div id="online-badge" hidden><i></i><span id="online-badge-text"></span></div>
 </div>
 
 <div id="map" class="screen" hidden>
@@ -416,6 +438,29 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <header><h2 id="cred-title" data-i18n="cred.title">Créditos</h2><span class="chipinfo" data-i18n="cred.sub">Modelos 3D dos carros</span></header>
     <div class="cred-list" id="cred-list"></div>
     <footer><span class="chipinfo" data-i18n="cred.foot">Modelos otimizados (texturas e malhas comprimidas) e adaptados para o jogo. Nomes e marcas pertencem aos respectivos fabricantes.</span> <a class="chipinfo" href="legal.html" target="_blank" rel="noopener" data-i18n="cred.legal">Termos e privacidade</a><button class="btn go small" id="cred-close" data-i18n="close">Fechar</button></footer>
+  </div>
+</div>
+
+<div id="online" class="screen scrim" hidden>
+  <div class="panel" role="dialog" aria-labelledby="on-title">
+    <header><h2 id="on-title" data-i18n="on.title">Online</h2><span class="chipinfo" data-i18n="on.sub">Dirija com outros jogadores</span></header>
+    <div class="on-body">
+      <p class="on-lead" data-i18n="on.lead">Salas de até 20 jogadores rodando juntos pela via expressa. Você vê o carro e o nome de cada um.</p>
+      <div id="on-signin" hidden>
+        <p class="on-lead" data-i18n="on.needAccount">O online é para quem tem conta: entre (ou crie uma) para jogar com os outros.</p>
+        <button class="btn go" id="on-login" data-i18n="on.login">Entrar</button>
+      </div>
+      <div class="on-choices" id="on-choices">
+        <button class="on-card" id="on-auto"><b data-i18n="on.auto">Sala pública</b><span data-i18n="on.autoDesc">Entra numa sala com gente rodando agora</span></button>
+        <button class="on-card" id="on-create"><b data-i18n="on.create">Criar sala privada</b><span data-i18n="on.createDesc">Gera um código para chamar os amigos</span></button>
+        <form class="on-card on-code" id="on-code-form" novalidate>
+          <b data-i18n="on.joinCode">Entrar com código</b>
+          <div class="on-code-row"><input id="on-code" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123" aria-label="Código da sala" data-i18n-aria="on.code"><button class="btn small" type="submit" data-i18n="on.enter">Entrar</button></div>
+        </form>
+      </div>
+      <p class="on-msg" id="on-msg" role="status" aria-live="polite"></p>
+    </div>
+    <footer><span class="chipinfo" data-i18n="on.note">Sem colisão entre jogadores; o trânsito é de cada um.</span><button class="btn small" id="on-close" data-i18n="close">Fechar</button></footer>
   </div>
 </div>
 
@@ -539,6 +584,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
         <button class="menu-btn" id="p-car" data-i18n="pause.car">Trocar de carro</button>
         <button class="menu-btn" id="p-reset" data-i18n="pause.reset">Voltar para a pista</button>
         <button class="menu-btn" id="p-settings" data-i18n="pause.settings">Configurações</button>
+        <button class="menu-btn" id="p-online" data-i18n="pause.leaveOnline" hidden>Sair do online</button>
         <button class="menu-btn" id="p-title" data-i18n="pause.menu">Menu inicial</button>
       </nav>
       <section class="pkeys" aria-labelledby="pk-title">
@@ -573,8 +619,8 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.18.0';
-  var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
+  var V = '1.19.0';
+  var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',

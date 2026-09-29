@@ -1,13 +1,31 @@
-// Cloudflare hosting (Workers static assets): the game is a static site served from the repository root.
-// What is not part of the site (tools, backend sources, docs) is listed in .assetsignore.
+// Cloudflare hosting: the static site (repository root; .assetsignore lists what is not part of it) and
+// the online rooms (worker/index.js: Durable Objects, one per room, and a lobby).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "night-cruise",
+  "main": "worker/index.js",
   "compatibility_date": "2026-09-26",
   "assets": {
     "directory": ".",
+    "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "none"
+    "not_found_handling": "none",
+    // only the online API runs code; every other request is a plain file
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "LOBBY", "class_name": "Lobby" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room", "Lobby"] }
+  ],
+  // public values (the project URL and its publishable key, as in js/account.js); no secrets here
+  "vars": {
+    "SUPABASE_URL": "https://awynkbzkmyybrjbkqdsb.supabase.co",
+    "SUPABASE_KEY": "sb_publishable_StGYW7U48omZkK3WNu8v_A_s5m9Nwpl"
   },
   "observability": { "enabled": true }
 }
