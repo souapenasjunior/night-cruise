@@ -62,6 +62,10 @@ export async function initAccount(settings, h) {
     for (const k of ['pagamento', 'collection_id', 'collection_status', 'payment_id', 'status', 'external_reference', 'payment_type', 'merchant_order_id', 'preference_id', 'site_id', 'processing_mode', 'merchant_account_id']) q.delete(k);
     const rest = q.toString();
     history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    // this is the checkout tab the game opened: the game tab is already watching, so go back to it
+    let opener = null;
+    try { opener = window.opener && !window.opener.closed && window.opener.location.origin === location.origin ? window.opener : null; } catch (e) { opener = null; }
+    if (opener) { try { opener.focus(); } catch (e) { /* focus is a hint */ } window.close(); }
     if (payReturn === 'falhou') { tellPurchase(t('shop.failed')); payReturn = null; }
   }
   if (pendingNotice && pendingNotice !== 'acc.confirmed') { history.replaceState(null, '', location.pathname + location.search); openAccount('login', t(pendingNotice)); pendingNotice = null; }
@@ -111,8 +115,12 @@ async function loadOwned() {
   if (!error) owned = new Set(data.map(r => r.car_id));
 }
 function tellPurchase(msg) { if (hooks.purchase) hooks.purchase(msg); }
-export async function buyProduct(product) {
-  if (!sb || !user) return t('shop.signInFirst');
+// The checkout opens in a new tab (`win`, opened by the click itself so it is not blocked as a pop-up);
+// the game stays here and unlocks the cars as soon as the server confirms the payment. Without a tab
+// (pop-ups blocked) the checkout replaces this page and the game picks up again on the way back.
+export async function buyProduct(product, win) {
+  const fail = msg => { if (win && !win.closed) win.close(); return msg; };
+  if (!sb || !user) return fail(t('shop.signInFirst'));
   tellPurchase(t('shop.redirect'));
   try {
     const { data, error } = await sb.functions.invoke('create-checkout', { body: { product } });
@@ -120,13 +128,34 @@ export async function buyProduct(product) {
       // the function answers errors as { error: code } (supabase-js keeps the response in error.context)
       let code = data && data.error;
       if (!code && error && error.context && error.context.json) code = (await error.context.json().catch(() => ({}))).error;
-      if (code === 'already_owned') { await loadOwned(); if (hooks.changed) hooks.changed(); return t('shop.approved'); }
-      if (code === 'too_frequent') return t('acc.err.rate');
-      return t('shop.error');
+      if (code === 'already_owned') { await loadOwned(); if (hooks.changed) hooks.changed(); return fail(t('shop.approved')); }
+      if (code === 'too_frequent') return fail(t('acc.err.rate'));
+      return fail(t('shop.error'));
+    }
+    if (win && !win.closed) {
+      win.location.href = data.url;
+      watchPurchase(win);
+      return t('shop.inNewTab');
     }
     location.href = data.url;
     return null;
-  } catch (e) { return t('shop.error'); }
+  } catch (e) { return fail(t('shop.error')); }
+}
+// while the checkout tab is open (and a few minutes after), look for the unlock
+let watching = 0;
+async function watchPurchase(win) {
+  const me = ++watching, before = owned.size, start = Date.now();
+  let closedAt = 0;
+  while (me === watching && user && Date.now() - start < 20 * 60 * 1000) {
+    await new Promise(r => setTimeout(r, 4000));
+    if (document.hidden && !(win && win.closed)) continue; // the player is on the checkout tab
+    await loadOwned();
+    if (owned.size > before) { tellPurchase(t('shop.approved')); if (hooks.changed) hooks.changed(); return; }
+    if (win && win.closed) {
+      closedAt = closedAt || Date.now();
+      if (Date.now() - closedAt > 3 * 60 * 1000) { tellPurchase(t('shop.pending')); return; }
+    }
+  }
 }
 // the webhook usually arrives within seconds of the return: look for the unlock for up to 2 minutes
 async function checkPurchase() {

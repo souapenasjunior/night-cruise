@@ -141,6 +141,7 @@ const DICT = {
     'shop.redirect': 'Abrindo o pagamento…', 'shop.error': 'Não foi possível abrir o pagamento. Tente de novo.',
     'shop.approved': 'Pagamento aprovado! Os 7 carros já são seus.', 'shop.pending': 'Pagamento em análise. Os carros serão liberados assim que ele for aprovado.',
     'shop.failed': 'O pagamento não foi concluído. Nada foi cobrado.', 'shop.checking': 'Confirmando o pagamento…',
+    'shop.inNewTab': 'Conclua o pagamento na nova aba. Os carros aparecem liberados aqui assim que ele for aprovado.',
     'shop.terms': 'Pagamento pelo Mercado Pago. 7 dias para desistir.', 'shop.termsLink': 'Termos e reembolso',
     'cred.legal': 'Termos, compras e privacidade',
     // account
@@ -257,6 +258,7 @@ const DICT = {
     'shop.redirect': 'Opening the payment…', 'shop.error': "Couldn't open the payment. Try again.",
     'shop.approved': 'Payment approved! The 7 cars are yours.', 'shop.pending': 'Payment under review. The cars unlock as soon as it is approved.',
     'shop.failed': 'The payment was not completed. Nothing was charged.', 'shop.checking': 'Confirming the payment…',
+    'shop.inNewTab': 'Finish the payment in the new tab. The cars unlock here as soon as it is approved.',
     'shop.terms': 'Paid through Mercado Pago. 7 days to change your mind.', 'shop.termsLink': 'Terms and refunds',
     'cred.legal': 'Terms, purchases and privacy',
     // account

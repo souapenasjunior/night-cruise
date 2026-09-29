@@ -532,8 +532,14 @@ $('sel-go').onclick = () => startDrive();
 $('sel-buy').onclick = async () => {
   if (!isSignedIn()) { openAccount('login', t('shop.signInFirst')); return; }
   $('sel-lock-msg').textContent = t('acc.wait');
-  const err = await buyProduct('premium_pack');
-  if (err) $('sel-lock-msg').textContent = err;
+  // the tab is opened now, inside the click, so the browser allows it; the checkout address follows
+  let win = null;
+  try {
+    win = window.open('', '_blank');
+    if (win) win.document.write(`<title>Mercado Pago</title><body style="background:#0b0e18;color:#cfd3df;font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0">${t('shop.redirect')}</body>`);
+  } catch (e) { win = null; }
+  const msg = await buyProduct('premium_pack', win);
+  if (msg) $('sel-lock-msg').textContent = msg;
 };
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
