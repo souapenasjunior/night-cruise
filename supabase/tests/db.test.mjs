@@ -195,9 +195,10 @@ ok(!(await one("select 1 x from pg_proc where proname like 'shop_%'")) && !(awai
 console.log('premium files');
 ok((await one("select public from storage.buckets where id = 'premium'")).public === false, 'the premium bucket is private');
 await db.query("insert into storage.objects (bucket_id, name) values ('premium', 'p_r34/p_r34.json'), ('premium', 'p_rx7/p_rx7.json')");
-// (online: signed-in players draw each other's cars, so they may read every premium car's files)
+// (every car turns in 3D on the car select, locked ones too, and online players draw each other's cars:
+// anyone may read the files; driving one still needs owning it)
 await as(...player(a), async tx => { ok((await tx.query("select 1 from storage.objects where bucket_id = 'premium'")).rows.length === 2, 'a signed-in player can read the premium car files (to see other players\' cars online)'); });
-await as('anon', {}, async tx => { ok((await tx.query("select 1 from storage.objects where bucket_id = 'premium'")).rows.length === 0, 'visitors read none'); });
+await as('anon', {}, async tx => { ok((await tx.query("select 1 from storage.objects where bucket_id = 'premium'")).rows.length === 2, 'visitors read them too (the car select shows locked cars in 3D)'); });
 await db.query("update public.drive_sessions set started_at = now() - interval '1 minute' where user_id = $1", [a]);
 await fails(as(...player(a), tx => tx.query("select public.start_drive('p_r34')")), /car_locked/, 'reading the files does not let anyone drive a car they do not own');
 

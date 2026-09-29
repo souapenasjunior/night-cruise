@@ -141,13 +141,13 @@ function cruiseBonus() {
 }
 
 // Premium car files are in the private Storage bucket 'premium' (one folder per car), readable by
-// signed-in players (online, everyone draws everyone's car; driving one needs owning it). Returns
-// Map(file name -> signed URL) or null. The URLs last 7 days and are kept in this browser meanwhile, so
-// the same links (and the browser's cache of the files) are reused.
+// anyone (the car select turns every car in 3D, locked ones too; online, everyone draws everyone's car;
+// driving one needs owning it). Returns Map(file name -> signed URL) or null. The URLs last 7 days and
+// are kept in this browser meanwhile, so the same links (and the browser's cache of the files) are reused.
 const SIGN_FOR = 7 * 24 * 3600;
 export async function premiumFiles(carId) {
-  if (!sb || !user) return null;
-  const key = `nc.prem.${user.id}.${carId}`;
+  if (!sb) return null;
+  const key = `nc.prem.${carId}`;
   try {
     const c = JSON.parse(localStorage.getItem(key) || 'null');
     if (c && c.until > Date.now() + 3600 * 1000) return new Map(c.files);

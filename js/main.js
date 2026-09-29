@@ -239,23 +239,21 @@ function loadCar(spec) {
   return carLoads.get(spec.id);
 }
 function showModel(spec) {
-  // a premium car not owned yet: its 3D model behind a padlock (the files are served to any signed-in
-  // player); a guest gets its picture
+  // every car turns in 3D, a locked one under a padlock (its picture only if the model can't be loaded)
   const photo = $('sel-photo');
   $('sel-padlock').hidden = !locked(spec);
-  if (locked(spec) && !isSignedIn()) {
-    if (show.current) { show.scene.remove(show.current.group); show.current = null; }
-    $('sel-loading').hidden = true;
-    photo.src = shopImg(spec); photo.alt = spec.name; photo.hidden = false;
-    return;
-  }
   photo.hidden = true;
   if (!glbReady(spec.id)) {
     if (show.current) { show.scene.remove(show.current.group); show.current = null; }
     $('sel-loading').hidden = false;
     $('sel-loading').textContent = t('shop.loading');
     loadCar(spec).then(ok => {
-      if (state === 'select' && HERO_SPECS[selIndex] === spec) { if (ok) updateSelect(); else $('sel-loading').textContent = t('shop.loadFail'); }
+      if (state !== 'select' || HERO_SPECS[selIndex] !== spec) return;
+      if (ok) updateSelect();
+      else {
+        $('sel-loading').hidden = true;
+        if (spec.premium) { photo.src = shopImg(spec); photo.alt = spec.name; photo.hidden = false; } else { $('sel-loading').hidden = false; $('sel-loading').textContent = t('shop.loadFail'); }
+      }
     });
     return;
   }
