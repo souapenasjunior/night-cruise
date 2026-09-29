@@ -17,7 +17,11 @@ export async function loadGlbCars(specs, onEach) {
   const loader = new GLTFLoader(manager);
   loader.setMeshoptDecoder(MeshoptDecoder);
   await Promise.all(specs.filter(s => s.glb).map(async s => {
-    const gltf = await loader.loadAsync(s.glb.file);
+    // files served from elsewhere (premium cars: signed Storage URLs), by file name
+    const urls = s.glb.urls;
+    const l = urls ? new GLTFLoader(new THREE.LoadingManager().setURLModifier(u => urls.get(u.split('?')[0].split('/').pop()) || u)) : loader;
+    if (urls) l.setMeshoptDecoder(MeshoptDecoder);
+    const gltf = await l.loadAsync(s.glb.file);
     templates.set(s.id, prepare(gltf.scene, s));
     if (onEach) onEach(s);
   }));

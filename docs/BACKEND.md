@@ -175,3 +175,12 @@ psql "<URL do banco>" -f backup/data.sql
 - Secrets (só no painel do Supabase → Edge Functions → Secrets): `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`. Opcional: `SITE_ORIGINS` (outros domínios do site, separados por vírgula).
 - Webhook no Mercado Pago (Suas integrações → Webhooks, evento "Pagamentos"): `https://awynkbzkmyybrjbkqdsb.supabase.co/functions/v1/mp-webhook`
 - Os arquivos dos modelos premium ficam públicos no site (o jogo só bloqueia na interface); as estatísticas no servidor recusam carros não liberados.
+
+## Arquivos dos carros premium (Storage privado)
+
+- Os modelos dos carros premium **não ficam no site**: estão no bucket privado `premium` do Supabase Storage, uma pasta por carro (`premium/p_r34/p_r34.json` + texturas `.webp`).
+- Só quem tem o carro liberado (`car_unlocks`) consegue ler a pasta (política "premium cars: owners read"). O jogo pede links assinados válidos por 7 dias (`premiumFiles` em `js/account.js`).
+- Quem não tem o carro vê a foto dele (`img/shop/<id>.webp`) na seleção.
+- `models/p_*` está no `.gitignore`: os arquivos ficam no seu PC para testes locais (`localhost:8765/#debug` → `__nc.devUnlock()`).
+- Para atualizar um carro depois de reconstruí-lo, rode dentro da pasta com as subpastas de cada carro:
+  `npx.cmd supabase storage cp -r p_r34 ss:///premium/p_r34 --linked --experimental --workdir <pasta do jogo>`

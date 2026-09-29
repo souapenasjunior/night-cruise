@@ -30,6 +30,16 @@ await db.exec(`
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(auth.jwt() ->> 'sub', '')::uuid $$;
   grant execute on all functions in schema auth to anon, authenticated, service_role;
+  -- Supabase Storage, the parts the migrations use
+  create schema storage;
+  grant usage on schema storage to anon, authenticated, service_role;
+  create table storage.buckets (id text primary key, name text not null, public boolean default false, file_size_limit bigint);
+  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets (id), name text not null);
+  alter table storage.objects enable row level security;
+  grant select on storage.objects to anon, authenticated;
+  create function storage.foldername(name text) returns text[] language sql immutable as
+    $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
+  grant execute on function storage.foldername(text) to anon, authenticated;
   -- Supabase's defaults: everything new in public is fully granted to the API roles
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
@@ -186,6 +196,18 @@ st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'ref
 ok(st === 'refunded' && !(await owns(c, 'p_r34')) && (await owns(c, 'r32')), 'a refund takes the premium cars back (free cars stay)');
 st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'approved', null, 1990, 'BRL') s", [ord.order_id]))).rows[0].s;
 ok(st === 'refunded' && !(await owns(c, 'p_r34')), 'a refunded order cannot be approved again');
+
+// ------------------------------------------------------------------ premium files (Storage)
+console.log('premium files');
+ok((await one("select public from storage.buckets where id = 'premium'")).public === false, 'the premium bucket is private');
+await db.query("insert into storage.objects (bucket_id, name) values ('premium', 'p_r34/p_r34.json'), ('premium', 'p_rx7/p_rx7.json')");
+await db.query("insert into public.car_unlocks (user_id, car_id, source) values ($1, 'p_rx7', 'admin') on conflict do nothing", [d]);
+await as(...player(d), async tx => {
+  const names = (await tx.query("select name from storage.objects where bucket_id = 'premium' order by name")).rows.map(r => r.name);
+  ok(names.length === 1 && names[0] === 'p_rx7/p_rx7.json', 'a player reads only the files of the premium cars they own');
+});
+await as(...player(a), async tx => { ok((await tx.query("select 1 from storage.objects where bucket_id = 'premium'")).rows.length === 0, 'a player without premium cars reads none'); });
+await as('anon', {}, async tx => { ok((await tx.query("select 1 from storage.objects where bucket_id = 'premium'")).rows.length === 0, 'visitors read none'); });
 
 // ------------------------------------------------------------------ account deletion
 console.log('account deletion');

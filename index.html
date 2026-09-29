@@ -107,6 +107,10 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .chip.locked .n { opacity: 0.55; }
 .paints[hidden], .sel-loading[hidden], .lock[hidden] { display: none; }
 .sel-loading { color: var(--dim); font-size: 13px; }
+/* premium car not owned: its picture in the showroom (the 3D model is only served to owners) */
+#sel-photo { position: absolute; right: clamp(8px, 4vw, 64px); top: 50%; transform: translateY(-58%); width: min(56vw, 920px); aspect-ratio: 16 / 9; object-fit: cover; pointer-events: none; mix-blend-mode: lighten; -webkit-mask: radial-gradient(62% 58% at 52% 55%, #000 55%, transparent 100%); mask: radial-gradient(62% 58% at 52% 55%, #000 55%, transparent 100%); }
+#sel-photo[hidden] { display: none; }
+@media (max-width: 760px) { #sel-photo { width: 100vw; right: 0; top: 30%; } }
 /* premium car not owned: one line where the colour row would be (these cars have no colour choice) */
 .lock { all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--sodium); font: 700 16px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .lock svg { width: 14px; height: 14px; flex: none; }
@@ -381,6 +385,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 </div>
 
 <div id="select" class="screen" hidden>
+  <img id="sel-photo" alt="" hidden>
   <div class="info">
     <div class="eyebrow" id="sel-class">Muscle</div>
     <h2 class="name" id="sel-name">Kaiju GT</h2>
@@ -628,7 +633,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.16.3';
+  var V = '1.17.0';
   var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

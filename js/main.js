@@ -19,7 +19,7 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
-import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyProduct } from './account.js';
+import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyProduct, premiumFiles } from './account.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -218,15 +218,35 @@ const show = { scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(32, 1,
   const rimB = new THREE.PointLight(0x40c8ff, 18, 18, 1.8); rimB.position.set(6, 2.8, -6); s.add(rimB);
   const top = new THREE.DirectionalLight(0xc8d4ff, 0.45); top.position.set(0, 10, 2); s.add(top);
 }
-// premium cars are fetched only when picked on the car select (not with the game)
+// premium cars are fetched only when picked on the car select (not with the game), from the private
+// Storage bucket with signed URLs that only their owners get (local testing: the files in models/)
 const carLoads = new Map();
 function loadCar(spec) {
   if (!carLoads.has(spec.id)) {
-    carLoads.set(spec.id, loadGlbCars([spec]).then(() => true, e => { carLoads.delete(spec.id); console.warn('[car]', spec.id, e && e.message); return false; }));
+    const go = async () => {
+      let s = spec;
+      if (spec.premium && !devOwnAll) {
+        const urls = await premiumFiles(spec.id);
+        if (!urls) throw new Error('premium files unavailable');
+        s = { ...spec, glb: { ...spec.glb, urls } };
+      }
+      await loadGlbCars([s]);
+      return true;
+    };
+    carLoads.set(spec.id, go().catch(e => { carLoads.delete(spec.id); console.warn('[car]', spec.id, e && e.message); return false; }));
   }
   return carLoads.get(spec.id);
 }
 function showModel(spec) {
+  // a premium car the player does not own: its picture (the model is only served to owners)
+  const photo = $('sel-photo');
+  if (locked(spec)) {
+    if (show.current) { show.scene.remove(show.current.group); show.current = null; }
+    $('sel-loading').hidden = true;
+    photo.src = shopImg(spec); photo.alt = spec.name; photo.hidden = false;
+    return;
+  }
+  photo.hidden = true;
   if (!glbReady(spec.id)) {
     if (show.current) { show.scene.remove(show.current.group); show.current = null; }
     $('sel-loading').hidden = false;
@@ -248,10 +268,12 @@ function updateShowroom(dt) {
   show.t += dt;
   if (!show.drag) show.yaw += dt * show.spin;
   const m = show.current;
-  if (!m) return;
-  m.group.rotation.y = show.yaw;
-  m.setLights({ head: true });
-  const L = m.L;
+  // (no model: a locked premium car's picture, or one still loading; the room stays framed the same)
+  if (m) {
+    m.group.rotation.y = show.yaw;
+    m.setLights({ head: true });
+  }
+  const L = m ? m.L : 4.5;
   const d = 5.8 + L * 0.95;
   const narrow = innerWidth < 760;
   show.cam.position.set(narrow ? 0 : -1.3, 2.3 + L * 0.1, d);

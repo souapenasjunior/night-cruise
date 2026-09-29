@@ -115,6 +115,27 @@ async function loadOwned() {
   if (!error) owned = new Set(data.map(r => r.car_id));
 }
 function tellPurchase(msg) { if (hooks.purchase) hooks.purchase(msg); }
+
+// Premium car files are in the private Storage bucket 'premium' (one folder per car), readable only by
+// players who own the car. Returns Map(file name -> signed URL) or null. The URLs last 7 days and are
+// kept in this browser meanwhile, so the same links (and the browser's cache of the files) are reused.
+const SIGN_FOR = 7 * 24 * 3600;
+export async function premiumFiles(carId) {
+  if (!sb || !user || !owned.has(carId)) return null;
+  const key = `nc.prem.${user.id}.${carId}`;
+  try {
+    const c = JSON.parse(localStorage.getItem(key) || 'null');
+    if (c && c.until > Date.now() + 3600 * 1000) return new Map(c.files);
+  } catch (e) { /* storage unavailable: sign again */ }
+  const { data: list, error } = await sb.storage.from('premium').list(carId, { limit: 500 });
+  if (error || !list || !list.length) return null;
+  const paths = list.map(f => `${carId}/${f.name}`);
+  const { data: signed, error: e2 } = await sb.storage.from('premium').createSignedUrls(paths, SIGN_FOR);
+  if (e2 || !signed) return null;
+  const files = signed.filter(s => s.signedUrl && !s.error).map(s => [s.path.split('/').pop(), s.signedUrl]);
+  try { localStorage.setItem(key, JSON.stringify({ until: Date.now() + SIGN_FOR * 1000, files })); } catch (e) { /* fine */ }
+  return new Map(files);
+}
 // The checkout opens in a new tab (`win`, opened by the click itself so it is not blocked as a pop-up);
 // the game stays here and unlocks the cars as soon as the server confirms the payment. Without a tab
 // (pop-ups blocked) the checkout replaces this page and the game picks up again on the way back.
