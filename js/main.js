@@ -572,7 +572,7 @@ function renderShop() {
     li.tabIndex = 0;
     li.setAttribute('role', 'option');
     li.style.borderBottomColor = (s.colors && s.colors.main) || 'var(--line)';
-    const im = document.createElement('img'); im.src = shopImg(s); im.alt = ''; im.loading = 'lazy';
+    const im = document.createElement('img'); im.src = shopImg(s); im.alt = ''; // (not lazy: built while the shop is hidden, they never started)
     const b = document.createElement('b'); b.textContent = s.short;
     li.append(im, b);
     li.onmouseenter = li.onfocus = li.onclick = () => showShopCar(i);
