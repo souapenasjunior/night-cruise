@@ -422,7 +422,7 @@ $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
 // credits and the account panel sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : null; }
+function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('shop').hidden ? $('shop') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -509,16 +509,26 @@ function updateSelect() {
   [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', locked(HERO_SPECS[i])); });
   const chip = $('sel-chips').children[selIndex];
   if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  // premium, not owned: the offer instead of "Drive"
+  // premium, not owned: a one-line note, and "Drive" becomes "See in the shop"
   const lk = locked(s);
   $('sel-lock').hidden = !lk;
-  $('sel-go').disabled = lk;
-  $('sel-go').textContent = lk ? t('shop.lockedBtn') : t('sel.go');
-  if (lk) $('sel-buy').textContent = isSignedIn() ? t('shop.buy') : t('shop.signInToBuy');
+  $('sel-go').textContent = lk ? t('shop.seeInShop') : t('sel.go');
   showModel(s);
   renderPaints();
+  fitSelectInfo();
   audio.setCar({ ...s.sound, top: s.stats.top });
 }
+// the car details must never run into the car strip below: on short screens drop the description, then
+// the stats
+function fitSelectInfo() {
+  const info = document.querySelector('#select .info'), strip = document.querySelector('#select .strip');
+  if (!info || !strip || $('select').hidden) return;
+  info.classList.remove('fit1', 'fit2');
+  const clash = () => info.getBoundingClientRect().bottom > strip.getBoundingClientRect().top - 4;
+  if (clash()) info.classList.add('fit1');
+  if (clash()) info.classList.add('fit2');
+}
+window.addEventListener('resize', () => { if (state === 'select') fitSelectInfo(); });
 function goSelect() {
   selIndex = 0;
   state = 'select';
@@ -528,10 +538,46 @@ function goSelect() {
 }
 $('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else goTitle(); };
 $('sel-go').onclick = () => startDrive();
-// premium pack: sign in first, then the payment page (the server unlocks the cars once it is paid)
-$('sel-buy').onclick = async () => {
-  if (!isSignedIn()) { openAccount('login', t('shop.signInFirst')); return; }
-  $('sel-lock-msg').textContent = t('acc.wait');
+// ------------------------------------------------------------------ shop
+// The Premium Pack: its cars, the price and the buy button. Opened from the title menu or from a locked car.
+const PACK_CARS = () => HERO_SPECS.filter(s => s.premium === 'premium_pack');
+const packOwned = () => PACK_CARS().every(s => !locked(s));
+let shopReturn = null; // element to focus when the shop closes
+function renderShop() {
+  const owned = packOwned();
+  $('shop').classList.toggle('shop-owned', owned);
+  $('shop-cars').innerHTML = '';
+  for (const s of PACK_CARS()) {
+    const li = document.createElement('li');
+    li.style.borderBottomColor = (s.colors && s.colors.main) || 'var(--line)';
+    const b = document.createElement('b'); b.textContent = s.name;
+    const sp = document.createElement('span'); sp.textContent = `${s.brand} · ${s.cls}`;
+    li.append(b, sp);
+    $('shop-cars').appendChild(li);
+  }
+  $('shop-buy').textContent = owned ? t('shop.ownedBtn') : isSignedIn() ? t('shop.buy') : t('shop.signInToBuy');
+  if (owned) $('shop-msg').textContent = t('shop.owned');
+}
+function openShop(from, msg) {
+  shopReturn = from || document.activeElement;
+  renderShop();
+  $('shop-msg').textContent = msg || (packOwned() ? t('shop.owned') : '');
+  $('shop').hidden = false;
+  setTimeout(() => $('shop-buy').focus(), 30);
+}
+function closeShop() {
+  $('shop').hidden = true;
+  if (state === 'select') updateSelect();
+  if (shopReturn && shopReturn.focus && !shopReturn.closest('[hidden]')) shopReturn.focus();
+}
+const isShopOpen = () => !$('shop').hidden;
+$('btn-shop').onclick = () => openShop($('btn-shop'));
+$('shop-close').onclick = closeShop;
+// buying: sign in first, then the Mercado Pago page (the server unlocks the cars once it is paid)
+$('shop-buy').onclick = async () => {
+  if (packOwned()) { closeShop(); if (state !== 'select') { audio.init(); audio.setVolumes(S.audio); goSelect(); } return; }
+  if (!isSignedIn()) { closeShop(); openAccount('login', t('shop.signInFirst')); return; }
+  $('shop-msg').textContent = t('acc.wait');
   // the tab is opened now, inside the click, so the browser allows it; the checkout address follows
   let win = null;
   try {
@@ -539,7 +585,7 @@ $('sel-buy').onclick = async () => {
     if (win) win.document.write(`<title>Mercado Pago</title><body style="background:#0b0e18;color:#cfd3df;font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0">${t('shop.redirect')}</body>`);
   } catch (e) { win = null; }
   const msg = await buyProduct('premium_pack', win);
-  if (msg) $('sel-lock-msg').textContent = msg;
+  if (msg) $('shop-msg').textContent = msg;
 };
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
@@ -627,7 +673,7 @@ function parkAtSlot(k) {
 // drive
 function startDrive() {
   const spec = HERO_SPECS[selIndex];
-  if (locked(spec)) { $('sel-buy').focus(); return; }
+  if (locked(spec)) { openShop($('sel-go')); return; }
   if (!glbReady(spec.id)) return; // still loading
   S.lastCar = spec.id;
   SET.save(S);
@@ -919,6 +965,7 @@ onLangChange(() => {
   if (settingsOpen) { renderTabs(); renderOpts(); }
   if (state === 'select') { buildChips(); updateSelect(); }
   if (!$('credits').hidden) openCredits();
+  if (isShopOpen()) renderShop();
   if (player) {
     renderPauseKeys();
     $('pause-info').textContent = t('pause.info', { car: player.spec.name, km: num(Math.round(player.odo / 100) / 10) });
@@ -967,6 +1014,12 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeAccount(); }
     return;
   }
+  if (isShopOpen()) {
+    if (e.code === 'Escape') { e.preventDefault(); closeShop(); }
+    if (e.code === 'ArrowDown' || e.code === 'ArrowRight') { e.preventDefault(); moveFocus(1); }
+    if (e.code === 'ArrowUp' || e.code === 'ArrowLeft') { e.preventDefault(); moveFocus(-1); }
+    return;
+  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -999,7 +1052,7 @@ function padMenus() {
     else if (input.padPressed(3)) bigMap.center(player);
     return;
   }
-  if (state === 'select' && !settingsOpen) {
+  if (state === 'select' && !settingsOpen && !isShopOpen() && !isAccountOpen()) {
     if (right || left) { selIndex = (selIndex + (right ? 1 : -1) + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); audio.selectChime(selIndex, right); }
     const lb = input.padPressed(4), rb = input.padPressed(5);
     if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
@@ -1017,6 +1070,7 @@ function padMenus() {
     if (settingsOpen) closeSettings();
     else if (!$('credits').hidden) closeCredits();
     else if (isAccountOpen()) closeAccount();
+    else if (isShopOpen()) closeShop();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
@@ -1231,8 +1285,14 @@ async function boot() {
   initAccount(S, {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
     // signed in / out, or a purchase unlocked cars: the car select shows the new state
-    changed: () => { if (state === 'select') updateSelect(); },
-    purchase: msg => { $('sel-lock-msg').textContent = msg; if (state === 'select') updateSelect(); },
+    changed: () => { if (state === 'select') updateSelect(); if (isShopOpen()) renderShop(); },
+    // news about a purchase (checkout opened, confirmed, pending...): shown in the shop, opened for it on
+    // the menus (not while driving)
+    purchase: msg => {
+      if (state === 'select') updateSelect();
+      if (!isShopOpen() && (state === 'title' || state === 'select') && !isAccountOpen()) openShop(null, msg);
+      else if (isShopOpen()) { renderShop(); $('shop-msg').textContent = msg; }
+    },
   }).catch(e => console.warn('[account]', e && e.message));
   if (location.hash === '#debug') {
     let fake = performance.now();

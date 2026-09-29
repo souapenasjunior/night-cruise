@@ -103,17 +103,30 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .chip.locked .n { opacity: 0.55; }
 .paints[hidden], .sel-loading[hidden], .lock[hidden] { display: none; }
 .sel-loading { color: var(--dim); font-size: 13px; }
-.lock { margin-top: 8px; padding: 12px 14px; border: 1px solid rgba(255, 178, 63, 0.45); background: rgba(40, 30, 14, 0.72); display: grid; gap: 8px; }
-.lock-h { display: flex; align-items: center; gap: 8px; color: var(--sodium); font: 700 18px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; }
-.lock-h svg { width: 15px; height: 15px; }
-.lock p { margin: 0; color: #c3c8d6; font-size: 13px; }
-.lock-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.lock .price { font: 900 28px/1 var(--display); letter-spacing: 0.02em; }
-.lock-msg { color: #cfd4e2; font-size: 12px; min-height: 1em; }
-.lock-terms { color: var(--dim); font-size: 11px; }
-.lock-terms a { color: var(--sodium); }
+/* premium car not owned: one line where the colour row would be (these cars have no colour choice) */
+.lock { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--sodium); font: 700 16px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.lock svg { width: 14px; height: 14px; flex: none; }
+/* the car details never run into the car strip: on short screens the description, then the stats, give way */
+#select .info.fit1 .desc { display: none; }
+#select .info.fit2 .stats { display: none; }
+/* shop */
+#shop .panel { width: min(760px, 100%); }
+.shop-body { overflow-y: auto; padding: 18px 22px; display: grid; gap: 16px; align-content: start; }
+.pack-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+.pack-head h3 { margin: 4px 0 6px; font: 900 30px/1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; }
+.pack-head p { margin: 0; color: #c3c8d6; font-size: 14px; max-width: 420px; }
+.pack-head .eyebrow { color: var(--sodium); font: 700 11px/1 var(--body); letter-spacing: 0.18em; text-transform: uppercase; }
+.pack-buy { display: grid; justify-items: end; gap: 6px; }
+.pack-buy .price { font: 900 40px/1 var(--display); letter-spacing: 0.02em; }
+.pack-buy small { color: var(--dim); font-size: 12px; }
+.pack-cars { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.pack-cars li { border: 1px solid var(--line); padding: 10px 12px 9px; display: grid; gap: 3px; border-bottom-width: 3px; }
+.pack-cars b { font: 700 18px/1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
+.pack-cars span { color: var(--dim); font-size: 12px; }
+.shop-msg { margin: 0; min-height: 1.2em; color: #cfd4e2; font-size: 14px; }
+.shop-owned .pack-buy .price, .shop-owned .pack-buy small { display: none; }
+#shop footer a { color: var(--sodium); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-@media (max-height: 700px) { .lock { padding: 8px 10px; gap: 5px; margin-top: 4px; } .lock p { display: none; } .lock .price { font-size: 22px; } }
 #select .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .hint { color: var(--dim); font-size: 12.5px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 .btn { all: unset; cursor: pointer; font: 700 20px/1 var(--display); letter-spacing: 0.1em; text-transform: uppercase; padding: 12px 22px; border: 1px solid var(--line-2); color: var(--text); transition: background .15s, border-color .15s, color .15s; text-align: center; }
@@ -293,6 +306,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   <p class="tag" data-i18n="title.tag">Anel K1, meia-noite. Sem corrida e sem missão: escolha um carro, entre na via expressa e dirija.</p>
   <nav id="title-nav">
     <button class="menu-btn primary" id="btn-play" data-i18n="title.play">Jogar</button>
+    <button class="menu-btn" id="btn-shop" data-i18n="title.shop">Loja</button>
     <button class="menu-btn" id="btn-settings" data-i18n="title.settings">Configurações</button>
     <button class="menu-btn" id="btn-account" hidden>Entrar</button>
     <button class="menu-btn" id="btn-credits" data-i18n="title.credits">Créditos</button>
@@ -310,13 +324,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <div class="stats" id="sel-stats"></div>
     <div class="paints"><span class="plabel" data-i18n="sel.paint">Cor</span><div class="swatches" id="sel-paints" role="radiogroup" aria-label="Cor do carro" data-i18n-aria="sel.paintAria"></div></div>
     <div class="sel-loading" id="sel-loading" hidden data-i18n="shop.loading">Carregando o carro…</div>
-    <div class="lock" id="sel-lock" hidden>
-      <div class="lock-h"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><b data-i18n="shop.packTitle">Pacote Premium</b></div>
-      <p data-i18n="shop.packDesc">7 carros lendários dos filmes de corrida, para sempre na sua conta.</p>
-      <div class="lock-row"><b class="price" data-i18n="shop.price">R$ 19,90</b><button class="btn go small" id="sel-buy">Comprar</button></div>
-      <small class="lock-msg" id="sel-lock-msg" role="status" aria-live="polite"></small>
-      <small class="lock-terms"><span data-i18n="shop.terms">Pagamento pelo Mercado Pago. 7 dias para desistir.</span> <a href="legal.html#compras" target="_blank" rel="noopener" data-i18n="shop.termsLink">Termos e reembolso</a></small>
-    </div>
+    <div class="lock" id="sel-lock" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span data-i18n="shop.lockLine">Pacote Premium · R$ 19,90</span></div>
   </div>
   <div class="strip">
     <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
@@ -366,6 +374,29 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <header><h2 id="cred-title" data-i18n="cred.title">Créditos</h2><span class="chipinfo" data-i18n="cred.sub">Modelos 3D dos carros</span></header>
     <div class="cred-list" id="cred-list"></div>
     <footer><span class="chipinfo" data-i18n="cred.foot">Modelos otimizados (texturas e malhas comprimidas) e adaptados para o jogo. Nomes e marcas pertencem aos respectivos fabricantes.</span> <a class="chipinfo" href="legal.html" target="_blank" rel="noopener" data-i18n="cred.legal">Termos, compras e privacidade</a><button class="btn go small" id="cred-close" data-i18n="close">Fechar</button></footer>
+  </div>
+</div>
+
+<div id="shop" class="screen scrim" hidden>
+  <div class="panel" role="dialog" aria-labelledby="shop-title">
+    <header><h2 id="shop-title" data-i18n="shop.title">Loja</h2><span class="chipinfo" data-i18n="shop.sub">Carros extras para a sua garagem</span></header>
+    <div class="shop-body">
+      <div class="pack-head">
+        <div>
+          <div class="eyebrow" data-i18n="shop.packEyebrow">Pacote</div>
+          <h3 data-i18n="shop.packTitle">Pacote Premium</h3>
+          <p data-i18n="shop.packDesc">7 carros lendários dos filmes de corrida, para sempre na sua conta.</p>
+        </div>
+        <div class="pack-buy">
+          <b class="price" data-i18n="shop.price">R$ 19,90</b>
+          <small data-i18n="shop.once">pagamento único</small>
+          <button class="btn go" id="shop-buy">Comprar</button>
+        </div>
+      </div>
+      <ul class="pack-cars" id="shop-cars"></ul>
+      <p class="shop-msg" id="shop-msg" role="status" aria-live="polite"></p>
+    </div>
+    <footer><span class="chipinfo"><span data-i18n="shop.terms">Pagamento pelo Mercado Pago. 7 dias para desistir.</span> <a href="legal.html#compras" target="_blank" rel="noopener" data-i18n="shop.termsLink">Termos e reembolso</a></span><button class="btn small" id="shop-close" data-i18n="close">Fechar</button></footer>
   </div>
 </div>
 
@@ -507,7 +538,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.14.1';
+  var V = '1.15.0';
   var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

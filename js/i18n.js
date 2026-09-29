@@ -142,6 +142,9 @@ const DICT = {
     'shop.approved': 'Pagamento aprovado! Os 7 carros já são seus.', 'shop.pending': 'Pagamento em análise. Os carros serão liberados assim que ele for aprovado.',
     'shop.failed': 'O pagamento não foi concluído. Nada foi cobrado.', 'shop.checking': 'Confirmando o pagamento…',
     'shop.inNewTab': 'Conclua o pagamento na nova aba. Os carros aparecem liberados aqui assim que ele for aprovado.',
+    'title.shop': 'Loja', 'shop.title': 'Loja', 'shop.sub': 'Carros extras para a sua garagem', 'shop.packEyebrow': 'Pacote',
+    'shop.once': 'pagamento único', 'shop.lockLine': 'Pacote Premium · R$ 19,90', 'shop.seeInShop': 'Ver na loja',
+    'shop.ownedBtn': 'Ir para a garagem', 'shop.owned': 'Você já tem o Pacote Premium. Os 7 carros estão na sua garagem.',
     'shop.terms': 'Pagamento pelo Mercado Pago. 7 dias para desistir.', 'shop.termsLink': 'Termos e reembolso',
     'cred.legal': 'Termos, compras e privacidade',
     // account
@@ -259,6 +262,9 @@ const DICT = {
     'shop.approved': 'Payment approved! The 7 cars are yours.', 'shop.pending': 'Payment under review. The cars unlock as soon as it is approved.',
     'shop.failed': 'The payment was not completed. Nothing was charged.', 'shop.checking': 'Confirming the payment…',
     'shop.inNewTab': 'Finish the payment in the new tab. The cars unlock here as soon as it is approved.',
+    'title.shop': 'Shop', 'shop.title': 'Shop', 'shop.sub': 'Extra cars for your garage', 'shop.packEyebrow': 'Pack',
+    'shop.once': 'one-time payment', 'shop.lockLine': 'Premium Pack · R$ 19.90', 'shop.seeInShop': 'See in the shop',
+    'shop.ownedBtn': 'Go to the garage', 'shop.owned': 'You own the Premium Pack. The 7 cars are in your garage.',
     'shop.terms': 'Paid through Mercado Pago. 7 days to change your mind.', 'shop.termsLink': 'Terms and refunds',
     'cred.legal': 'Terms, purchases and privacy',
     // account
