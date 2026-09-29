@@ -155,6 +155,15 @@ export class Hud {
         c.fillRect(a.x - 7, a.z - 7, 14, 14);
       }
     }
+    // other players online (set by the game each frame): green, ringed in white
+    for (const o of this.others || []) {
+      if (o.x === null) continue;
+      const dx = o.x - player.pos.x, dz = o.z - player.pos.z;
+      if (dx * dx + dz * dz > 700 * 700) continue;
+      c.beginPath(); c.arc(o.x, o.z, 26, 0, Math.PI * 2);
+      c.fillStyle = '#3fe07a'; c.fill();
+      c.lineWidth = 10; c.strokeStyle = '#ffffff'; c.stroke();
+    }
     c.restore();
     // player arrow
     c.save();

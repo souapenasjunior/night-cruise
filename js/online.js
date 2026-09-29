@@ -208,7 +208,13 @@ export class Online {
   // positions of the other players (for the map)
   others() {
     const out = [];
-    for (const r of this.remotes.values()) if (r.model) out.push({ name: r.name, x: r.model.group.position.x, z: r.model.group.position.z, yaw: r.model.group.rotation.y });
+    for (const r of this.remotes.values()) {
+      const g = r.model && r.model.group;
+      const last = r.buf.length ? r.buf[r.buf.length - 1].s : null;
+      // (a car still loading is placed from its last update)
+      const x = g ? g.position.x : last ? last[0] : null, z = g ? g.position.z : last ? last[2] : null;
+      out.push({ id: r.id, name: r.name, car: r.car, x, z, yaw: g ? g.rotation.y : last ? last[3] : 0, speed: last ? Math.abs(last[5]) : 0 });
+    }
     return out;
   }
 }

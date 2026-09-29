@@ -9,40 +9,41 @@ export const JDM_SPECS = [
     // (livery: every car keeps the paint of its file; there is no colour choice)
     id: 'r32', short: 'R32', name: 'Skyline GT-R R32', brand: 'NISSAN', number: '32', cls: 'Grand tourer', livery: true,
     colors: { main: '#16171b', accent: '#c9ccd2' },
-    stats: { top: 265, accel: 8.6, grip: 1.12, drift: 0.85, mass: 1430 },
+    stats: { top: 225, accel: 7.2, grip: 1.0, drift: 0.85, mass: 1430 },
     sound: { type: 'v6', turbo: true, pops: 0.5 },
     wheels: {},
-    glb: { file: 'models/r32.json', paint: /^paint$/, rotY: 0, length: 4.55, wheel: /^(tyre|rims|brake)$/, caliper: /^brake_caliper$/, headMat: /^headlights\.001$/, tailMat: /^rear_lights2?$/ },
+    glb: { file: 'models/r32.json', paint: /^paint$/, rotY: 0, length: 4.55, wheel: /^(tyre|rims|brake)$/, caliper: /^brake_caliper$/, headMat: /^headlights\.001$/, tailMat: /^rear_lights2?$/, windowMat: /^widnows$/ },
   },
   {
     id: 'nsx', short: 'NSX', name: 'NSX', brand: 'HONDA', number: '90', cls: 'Superesportivo', livery: true,
     colors: { main: '#f0f0ee', accent: '#141414' },
-    stats: { top: 270, accel: 8.4, grip: 1.1, drift: 0.95, mass: 1370 },
+    stats: { top: 230, accel: 7.4, grip: 0.98, drift: 0.95, mass: 1370 },
     sound: { type: 'flat6', pops: 0.4 },
     wheels: {},
-    glb: { file: 'models/nsx.json', rotY: 0, length: 4.4, wheel: /^Material\.(011|018|021|023)$/, headMat: /^Material\.013$/, tailMat: /^Material\.009$/, paint: /^Material\.003$/ },
+    glb: { file: 'models/nsx.json', rotY: 0, length: 4.4, wheel: /^Material\.(011|018|021|023)$/, headMat: /^Material\.013$/, tailMat: /^Material\.009$/, paint: /^Material\.003$/, windowMat: /^Material\.004$/ },
   },
   {
     id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico', livery: true,
     colors: { main: '#efefef', accent: '#1b1b1b' },
-    stats: { top: 215, accel: 6.9, grip: 0.92, drift: 1.5, mass: 950 },
+    stats: { top: 195, accel: 6.2, grip: 0.88, drift: 1.5, mass: 950 },
     sound: { type: 'i4rally', pops: 0.9 },
     wheels: {},
-    glb: { file: 'models/tiara83.json', paint: /Bodymat$/, rotY: -Q, length: 4.2, wheelNode: /WheelTuner/, caliperNode: /CaliperTuner/, headNode: /_Headlights_/, tailNode: /_Brakelights_/, revNode: /_Reverselights_/ },
+    glb: { file: 'models/tiara83.json', paint: /Bodymat$/, rotY: -Q, length: 4.2, wheelNode: /WheelTuner/, caliperNode: /CaliperTuner/, headNode: /_Headlights_/, tailNode: /_Brakelights_/, revNode: /_Reverselights_/, windowNode: /^TiaraGT83_(Glass|Trunkdoor_Glass|Windshield|Glass_Driver|Glass_Passenger)_UCB/ },
   },
   // Premium cars: each one is bought on its own with yen (the in-game money earned by driving; prices in
-  // the database, cars.price_coins) and drivable once the account owns it. Their
+  // the database, cars.price_coins) and drivable once the account owns it. All are quicker than the free
+  // cars, and the dearer the better (listed cheapest first). Their
   // files load only when picked on the car select, never with the game. Each keeps its original livery
   // (painted in the texture), so there is no colour choice. The files were prepared (scale, wheels per
   // corner, simplified, WebP) so every wheel/caliper corner is its own mesh: wheel_* / caliper_* nodes.
   ...[
-    ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 290, accel: 9.0, grip: 1.15, drift: 0.9, mass: 1560 }, { type: 'i6rb', turbo: true, pops: 0.7 }],
-    ['p_rx7', 'RX-7', "Julius's RX-7", 'MAZDA', '7', 'Esportivo', '#d4262c', '#141414', 4.3, { top: 270, accel: 8.8, grip: 1.05, drift: 1.3, mass: 1280 }, { type: 'rotary', turbo: true, pops: 1.6 }],
-    ['p_eclipse', 'ECLIPSE', 'Eclipse 1995', 'MITSUBISHI', '95', 'Esportivo', '#27a55b', '#141414', 4.4, { top: 245, accel: 7.9, grip: 1.0, drift: 1.0, mass: 1300 }, { type: 'i4turbo', turbo: true, pops: 0.8 }],
-    ['p_s15', 'S15', 'Silvia S15 "Mona Lisa"', 'NISSAN', '15', 'Drift', '#e8761c', '#141414', 4.45, { top: 255, accel: 8.2, grip: 1.0, drift: 1.45, mass: 1250 }, { type: 'i4sr', turbo: true, pops: 1.0 }],
-    ['p_supra2', 'SUPRA SJ', "Slap Jack's Supra", 'TOYOTA', '94', 'Superesportivo', '#e05a1c', '#f2c21c', 4.51, { top: 285, accel: 9.1, grip: 1.08, drift: 1.1, mass: 1500 }, { type: 'i6jz', turbo: true, pops: 0.6 }],
-    ['p_s2000', 'S2000', "Suki's S2000", 'HONDA', '20', 'Esportivo', '#e86aa6', '#f4f4f4', 4.13, { top: 250, accel: 8.0, grip: 1.1, drift: 1.05, mass: 1260 }, { type: 'i4vtec', pops: 0.4 }],
-    ['p_supra', 'SUPRA', 'Supra MK IV', 'TOYOTA', '80', 'Superesportivo', '#f07818', '#141414', 4.51, { top: 295, accel: 9.3, grip: 1.07, drift: 1.15, mass: 1510 }, { type: 'i6jz', turbo: true, pops: 0.8 }],
+    ['p_eclipse', 'ECLIPSE', 'Eclipse 1995', 'MITSUBISHI', '95', 'Esportivo', '#27a55b', '#141414', 4.4, { top: 245, accel: 7.9, grip: 1.02, drift: 1.0, mass: 1300 }, { type: 'i4turbo', turbo: true, pops: 0.8 }],
+    ['p_s2000', 'S2000', "Suki's S2000", 'HONDA', '20', 'Esportivo', '#e86aa6', '#f4f4f4', 4.13, { top: 252, accel: 8.2, grip: 1.04, drift: 1.05, mass: 1260 }, { type: 'i4vtec', pops: 0.4 }],
+    ['p_s15', 'S15', 'Silvia S15 "Mona Lisa"', 'NISSAN', '15', 'Drift', '#e8761c', '#141414', 4.45, { top: 260, accel: 8.5, grip: 1.06, drift: 1.45, mass: 1250 }, { type: 'i4sr', turbo: true, pops: 1.0 }],
+    ['p_rx7', 'RX-7', "Julius's RX-7", 'MAZDA', '7', 'Esportivo', '#d4262c', '#141414', 4.3, { top: 268, accel: 8.8, grip: 1.08, drift: 1.3, mass: 1280 }, { type: 'rotary', turbo: true, pops: 1.6 }],
+    ['p_supra2', 'SUPRA SJ', "Slap Jack's Supra", 'TOYOTA', '94', 'Superesportivo', '#e05a1c', '#f2c21c', 4.51, { top: 278, accel: 9.1, grip: 1.1, drift: 1.1, mass: 1500 }, { type: 'i6jz', turbo: true, pops: 0.6 }],
+    ['p_supra', 'SUPRA', 'Supra MK IV', 'TOYOTA', '80', 'Superesportivo', '#f07818', '#141414', 4.51, { top: 290, accel: 9.5, grip: 1.13, drift: 1.15, mass: 1510 }, { type: 'i6jz', turbo: true, pops: 0.8 }],
+    ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 305, accel: 9.9, grip: 1.18, drift: 0.9, mass: 1560 }, { type: 'i6rb', turbo: true, pops: 0.7 }],
   ].map(([id, short, name, brand, number, cls, main, accent, length, stats, sound]) => ({
     id, short, name, brand, number, cls, premium: 'premium_pack', livery: true,
     colors: { main, accent }, stats, sound, wheels: {},

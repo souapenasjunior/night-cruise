@@ -136,7 +136,9 @@ const DICT = {
     'car.p_supra': 'A Supra laranja que virou lenda: seis em linha biturbo e força de sobra em qualquer reta.',
     'shop.loading': 'Carregando o carro…', 'shop.loadFail': 'Não foi possível carregar o carro. Verifique a conexão.',
     // yen (in-game money, earned by driving; no real money anywhere)
-    'coins.lockLine': 'Premium · {price} · você tem {bal}', 'coins.lockGuest': 'Premium · {price}',
+    'coins.lockLine': 'Bloqueado · {price} · você tem {bal}', 'coins.lockGuest': 'Bloqueado · {price}', 'coins.locked': 'Bloqueado',
+    'coins.howUnlockT': 'Como desbloquear', 'coins.howUnlock': 'Junte os ienes do preço e aperte Comprar: o carro fica seu para sempre.',
+    'coins.howEarnT': 'Como ganhar ienes', 'coins.howEarn': 'Dirija logado: ¥ 1 a cada 10 m. Quanto mais longa a viagem, mais você ganha: ×1,25 após 10 min, ×1,5 após 30 min e ×2 após 60 min.',
     'coins.buy': 'Comprar · {price}', 'coins.confirm': 'Confirmar · {price}', 'coins.short': 'Faltam {missing}',
     'coins.signInBtn': 'Entrar para comprar', 'coins.signIn': 'Entre na sua conta (ou crie uma) para ganhar ienes dirigindo e comprar carros.',
     'coins.confirmHint': 'Aperte de novo para comprar o {car}.', 'coins.notEnough': 'Ienes insuficientes para este carro.',
@@ -157,6 +159,8 @@ const DICT = {
     'on.err.auth': 'Não foi possível confirmar sua conta. Entre de novo.', 'on.err.car': 'Esse carro não é seu.',
     'on.err.elsewhere': 'Sua conta entrou no online em outra aba.', 'on.err.full': 'A sala está cheia (20 jogadores).',
     'on.err.net': 'Não foi possível conectar ao online. Tente de novo.',
+    'on.players': 'Jogadores na sala', 'on.playersRoom': 'Sala {room} · {n}/{max}',
+    'on.colName': 'Jogador', 'on.colCar': 'Carro', 'on.colDist': 'Distância', 'on.colSpeed': 'Velocidade', 'on.you': 'você',
     'cred.legal': 'Termos e privacidade',
     // account
     'acc.premiumBadge': 'Coleção completa', 'acc.statCoins': 'Ienes', 'acc.garage': 'Garagem', 'acc.favCar': 'Último carro:',
@@ -270,7 +274,9 @@ const DICT = {
     'car.p_supra': 'The orange Supra that became a legend: twin-turbo straight six and power to spare on any straight.',
     'shop.loading': 'Loading the car…', 'shop.loadFail': "Couldn't load the car. Check your connection.",
     // yen (in-game money, earned by driving; no real money anywhere)
-    'coins.lockLine': 'Premium · {price} · you have {bal}', 'coins.lockGuest': 'Premium · {price}',
+    'coins.lockLine': 'Locked · {price} · you have {bal}', 'coins.lockGuest': 'Locked · {price}', 'coins.locked': 'Locked',
+    'coins.howUnlockT': 'How to unlock', 'coins.howUnlock': 'Save up the price in yen and press Buy: the car is yours for good.',
+    'coins.howEarnT': 'How to earn yen', 'coins.howEarn': 'Drive while signed in: ¥1 every 10 m. The longer the drive, the more you earn: ×1.25 after 10 min, ×1.5 after 30 min and ×2 after 60 min.',
     'coins.buy': 'Buy · {price}', 'coins.confirm': 'Confirm · {price}', 'coins.short': '{missing} to go',
     'coins.signInBtn': 'Sign in to buy', 'coins.signIn': 'Sign in (or create an account) to earn yen by driving and buy cars.',
     'coins.confirmHint': 'Press again to buy the {car}.', 'coins.notEnough': 'Not enough yen for this car.',
@@ -291,6 +297,8 @@ const DICT = {
     'on.err.auth': "Couldn't confirm your account. Sign in again.", 'on.err.car': "That car isn't yours.",
     'on.err.elsewhere': 'Your account went online in another tab.', 'on.err.full': 'The room is full (20 players).',
     'on.err.net': "Couldn't connect to online. Try again.",
+    'on.players': 'Players in the room', 'on.playersRoom': 'Room {room} · {n}/{max}',
+    'on.colName': 'Player', 'on.colCar': 'Car', 'on.colDist': 'Distance', 'on.colSpeed': 'Speed', 'on.you': 'you',
     'cred.legal': 'Terms and privacy',
     // account
     'acc.premiumBadge': 'Full collection', 'acc.statCoins': 'Yen', 'acc.garage': 'Garage', 'acc.favCar': 'Last car:',

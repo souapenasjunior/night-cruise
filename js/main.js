@@ -19,7 +19,7 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
-import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken } from './account.js';
+import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken, myName } from './account.js';
 import { Online, newPrivateCode, normaliseCode, isCode, roomLabel } from './online.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
@@ -220,7 +220,7 @@ const show = { scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(32, 1,
   const top = new THREE.DirectionalLight(0xc8d4ff, 0.45); top.position.set(0, 10, 2); s.add(top);
 }
 // premium cars are fetched only when picked on the car select (not with the game), from the private
-// Storage bucket with signed URLs that only their owners get (local testing: the files in models/)
+// Storage bucket with signed URLs for signed-in players (local testing: the files in models/)
 const carLoads = new Map();
 function loadCar(spec) {
   if (!carLoads.has(spec.id)) {
@@ -239,9 +239,11 @@ function loadCar(spec) {
   return carLoads.get(spec.id);
 }
 function showModel(spec) {
-  // a premium car the player does not own: its picture (the model is only served to owners)
+  // a premium car not owned yet: its 3D model behind a padlock (the files are served to any signed-in
+  // player); a guest gets its picture
   const photo = $('sel-photo');
-  if (locked(spec)) {
+  $('sel-padlock').hidden = !locked(spec);
+  if (locked(spec) && !isSignedIn()) {
     if (show.current) { show.scene.remove(show.current.group); show.current = null; }
     $('sel-loading').hidden = true;
     photo.src = shopImg(spec); photo.alt = spec.name; photo.hidden = false;
@@ -505,7 +507,7 @@ function buildChips() {
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', `${s.name} (${s.cls})`);
     // name in plain white; the stripe shows the paint chosen for that car (set in renderPaints)
-    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span>${s.premium ? '<span class="tag">PREMIUM</span>' : ''}`;
+    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span>${s.premium ? '<svg class="pl" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg>' : ''}`;
     b.onclick = () => { const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
     b.ondblclick = () => startDrive();
     wrapEl.appendChild(b);
@@ -621,6 +623,25 @@ function onlineHud() {
   onlineBadge = text;
   $('online-badge').hidden = !text;
   $('online-badge-text').textContent = text;
+}
+// the players in the room, beside the full-screen map (M) while playing online
+let playersT = 0;
+function playersPanel(dt) {
+  const el = $('players');
+  el.hidden = !(onlineWant && online.connected && player);
+  if (el.hidden) return;
+  playersT -= dt;
+  if (playersT > 0) return;
+  playersT = 0.25;
+  const carName = id => { const s = HERO_SPECS.find(x => x.id === id); return s ? s.name : id; };
+  const dist = m => (m >= 1000 ? `${num(m / 1000, 1)} km` : `${Math.round(m / 10) * 10} m`);
+  const kmh = v => `${Math.round((S.gameplay.units === 'mph' ? 2.237 : 3.6) * v)} ${S.gameplay.units === 'mph' ? 'mph' : 'km/h'}`;
+  const rows = online.others().map(o => ({ ...o, d: o.x === null ? Infinity : Math.hypot(o.x - player.pos.x, o.z - player.pos.z) })).sort((a, b) => a.d - b.d);
+  $('players-room').textContent = t('on.playersRoom', { room: roomLabel(online.room), n: online.count, max: 20 });
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let html = `<tr class="me"><td>${esc(myName() || t('on.you'))} <em>${t('on.you')}</em></td><td>${esc(player.spec.name)}</td><td>—</td><td>${kmh(Math.abs(player.vf || 0))}</td></tr>`;
+  for (const r of rows) html += `<tr><td>${esc(r.name)}</td><td>${esc(carName(r.car))}</td><td>${r.d === Infinity ? '…' : dist(r.d)}</td><td>${kmh(r.speed)}</td></tr>`;
+  $('players-list').innerHTML = html;
 }
 function openOnline() {
   const signed = isSignedIn();
@@ -1239,6 +1260,7 @@ function driveStep(dt) {
     blinkOn: player.blinkOn, blinkActive: player.lights.left || player.lights.right || player.lights.hazard,
     other: traffic.nearestCruiser, traffic: traffic.nearestTraffic,
   });
+  hud.others = onlineWant && online ? online.others() : null;
   hud.update(dt, player, traffic);
   updateLampLights(dt, Math.sin(player.yaw), Math.cos(player.yaw), player.pos.x, player.pos.z);
   hemi.intensity = damp(hemi.intensity, tunnel ? 0.3 : 0.62, 3, dt);
@@ -1315,7 +1337,7 @@ function tick(now) {
     renderPass.scene = scene; renderPass.camera = camera;
     if (bloom.enabled) composer.render(); else renderer.render(scene, camera);
     if (state === 'drive' && S.gameplay.mirror && player) renderMirror();
-    if (state === 'map') bigMap.draw(player, traffic);
+    if (state === 'map') { bigMap.draw(player, traffic, onlineWant && online ? online.others() : []); playersPanel(dt); }
   } else if (state === 'select') {
     updateShowroom(dt);
     audio.idle(false);

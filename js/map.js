@@ -118,7 +118,7 @@ export class BigMap {
   close() { this.isOpen = false; this.root.hidden = true; this.drag = null; }
   center(player) { this.view.cx = player.pos.x; this.view.cz = player.pos.z; this.view.scale = Math.max(this.view.scale, this.fitScale * 3); }
 
-  draw(player, traffic) {
+  draw(player, traffic, others = []) {
     if (!this.isOpen) return;
     this._resize();
     const c = this.ctx, dpr = this.dpr, v = this.view;
@@ -203,6 +203,27 @@ export class BigMap {
       c.font = '700 15px "Big Shoulders Display", "Arial Narrow", sans-serif';
       c.fillStyle = '#eceff7';
       c.fillText(name, lx + 3, sy + 7);
+    }
+    // other players online: green arrows with their names
+    for (const o of others) {
+      if (o.x === null) continue;
+      const [ox, oy] = toScreen(o.x, o.z);
+      if (ox < -60 || oy < -30 || ox > cw + 60 || oy > ch + 30) continue;
+      const oa = Math.atan2(Math.cos(o.yaw), Math.sin(o.yaw));
+      c.save();
+      c.translate(ox, oy);
+      c.rotate(oa + Math.PI / 2);
+      c.beginPath();
+      c.moveTo(0, -10); c.lineTo(7, 8); c.lineTo(0, 4); c.lineTo(-7, 8); c.closePath();
+      c.lineWidth = 2.5; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.stroke();
+      c.fillStyle = '#3fe07a'; c.fill();
+      c.restore();
+      c.font = '700 13px "Big Shoulders Display", "Arial Narrow", sans-serif';
+      const nw = c.measureText(o.name).width;
+      c.fillStyle = 'rgba(8,10,20,0.78)';
+      c.fillRect(ox + 11, oy - 9, nw + 10, 18);
+      c.fillStyle = '#cff5dd';
+      c.fillText(o.name, ox + 16, oy);
     }
     // player arrow (always on top)
     const [sx, sy] = toScreen(player.pos.x, player.pos.z);

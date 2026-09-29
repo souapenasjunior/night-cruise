@@ -246,6 +246,15 @@ function prepare(scene, spec) {
     }
     m.material = painted.get(src);
   }
+  // dark tinted windows (G.windowMat by material, G.windowNode by mesh name): some files ship them almost
+  // clear, and the empty cabin showed through
+  let tint = null;
+  for (const m of meshes) {
+    if (!test(G.windowMat, matName(m)) && !test(G.windowNode, m.name)) continue;
+    tint = tint || new THREE.MeshStandardMaterial({ name: 'window:tint', color: 0x06070a, metalness: 0.1, roughness: 0.05, transparent: true, opacity: 0.94, envMapIntensity: 1.2 });
+    m.material = tint;
+    m.castShadow = false;
+  }
   // Lamps by position (G.lampSplit): some files use one lamp material for everything (headlamps, tail
   // lamps, indicators, even parts under the car) or a lens material shared with a window. Each lamp mesh
   // is cut by triangle: 'head' only at the nose at lamp height, 'tail' only at the tail; the rest never

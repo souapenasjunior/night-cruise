@@ -103,8 +103,14 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .chip:hover { border-color: var(--line-2); }
 .chip.sel { border-color: var(--sodium); transform: translateY(-3px); background: rgba(40, 30, 14, 0.6); }
 .chip:focus-visible { outline: 2px solid var(--sodium); outline-offset: 2px; }
-.chip .tag { position: absolute; top: 4px; right: 5px; font: 700 8.5px/1 var(--body); letter-spacing: 0.12em; color: var(--sodium); }
+.chip .pl { position: absolute; top: 5px; right: 5px; width: 12px; height: 12px; color: var(--sodium); display: none; }
+.chip.locked .pl { display: block; }
 .chip.locked .n { opacity: 0.55; }
+/* a locked car in the showroom: a padlock over it */
+#sel-padlock { position: absolute; right: clamp(24px, 22vw, 420px); top: 16%; display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: rgba(8, 10, 20, 0.78); border: 1px solid rgba(255, 176, 60, 0.55); color: var(--sodium); font: 800 18px/1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; pointer-events: none; }
+#sel-padlock svg { width: 26px; height: 26px; }
+#sel-padlock[hidden] { display: none; }
+@media (max-width: 760px) { #sel-padlock { right: 50%; transform: translateX(50%); top: 10%; } }
 .paints[hidden], .sel-loading[hidden], .lock[hidden] { display: none; }
 .sel-loading { color: var(--dim); font-size: 13px; }
 /* premium car not owned: its picture in the showroom (the 3D model is only served to owners) */
@@ -117,6 +123,8 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .lock-line { display: flex; align-items: center; gap: 8px; color: var(--sodium); font: 700 16px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .lock svg { width: 14px; height: 14px; flex: none; }
 .lock small { color: #cfd4e2; font-size: 12.5px; min-height: 1em; }
+.lock-how { margin: 0; max-width: 420px; color: #cfd4e2; font-size: 12.5px; line-height: 1.4; }
+.lock-how b { display: block; color: var(--text); font: 700 10.5px/1.6 var(--body); letter-spacing: 0.12em; text-transform: uppercase; }
 .lock small:empty { display: none; }
 #sel-go.buy { background: linear-gradient(180deg, #ffc35c, #ff9f1c); color: #1a1206; box-shadow: 0 0 24px rgba(255, 170, 40, 0.35); }
 #sel-go.short { opacity: 0.75; }
@@ -140,6 +148,19 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 #online-badge { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(8, 10, 20, 0.62); border: 1px solid rgba(90, 220, 140, 0.35); font: 700 12px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #cff5dd; pointer-events: none; }
 #online-badge[hidden] { display: none; }
 #online-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fe07a; box-shadow: 0 0 8px #3fe07a; }
+/* players in the room, beside the full-screen map */
+#players { position: absolute; top: clamp(64px, 10vh, 96px); right: clamp(16px, 3vw, 36px); width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow: auto; padding: 14px 16px 12px; background: rgba(8, 10, 20, 0.86); border: 1px solid rgba(90, 220, 140, 0.35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); pointer-events: none; }
+#players[hidden] { display: none; }
+#players header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+#players header b { font: 800 20px/1 var(--display); letter-spacing: 0.05em; text-transform: uppercase; }
+#players header span { color: #9fd6b7; font: 700 11px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; }
+#players table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+#players th { text-align: left; color: var(--dim); font: 600 10.5px/1 var(--body); letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+#players td { padding: 7px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#players td:first-child { font-weight: 700; color: #eceff7; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+#players tr.me td { color: #ffd27a; }
+#players em { font-style: normal; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-left: 4px; }
+@media (max-width: 560px) { #players th:nth-child(4), #players td:nth-child(4) { display: none; } }
 /* yen on the HUD while driving */
 #coins { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); right: clamp(16px, 3vw, 36px); display: grid; justify-items: end; gap: 3px; pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
 #coins[hidden] { display: none; }
@@ -385,9 +406,12 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
     <div class="sel-loading" id="sel-loading" hidden data-i18n="shop.loading">Carregando o carro…</div>
     <div class="lock" id="sel-lock" hidden>
       <div class="lock-line"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span id="sel-lock-text"></span></div>
+      <p class="lock-how"><b data-i18n="coins.howUnlockT">Como desbloquear</b> <span data-i18n="coins.howUnlock">Junte os ienes do preço e aperte Comprar: o carro fica seu para sempre.</span></p>
+      <p class="lock-how"><b data-i18n="coins.howEarnT">Como ganhar ienes</b> <span data-i18n="coins.howEarn">Dirija logado: ¥ 1 a cada 10 m. Quanto mais longa a viagem, mais você ganha: ×1,25 após 10 min, ×1,5 após 30 min e ×2 após 60 min.</span></p>
       <small id="sel-msg" role="status" aria-live="polite"></small>
     </div>
   </div>
+  <div id="sel-padlock" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span data-i18n="coins.locked">Bloqueado</span></div>
   <div class="strip">
     <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
     <div class="row">
@@ -422,6 +446,10 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 
 <div id="map" class="screen" hidden>
   <canvas id="map-c" aria-label="Mapa da via expressa" data-i18n-aria="map.aria"></canvas>
+  <div id="players" hidden>
+    <header><b data-i18n="on.players">Jogadores na sala</b><span id="players-room"></span></header>
+    <table><thead><tr><th data-i18n="on.colName">Jogador</th><th data-i18n="on.colCar">Carro</th><th data-i18n="on.colDist">Distância</th><th data-i18n="on.colSpeed">Velocidade</th></tr></thead><tbody id="players-list"></tbody></table>
+  </div>
   <div class="map-head"><h2 data-i18n="map.title">Mapa</h2><span data-i18n="map.sub">Anel K1 · Estacionamento Nishi</span></div>
   <div class="map-keys" data-i18n-html="map.keys"><span><kbd>Roda</kbd> zoom</span><span><kbd>Arrastar</kbd> mover</span><span><kbd>C</kbd> centralizar no carro</span><span><kbd>M</kbd> / <kbd>Esc</kbd> fechar</span></div>
   <div class="map-legend">
@@ -619,7 +647,7 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.19.0';
+  var V = '1.20.0';
   var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
