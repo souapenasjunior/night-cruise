@@ -54,6 +54,16 @@ export async function initAccount(settings, h) {
     token = session ? session.access_token : null;
     setTimeout(() => onAuth(event, session), 0);
   });
+  // back from the Mercado Pago checkout (?pagamento=aprovado|pendente|falhou): only a hint for the message;
+  // the unlock itself comes from the server once the payment notification is verified there
+  const q = new URLSearchParams(location.search);
+  if (q.has('pagamento')) {
+    payReturn = q.get('pagamento');
+    for (const k of ['pagamento', 'collection_id', 'collection_status', 'payment_id', 'status', 'external_reference', 'payment_type', 'merchant_order_id', 'preference_id', 'site_id', 'processing_mode', 'merchant_account_id']) q.delete(k);
+    const rest = q.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    if (payReturn === 'falhou') { tellPurchase(t('shop.failed')); payReturn = null; }
+  }
   if (pendingNotice && pendingNotice !== 'acc.confirmed') { history.replaceState(null, '', location.pathname + location.search); openAccount('login', t(pendingNotice)); pendingNotice = null; }
   SET.onSave(() => { if (user && !applying) scheduleSettingsUpload(); });
   window.addEventListener('pagehide', flushOnExit);
@@ -70,7 +80,9 @@ async function onAuth(event, session) {
     sb.rpc('touch_last_seen').then(() => {}, () => {});
     if (pendingNotice === 'acc.confirmed') { pendingNotice = null; openAccount('profile', t('acc.confirmed')); }
   }
-  if (!user) { profile = null; stats = null; drive = null; }
+  if (user) await loadOwned();
+  if (!user) { profile = null; stats = null; drive = null; owned = new Set(); }
+  if (user && payReturn) checkPurchase();
   render();
   if (hooks.changed) hooks.changed();
 }
@@ -83,6 +95,51 @@ async function loadProfile() {
   ]);
   if (!p.error) profile = p.data;
   if (!s.error) stats = s.data;
+}
+
+// ------------------------------------------------------------------ shop
+// What the player owns comes from car_unlocks (readable only by its owner, written only by the server).
+// Buying: the Edge Function create-checkout opens an order and a Mercado Pago checkout; the webhook
+// (mp-webhook) confirms the payment with Mercado Pago itself and only then unlocks the cars.
+let owned = new Set();
+let payReturn = null; // 'aprovado' | 'pendente' after coming back from the checkout
+export const isSignedIn = () => !!user;
+export const ownsCar = id => owned.has(id);
+async function loadOwned() {
+  if (!user) return;
+  const { data, error } = await sb.from('car_unlocks').select('car_id').eq('user_id', user.id);
+  if (!error) owned = new Set(data.map(r => r.car_id));
+}
+function tellPurchase(msg) { if (hooks.purchase) hooks.purchase(msg); }
+export async function buyProduct(product) {
+  if (!sb || !user) return t('shop.signInFirst');
+  tellPurchase(t('shop.redirect'));
+  try {
+    const { data, error } = await sb.functions.invoke('create-checkout', { body: { product } });
+    if (error || !data || !data.url) {
+      // the function answers errors as { error: code } (supabase-js keeps the response in error.context)
+      let code = data && data.error;
+      if (!code && error && error.context && error.context.json) code = (await error.context.json().catch(() => ({}))).error;
+      if (code === 'already_owned') { await loadOwned(); if (hooks.changed) hooks.changed(); return t('shop.approved'); }
+      if (code === 'too_frequent') return t('acc.err.rate');
+      return t('shop.error');
+    }
+    location.href = data.url;
+    return null;
+  } catch (e) { return t('shop.error'); }
+}
+// the webhook usually arrives within seconds of the return: look for the unlock for up to 2 minutes
+async function checkPurchase() {
+  const kind = payReturn;
+  payReturn = null;
+  tellPurchase(t(kind === 'aprovado' ? 'shop.checking' : 'shop.pending'));
+  const before = owned.size;
+  for (let i = 0; i < 40 && user; i++) {
+    await new Promise(r => setTimeout(r, i < 10 ? 3000 : 6000));
+    await loadOwned();
+    if (owned.size > before) { tellPurchase(t('shop.approved')); return; }
+  }
+  tellPurchase(t('shop.pending'));
 }
 
 // ------------------------------------------------------------------ settings sync

@@ -76,7 +76,8 @@ ok((await one('select count(*)::int n from public.car_unlocks where user_id = $1
 // ------------------------------------------------------------------ anonymous visitor
 console.log('anonymous');
 await as('anon', {}, async tx => {
-  ok((await tx.query('select * from public.cars')).rows.length === 3, 'anon reads the car catalogue');
+  ok((await tx.query('select * from public.cars')).rows.length === 10, 'anon reads the car catalogue (3 free + 7 premium)');
+  ok((await tx.query("select price_cents from public.products where id = 'premium_pack'")).rows[0].price_cents === 1990, 'anon reads the shop catalogue');
 });
 await fails(as('anon', {}, tx => tx.query('select * from public.profiles')), /permission denied/, 'anon cannot read profiles');
 await fails(as('anon', {}, tx => tx.query("select public.set_username('hacker')")), /permission denied/, 'anon cannot call set_username');
@@ -153,6 +154,38 @@ await db.query("insert into public.cars (id, name, unlocked_by_default) values (
 await db.query("update public.drive_sessions set started_at = now() - interval '1 minute' where user_id = $1", [a]);
 await fails(as(...player(a), tx => tx.query("select public.start_drive('secret')")), /car_locked/, 'a locked car cannot be driven for stats');
 ok((await one('select drives from public.player_stats where user_id = $1', [a])).drives === 1, 'drive count kept by the server');
+
+// ------------------------------------------------------------------ shop
+console.log('shop');
+const svc = fn => as('service_role', { role: 'service_role' }, fn);
+const owns = async (u, car) => !!(await one('select 1 x from public.car_unlocks where user_id = $1 and car_id = $2', [u, car]));
+ok((await one("select count(*)::int n from public.product_cars where product_id = 'premium_pack'")).n === 7, 'the pack holds the 7 premium cars');
+ok(!(await owns(c, 'p_r34')), 'premium cars are locked for a new player');
+await fails(as(...player(c), tx => tx.query("select * from public.shop_create_order($1, 'premium_pack')", [c])), /permission denied/, 'a player cannot open orders directly');
+await fails(as(...player(c), tx => tx.query("select public.shop_apply_payment($1, '1', 'approved', null, 1990, 'BRL')", [a])), /permission denied/, 'a player cannot apply payments');
+await fails(as(...player(c), tx => tx.query("insert into public.orders (user_id, product_id, amount_cents, currency) values ($1, 'premium_pack', 1, 'BRL')", [c])), /permission denied/, 'a player cannot insert orders');
+const ord = (await svc(tx => tx.query("select * from public.shop_create_order($1, 'premium_pack')", [c]))).rows[0];
+ok(ord && ord.amount_cents === 1990 && ord.currency === 'BRL', 'the server opens an order at the catalogue price');
+await fails(svc(tx => tx.query("select * from public.shop_create_order($1, 'nope')", [c])), /unknown_product/, 'unknown product refused');
+await as(...player(c), async tx => { ok((await tx.query('select id from public.orders')).rows.length === 1, 'a player sees their own order'); });
+await as(...player(d), async tx => { ok((await tx.query('select id from public.orders')).rows.length === 0, "and not someone else's"); });
+await fails(svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'approved', null, 1, 'BRL')", [ord.order_id])), /amount_mismatch/, 'a payment of the wrong amount unlocks nothing');
+ok(!(await owns(c, 'p_r34')), 'still locked after the wrong amount');
+let st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'pending', 'pending_waiting_payment', 1990, 'BRL') s", [ord.order_id]))).rows[0].s;
+ok(st === 'pending' && !(await owns(c, 'p_r34')), 'a pending payment (Pix not paid yet) unlocks nothing');
+st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'approved', 'accredited', 1990, 'BRL') s", [ord.order_id]))).rows[0].s;
+ok(st === 'approved' && (await one("select count(*)::int n from public.car_unlocks where user_id = $1 and source = 'purchase'", [c])).n === 7, 'an approved payment unlocks the 7 cars');
+st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'approved', 'accredited', 1990, 'BRL') s", [ord.order_id]))).rows[0].s;
+ok(st === 'approved' && (await one("select count(*)::int n from public.car_unlocks where user_id = $1", [c])).n === 10, 'the same notification twice changes nothing');
+st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'pending', null, 1990, 'BRL') s", [ord.order_id]))).rows[0].s;
+ok(st === 'approved', 'a late pending notification does not undo an approval');
+await fails(svc(tx => tx.query("select * from public.shop_create_order($1, 'premium_pack')", [c])), /already_owned/, 'no second order for a pack already owned');
+await db.query("update public.drive_sessions set started_at = now() - interval '1 minute'");
+ok(!!(await as(...player(c), tx => tx.query("select public.start_drive('p_r34') id"))).rows[0].id, 'a bought car can be driven for stats');
+st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'refunded', 'refunded', 1990, 'BRL') s", [ord.order_id]))).rows[0].s;
+ok(st === 'refunded' && !(await owns(c, 'p_r34')) && (await owns(c, 'r32')), 'a refund takes the premium cars back (free cars stay)');
+st = (await svc(tx => tx.query("select public.shop_apply_payment($1, '111', 'approved', null, 1990, 'BRL') s", [ord.order_id]))).rows[0].s;
+ok(st === 'refunded' && !(await owns(c, 'p_r34')), 'a refunded order cannot be approved again');
 
 // ------------------------------------------------------------------ account deletion
 console.log('account deletion');

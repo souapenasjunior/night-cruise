@@ -29,6 +29,27 @@ export const JDM_SPECS = [
     wheels: {},
     glb: { file: 'models/tiara83.json', paint: /Bodymat$/, rotY: -Q, length: 4.2, wheelNode: /WheelTuner/, caliperNode: /CaliperTuner/, headNode: /_Headlights_/, tailNode: /_Brakelights_/, revNode: /_Reverselights_/ },
   },
+  // Premium pack (sold as one product, 'premium_pack'): drivable only once the account owns it. Their
+  // files load only when picked on the car select, never with the game. Each keeps its original livery
+  // (painted in the texture), so there is no colour choice. The files were prepared (scale, wheels per
+  // corner, simplified, WebP) so every wheel/caliper corner is its own mesh: wheel_* / caliper_* nodes.
+  ...[
+    ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 290, accel: 9.0, grip: 1.15, drift: 0.9, mass: 1560 }, { type: 'v6', turbo: true, pops: 0.5 }],
+    ['p_rx7', 'RX-7', "Julius's RX-7", 'MAZDA', '7', 'Esportivo', '#d4262c', '#141414', 4.3, { top: 270, accel: 8.8, grip: 1.05, drift: 1.3, mass: 1280 }, { type: 'i4turbo', turbo: true, pops: 1.0 }],
+    ['p_eclipse', 'ECLIPSE', 'Eclipse 1995', 'MITSUBISHI', '95', 'Esportivo', '#27a55b', '#141414', 4.4, { top: 245, accel: 7.9, grip: 1.0, drift: 1.0, mass: 1300 }, { type: 'i4turbo', turbo: true, pops: 0.8 }],
+    ['p_s15', 'S15', 'Silvia S15 "Mona Lisa"', 'NISSAN', '15', 'Drift', '#e8761c', '#141414', 4.45, { top: 255, accel: 8.2, grip: 1.0, drift: 1.45, mass: 1250 }, { type: 'i4turbo', turbo: true, pops: 0.9 }],
+    ['p_supra2', 'SUPRA SJ', "Slap Jack's Supra", 'TOYOTA', '94', 'Superesportivo', '#e05a1c', '#f2c21c', 4.51, { top: 285, accel: 9.1, grip: 1.08, drift: 1.1, mass: 1500 }, { type: 'v6', turbo: true, pops: 0.6 }],
+    ['p_s2000', 'S2000', "Suki's S2000", 'HONDA', '20', 'Esportivo', '#e86aa6', '#f4f4f4', 4.13, { top: 250, accel: 8.0, grip: 1.1, drift: 1.05, mass: 1260 }, { type: 'i4rally', pops: 0.5 }],
+    ['p_supra', 'SUPRA', 'Supra MK IV', 'TOYOTA', '80', 'Superesportivo', '#f07818', '#141414', 4.51, { top: 295, accel: 9.3, grip: 1.07, drift: 1.15, mass: 1510 }, { type: 'v6', turbo: true, pops: 0.7 }],
+  ].map(([id, short, name, brand, number, cls, main, accent, length, stats, sound]) => ({
+    id, short, name, brand, number, cls, premium: 'premium_pack', livery: true,
+    colors: { main, accent }, stats, sound, wheels: {},
+    glb: {
+      file: `models/${id}.json`, rotY: 0, length, paint: /Paint/,
+      wheelNode: /^wheel_/, caliperNode: /^caliper_/,
+      headMat: /LightA/, tailMat: /red_glass|Glas_R/, tailPts: /red_glass|Glas_R|LightA/,
+    },
+  })),
 ];
 
 // body colours offered for every car (the first one is the default)
@@ -85,4 +106,12 @@ export const CREDITS = [
   { title: 'Low Poly Car: Toyota ToyoAce Van', author: 'ROH3D', url: 'https://sketchfab.com/3d-models/low-poly-car-toyota-toyoace-van-b8abd3caa4864f41aaba6a583591155d' },
   { title: 'Isuzu Erga Mio bus', author: 'own.guest', url: 'https://sketchfab.com/3d-models/isuzu-erga-mio-bus-050e8acd0bbc4da0902a8a874ef10fca' },
   { title: 'Lowpoly Sedan & Wagon', author: 'Han66st', url: 'https://sketchfab.com/3d-models/lowpoly-sedan-wagon-e11a46478c674b279fe9d299b2125c30' },
+  // premium pack
+  { title: "Brian's R34 from 2 Fast 2 Furious", author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/brians-r34-from-2-fast-2-furious-c424e4f18c9742d296920f069d139b45' },
+  { title: "Julius's RX7 from 2Fast 2Furious", author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/juliuss-rx7-from-2fast-2furious-df6988a4756c48f5a038327ae750058f' },
+  { title: 'Mitsubishi Eclipse From F&F', author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/mitsubishi-eclipse-from-ff-72f24781cf0e4672a39c2603352eebcb' },
+  { title: 'Nissan S15 "Mona Lisa" From F&F Tokyo Drift', author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/nissan-s15-mona-lisa-from-ff-tokyo-drift-a258e6e9a0974aa693ea3e55d0931a6e' },
+  { title: "Slap Jack's Supra from 2Fast 2Furious", author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/slap-jacks-supra-from-2fast-2furious-8d1effbeefdc4052814e247ffb5ab5f7' },
+  { title: "Suki's S2000 from 2Fast 2Furious", author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/sukis-s2000-from-2fast-2furious-c1469160e8b1448db5b8b760ffd1d33f' },
+  { title: 'Toyota Supra from F&F', author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/toyota-supra-from-ff-460aa5fc92904f36a81bcdf4fc5e166f' },
 ];

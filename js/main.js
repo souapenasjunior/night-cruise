@@ -7,7 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildNetwork } from './network.js';
 import { World } from './world.js';
 import { HERO_SPECS, CarModel } from './cars.js';
-import { loadGlbCars } from './glbcars.js';
+import { loadGlbCars, glbReady } from './glbcars.js';
 import { CREDITS, TRAFFIC_GLB, PAINTS } from './jdmspecs.js';
 import { Player } from './player.js';
 import { Traffic } from './traffic.js';
@@ -19,7 +19,7 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
-import { initAccount, isAccountOpen, closeAccount, driveStarted, driveTick, driveStopped } from './account.js';
+import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyProduct } from './account.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -218,7 +218,25 @@ const show = { scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(32, 1,
   const rimB = new THREE.PointLight(0x40c8ff, 18, 18, 1.8); rimB.position.set(6, 2.8, -6); s.add(rimB);
   const top = new THREE.DirectionalLight(0xc8d4ff, 0.45); top.position.set(0, 10, 2); s.add(top);
 }
+// premium cars are fetched only when picked on the car select (not with the game)
+const carLoads = new Map();
+function loadCar(spec) {
+  if (!carLoads.has(spec.id)) {
+    carLoads.set(spec.id, loadGlbCars([spec]).then(() => true, e => { carLoads.delete(spec.id); console.warn('[car]', spec.id, e && e.message); return false; }));
+  }
+  return carLoads.get(spec.id);
+}
 function showModel(spec) {
+  if (!glbReady(spec.id)) {
+    if (show.current) { show.scene.remove(show.current.group); show.current = null; }
+    $('sel-loading').hidden = false;
+    $('sel-loading').textContent = t('shop.loading');
+    loadCar(spec).then(ok => {
+      if (state === 'select' && HERO_SPECS[selIndex] === spec) { if (ok) updateSelect(); else $('sel-loading').textContent = t('shop.loadFail'); }
+    });
+    return;
+  }
+  $('sel-loading').hidden = true;
   let m = show.models.get(spec.id);
   if (!m) { m = new CarModel(spec, { hq: true }); m.setLights({ head: true }); show.models.set(spec.id, m); }
   if (m.setPaint) m.setPaint(paintOf(spec));
@@ -418,10 +436,13 @@ $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
 
 // select: body colour (5 per car; the first is the model's original paint)
 const paintIdx = spec => Math.min((S.paintIdx && S.paintIdx[spec.id]) || 0, PAINTS.length - 1);
-const paintOf = spec => PAINTS[paintIdx(spec)].hex;
+// (a car with a livery keeps its original paint: null)
+const paintOf = spec => (spec.livery ? null : PAINTS[paintIdx(spec)].hex);
+// a premium car the account does not own yet: shown on the car select, not drivable
+const locked = spec => !!spec.premium && !ownsCar(spec.id);
 function choosePaint(i) {
   const s = HERO_SPECS[selIndex];
-  if (i < 0 || i >= PAINTS.length) return;
+  if (s.livery || i < 0 || i >= PAINTS.length) return;
   S.paintIdx = S.paintIdx || {};
   S.paintIdx[s.id] = i;
   SET.save(S);
@@ -431,9 +452,11 @@ function choosePaint(i) {
   audio.menuBlip(true);
 }
 function renderPaints() {
-  [...$('sel-chips').children].forEach((c, i) => { const sw = c.querySelector('.sw'); if (sw) sw.style.background = paintOf(HERO_SPECS[i]); });
+  [...$('sel-chips').children].forEach((c, i) => { const sw = c.querySelector('.sw'); if (sw) sw.style.background = paintOf(HERO_SPECS[i]) || HERO_SPECS[i].colors.main; });
   const s = HERO_SPECS[selIndex], el = $('sel-paints');
   el.innerHTML = '';
+  el.parentElement.hidden = !!s.livery;
+  if (s.livery) return;
   const cur = paintIdx(s);
   PAINTS.forEach(({ name, hex }, i) => {
     const b = document.createElement('button');
@@ -458,7 +481,7 @@ function buildChips() {
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', `${s.name} (${s.cls})`);
     // name in plain white; the stripe shows the paint chosen for that car (set in renderPaints)
-    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span>`;
+    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span>${s.premium ? '<span class="tag">PREMIUM</span>' : ''}`;
     b.onclick = () => { const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
     b.ondblclick = () => startDrive();
     wrapEl.appendChild(b);
@@ -483,9 +506,15 @@ function updateSelect() {
     statRow(t('stat.grip'), (st.grip - 0.6) / 0.75, t(st.grip >= 1.05 ? 'grip.high' : st.grip >= 0.88 ? 'grip.mid' : 'grip.low')) +
     statRow(t('stat.rear'), (st.drift - 0.4) / 1.1, t(st.drift >= 1.2 ? 'rear.loose' : st.drift >= 0.85 ? 'rear.neutral' : 'rear.firm')) +
     statRow(t('stat.mass'), st.mass / 4400, `${st.mass} kg`);
-  [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); });
+  [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', locked(HERO_SPECS[i])); });
   const chip = $('sel-chips').children[selIndex];
   if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // premium, not owned: the offer instead of "Drive"
+  const lk = locked(s);
+  $('sel-lock').hidden = !lk;
+  $('sel-go').disabled = lk;
+  $('sel-go').textContent = lk ? t('shop.lockedBtn') : t('sel.go');
+  if (lk) $('sel-buy').textContent = isSignedIn() ? t('shop.buy') : t('shop.signInToBuy');
   showModel(s);
   renderPaints();
   audio.setCar({ ...s.sound, top: s.stats.top });
@@ -499,6 +528,13 @@ function goSelect() {
 }
 $('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else goTitle(); };
 $('sel-go').onclick = () => startDrive();
+// premium pack: sign in first, then the payment page (the server unlocks the cars once it is paid)
+$('sel-buy').onclick = async () => {
+  if (!isSignedIn()) { openAccount('login', t('shop.signInFirst')); return; }
+  $('sel-lock-msg').textContent = t('acc.wait');
+  const err = await buyProduct('premium_pack');
+  if (err) $('sel-lock-msg').textContent = err;
+};
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
 canvas.addEventListener('pointerup', () => { show.drag = null; });
@@ -585,6 +621,8 @@ function parkAtSlot(k) {
 // drive
 function startDrive() {
   const spec = HERO_SPECS[selIndex];
+  if (locked(spec)) { $('sel-buy').focus(); return; }
+  if (!glbReady(spec.id)) return; // still loading
   S.lastCar = spec.id;
   SET.save(S);
   let spawn = null;
@@ -1145,7 +1183,7 @@ async function boot() {
   world = new World(scene, net, S.graphics);
   await step(50, t('load.cars'));
   let nCars = 0;
-  const allCars = [...HERO_SPECS, ...TRAFFIC_GLB];
+  const allCars = [...HERO_SPECS.filter(s => !s.premium), ...TRAFFIC_GLB];
   await loadGlbCars(allCars, () => { nCars++; bar.style.width = `${50 + (nCars / allCars.length) * 12}%`; });
   await step(62, t('load.lamps'));
   // environment map from the city itself (reflections on paint, glass and asphalt)
@@ -1162,7 +1200,7 @@ async function boot() {
   cubeRT.dispose();
   await step(78, t('load.traffic'));
   const counts = SET.TRAFFIC_COUNTS.max;
-  traffic = new Traffic(scene, net, world, { count: counts[0], cruisers: counts[1], heroSpecs: HERO_SPECS, hq: S.graphics.quality !== 'low', streaks: true });
+  traffic = new Traffic(scene, net, world, { count: counts[0], cruisers: counts[1], heroSpecs: HERO_SPECS.filter(s => !s.premium), hq: S.graphics.quality !== 'low', streaks: true });
   const [n, c] = SET.TRAFFIC_COUNTS[S.graphics.traffic] || SET.TRAFFIC_COUNTS.medium;
   traffic.setCounts(n, c);
   traffic.setRadius(S.graphics.renderDist * 0.8);
@@ -1176,7 +1214,7 @@ async function boot() {
   await step(92, t('load.shaders'));
   // build every cruiser now and compile its shaders, so a car appearing mid-drive never stalls a frame
   const warm = [];
-  for (const s of HERO_SPECS) { const m = traffic._heroModel(s); if (!m.group.parent) { scene.add(m.group); warm.push(m.group); } }
+  for (const s of HERO_SPECS.filter(sp => glbReady(sp.id))) { const m = traffic._heroModel(s); if (!m.group.parent) { scene.add(m.group); warm.push(m.group); } }
   renderer.compile(scene, camera);
   for (const g of warm) scene.remove(g);
   await step(100, 'Pronto.');
@@ -1186,6 +1224,9 @@ async function boot() {
   // accounts load after the game is up and never hold it back (nothing happens without a configured backend)
   initAccount(S, {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
+    // signed in / out, or a purchase unlocked cars: the car select shows the new state
+    changed: () => { if (state === 'select') updateSelect(); },
+    purchase: msg => { $('sel-lock-msg').textContent = msg; if (state === 'select') updateSelect(); },
   }).catch(e => console.warn('[account]', e && e.message));
   if (location.hash === '#debug') {
     let fake = performance.now();
