@@ -71,12 +71,12 @@ ok((await one('select username from public.profiles where id = $1', [b])).userna
 ok((await one('select username from public.profiles where id = $1', [c])).username.startsWith('driver_'), 'invalid name falls back to driver_xxxxxx');
 ok((await one('select username from public.profiles where id = $1', [d])).username.startsWith('driver_'), 'reserved name refused');
 ok(!!(await one('select * from public.player_stats where user_id = $1', [a])), 'stats row created');
-ok((await one('select count(*)::int n from public.car_unlocks where user_id = $1', [a])).n === 6, 'the 6 playable cars unlocked by default');
+ok((await one('select count(*)::int n from public.car_unlocks where user_id = $1', [a])).n === 3, 'the 3 playable cars unlocked by default');
 
 // ------------------------------------------------------------------ anonymous visitor
 console.log('anonymous');
 await as('anon', {}, async tx => {
-  ok((await tx.query('select * from public.cars')).rows.length === 6, 'anon reads the car catalogue');
+  ok((await tx.query('select * from public.cars')).rows.length === 3, 'anon reads the car catalogue');
 });
 await fails(as('anon', {}, tx => tx.query('select * from public.profiles')), /permission denied/, 'anon cannot read profiles');
 await fails(as('anon', {}, tx => tx.query("select public.set_username('hacker')")), /permission denied/, 'anon cannot call set_username');

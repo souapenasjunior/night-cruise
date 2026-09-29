@@ -47,7 +47,7 @@ Night Cruise is a relaxed driving game inspired by Tokyo's expressways (the Shut
 ### Legendas para posts
 1. Tóquio, meia-noite. O anel está livre. 🌃 Jogue grátis no navegador: nightcruisegame.com
 2. Sem corrida. Sem missão. Só a via expressa e a cidade acesa. #NightCruise #indiegame #threejs
-3. Escolha o seu: R32, S13, S14, 350Z, NSX ou o clássico dos anos 80. Estacione no Nishi PA e saia para a noite.
+3. Escolha o seu: R32, NSX ou o clássico dos anos 80. Estacione no Nishi PA e saia para a noite.
 4. Placas no estilo da Shuto Expressway, com a linha de baixo no seu idioma. 🇧🇷 🇺🇸
 5. (EN) Tokyo, midnight. The loop is yours. Free in your browser: nightcruisegame.com
 
