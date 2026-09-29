@@ -68,6 +68,43 @@ function splitLamps(meshes, G, box) {
   const frontZ = box.max.z - (G.lampDepth || 0.6), rearZ = box.min.z + (G.lampDepth || 0.6);
   const minY = G.lampMinY !== undefined ? G.lampMinY : 0.3, headMaxY = G.headMaxY || 9;
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  // Some files use the window material for the lamp covers too: tinted like the windows, the lit lamps
+  // behind them looked off. Window triangles at the car's ends and at lamp height become clear lenses.
+  const lensMats = new Map();
+  const lensOf = mat => {
+    if (!lensMats.has(mat)) {
+      const l = mat.clone();
+      l.name = mat.name + ':lens';
+      l.color.set(0xffffff); l.opacity = 0.12; l.transparent = true; l.depthWrite = false;
+      l.roughness = 0.05; l.metalness = 0;
+      lensMats.set(mat, l);
+    }
+    return lensMats.get(mat);
+  };
+  const lensFront = box.max.z - 0.75, lensRear = box.min.z + 0.5;
+  for (const m of [...meshes]) {
+    if (!m.parent || !test(/Window/i, matName(m))) continue;
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+    const pos = g.attributes.position, nt = pos.count / 3, lens = [], rest = [];
+    m.updateWorldMatrix(true, false);
+    for (let t = 0; t < nt; t++) {
+      a.fromBufferAttribute(pos, t * 3).applyMatrix4(m.matrixWorld);
+      b.fromBufferAttribute(pos, t * 3 + 1).applyMatrix4(m.matrixWorld);
+      c.fromBufferAttribute(pos, t * 3 + 2).applyMatrix4(m.matrixWorld);
+      const y = (a.y + b.y + c.y) / 3, z = (a.z + b.z + c.z) / 3;
+      ((z > lensFront && y < 0.95) || (z < lensRear && y < 1.0) ? lens : rest).push(t);
+    }
+    if (!lens.length) continue;
+    for (const [tris, mat, tag] of [[lens, lensOf(m.material), 'lens'], [rest, m.material, 'glass']]) {
+      if (!tris.length) continue;
+      const p = new THREE.Mesh(subGeometry(g, tris), mat);
+      p.name = m.name + ':' + tag;
+      p.position.copy(m.position); p.quaternion.copy(m.quaternion); p.scale.copy(m.scale);
+      m.parent.add(p);
+      meshes.push(p);
+    }
+    m.parent.remove(m);
+  }
   for (const m of [...meshes]) {
     if (!m.parent || !test(LAMP, matName(m)) || test(/Window/i, matName(m))) continue;
     const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
@@ -316,7 +353,9 @@ export class GlbCarModel {
       if (!own.has(k)) {
         const mat = mesh.material.clone();
         mat.emissive = new THREE.Color(color);
-        if (!mat.emissiveMap && mat.map) mat.emissiveMap = mat.map;
+        // lampSplit cars: the reflector textures are pale (the tail lamps glowed pink): pure colour instead
+        if (G.lampSplit) mat.emissiveMap = null;
+        else if (!mat.emissiveMap && mat.map) mat.emissiveMap = mat.map;
         mat.emissiveIntensity = 0;
         mat.userData.role = key;
         own.set(k, mat);
@@ -325,7 +364,7 @@ export class GlbCarModel {
     };
     for (const m of meshes) {
       const lr = m.userData.lampRole;
-      if (G.lampSplit) { if (lr === 'head') claim(m, 'head', '#fff2dc'); else if (lr === 'tail') claim(m, 'tail', '#ff2030'); continue; }
+      if (G.lampSplit) { if (lr === 'head') claim(m, 'head', '#fff4e2'); else if (lr === 'tail') claim(m, 'tail', '#ff0a14'); continue; }
       if (role(m, G.headMat, G.headNode)) claim(m, 'head', '#fff2dc');
       else if (role(m, G.tailMat, G.tailNode)) claim(m, 'tail', '#ff2030');
       else if (role(m, G.revMat, G.revNode)) claim(m, 'rev', '#ffffff');
@@ -343,6 +382,16 @@ export class GlbCarModel {
   // state: {head, brake, reverse, left, right}
   setLights(st) {
     const tailLevel = st.brake ? 1 : st.head ? 0.38 : 0.12;
+    if (this.spec.glb.lampSplit) {
+      // pure-colour lamps (see claim): lit lamps must read as lit, the brake light clearly brighter
+      for (const m of this._own) {
+        const r = m.userData.role;
+        m.emissiveIntensity = r === 'head' ? (st.head ? 4 : 0) : r === 'tail' ? (st.brake ? 5 : st.head ? 1.8 : 0.5) : 0;
+      }
+      this.blink.left = !!st.left;
+      this.blink.right = !!st.right;
+      return;
+    }
     for (const m of this._own) {
       const r = m.userData.role;
       // (lampSplit cars light their textured reflectors, darker than a plain lamp: a little more drive)
