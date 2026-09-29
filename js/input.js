@@ -15,6 +15,8 @@ export const PAD_FIXED_LABELS = {
   get left() { return t('pad.stick') + ' / D-pad ←'; },
   get right() { return t('pad.stick') + ' / D-pad →'; },
 };
+// focus in a field that takes typing (a range slider is not one: arrows still steer the menus)
+export const isTyping = el => !!el && (el.isContentEditable || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button', 'submit'].includes(el.type)));
 export const padName = b => (b === 16 ? t('pad.guide') : PAD_NAMES[b]) || t('pad.button', { n: b });
 
 export function keyName(code) {
@@ -43,6 +45,8 @@ export class Input {
     window.addEventListener('keydown', e => {
       if (this.capture) { e.preventDefault(); e.stopImmediatePropagation(); const cb = this.capture; this.capture = null; cb(e.code); return; }
       if (this.padCapture) { e.preventDefault(); e.stopImmediatePropagation(); const cb = this.padCapture; this.padCapture = null; cb(e.code === 'Delete' || e.code === 'Backspace' ? 'remove' : null); return; }
+      // typing in a text field (account forms) is not driving
+      if (isTyping(e.target)) return;
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) && this.enabled) e.preventDefault();
       if (!this.down.has(e.code)) this.edges.add(e.code);
       this.down.add(e.code);

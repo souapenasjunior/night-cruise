@@ -19,6 +19,7 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
+import { initAccount, isAccountOpen, closeAccount, driveStarted, driveTick, driveStopped } from './account.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -402,8 +403,8 @@ function closeCredits() { $('credits').hidden = true; $('btn-credits').focus(); 
 $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
-// credits sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('credits').hidden ? $('credits') : null; }
+// credits and the account panel sit over the title screen: menu navigation stays inside them while open
+function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -503,6 +504,7 @@ canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.dra
 canvas.addEventListener('pointerup', () => { show.drag = null; });
 
 function goTitle() {
+  driveStopped();
   if (player) { player.dispose(); player = null; }
   scene.add(idleLights);
   state = 'title';
@@ -529,6 +531,7 @@ function renderPauseKeys() {
 function pauseGame() {
   if (state !== 'drive') return;
   state = 'pause';
+  driveStopped();
   showScreen('pause');
   renderPauseKeys();
   $('pause-info').textContent = t('pause.info', { car: player.spec.name, km: num(Math.round(player.odo / 100) / 10) });
@@ -618,6 +621,7 @@ function startDrive() {
   applySettings();
   hud.lastZone = null;
   hud.toast(t('toast.go', { car: spec.name }));
+  driveStarted(spec.id); // (signed in: the server opens a drive to count distance and time)
   driveClock = 0; fpsSamples = []; adaptDone = 0;
   lastTime = performance.now();
 }
@@ -915,6 +919,10 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeCredits(); }
     return;
   }
+  if (isAccountOpen()) {
+    if (e.code === 'Escape') { e.preventDefault(); closeAccount(); }
+    return;
+  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -964,6 +972,7 @@ function padMenus() {
   if (b) {
     if (settingsOpen) closeSettings();
     else if (!$('credits').hidden) closeCredits();
+    else if (isAccountOpen()) closeAccount();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
@@ -1000,6 +1009,7 @@ function driveStep(dt) {
     rig.snapNext = true;
   }
   player.odo = (player.odo || 0) + Math.hypot(player.pos.x - x0, player.pos.z - z0);
+  driveTick(dt, player.odo);
   traffic.update(dt, player, camera);
   // impacts
   let hit = 0;
@@ -1173,6 +1183,10 @@ async function boot() {
   state = 'title';
   showScreen('title');
   lastTime = performance.now();
+  // accounts load after the game is up and never hold it back (nothing happens without a configured backend)
+  initAccount(S, {
+    settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
+  }).catch(e => console.warn('[account]', e && e.message));
   if (location.hash === '#debug') {
     let fake = performance.now();
     window.__nc = {

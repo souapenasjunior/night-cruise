@@ -1,0 +1,7 @@
+node_modules/
+# Supabase CLI local state and any local secrets
+supabase/.temp/
+supabase/.branches/
+.env
+.env.*
+*.local

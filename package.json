@@ -1,0 +1,15 @@
+{
+  "name": "night-cruise",
+  "private": true,
+  "description": "Development tools only. The game itself has no build step: GitHub Pages serves the files as they are.",
+  "type": "module",
+  "scripts": {
+    "test:db": "node supabase/tests/db.test.mjs",
+    "db:push": "supabase db push",
+    "db:diff": "supabase db diff"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "supabase": "2.118.0"
+  }
+}

@@ -1,0 +1,45 @@
+# Daily database backup (the Supabase free plan has no automatic backups).
+# Dumps roles, schema and data, encrypts them (the dump holds e-mails and password hashes and the
+# repository is public) and keeps them as a workflow artifact for 30 days.
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL    the database connection string (Supabase: Connect → Session pooler), with password
+#   BACKUP_PASSPHRASE  a long random passphrase; keep a copy outside GitHub, it is needed to restore
+# and the repository variable BACKUP_ENABLED = true. Restore: see docs/BACKEND.md.
+name: Database backup
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # every day, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: ${{ vars.BACKUP_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Dump and encrypt
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$DB_URL" && test -n "$PASSPHRASE"
+          mkdir backup
+          supabase db dump --db-url "$DB_URL" --role-only -f backup/roles.sql
+          supabase db dump --db-url "$DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$DB_URL" --data-only --use-copy --schema public,auth -f backup/data.sql
+          tar -czf backup.tar.gz backup
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" --symmetric --cipher-algo AES256 -o "nightcruise-db-$(date -u +%Y%m%d-%H%M).tar.gz.gpg" backup.tar.gz
+          rm -rf backup backup.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: nightcruise-db-*.tar.gz.gpg
+          retention-days: 30
+          if-no-files-found: error

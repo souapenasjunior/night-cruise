@@ -30,7 +30,43 @@ export function defaults() {
     lang: 'auto', // 'auto' (browser language), 'pt' or 'en'
     lastCar: 'kaiju',
     paintIdx: {}, // chosen colour (index into PAINTS) per car id
+    savedAt: 0, // when these settings were last saved (ms), to tell which copy is newer when an account syncs them
   };
+}
+
+// The part of the settings that follows a player between devices when signed in. Graphics and display
+// stay per device (a phone must not inherit the PC's "ultra").
+export const SYNCED = ['audio', 'gameplay', 'bindings', 'pad', 'lang', 'lastCar', 'paintIdx'];
+export function syncedPart(s) {
+  const o = {};
+  for (const k of SYNCED) o[k] = JSON.parse(JSON.stringify(s[k]));
+  return o;
+}
+// Take the synced part from `remote` (settings stored with the account), validated exactly like a saved
+// file. Objects are updated in place, so systems holding them (input bindings) see the change.
+export function applySynced(s, remote) {
+  if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return false;
+  const tmp = defaults();
+  for (const k of Object.keys(tmp)) if (!SYNCED.includes(k)) tmp[k] = JSON.parse(JSON.stringify(s[k]));
+  for (const k of SYNCED) {
+    const v = remote[k] === undefined ? s[k] : remote[k];
+    if (typeof tmp[k] === 'object' && !Array.isArray(tmp[k])) {
+      if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(tmp[k], JSON.parse(JSON.stringify(v)));
+    } else tmp[k] = v;
+  }
+  fixBindings(tmp);
+  sanitize(tmp);
+  for (const k of SYNCED) {
+    if (s[k] && typeof s[k] === 'object' && !Array.isArray(s[k])) {
+      for (const x of Object.keys(s[k])) delete s[k][x];
+      Object.assign(s[k], tmp[k]);
+    } else s[k] = tmp[k];
+  }
+  return true;
+}
+function fixBindings(d) {
+  for (const a of Object.keys(DEFAULT_BINDINGS)) if (!Array.isArray(d.bindings[a])) d.bindings[a] = DEFAULT_BINDINGS[a].slice();
+  for (const a of Object.keys(d.bindings)) if (!DEFAULT_BINDINGS[a]) delete d.bindings[a]; // actions that no longer exist
 }
 
 export function load() {
@@ -44,8 +80,7 @@ export function load() {
         if (typeof d[k] === 'object' && !Array.isArray(d[k])) Object.assign(d[k], s[k]);
         else d[k] = s[k];
       }
-      for (const a of Object.keys(DEFAULT_BINDINGS)) if (!Array.isArray(d.bindings[a])) d.bindings[a] = DEFAULT_BINDINGS[a].slice();
-      for (const a of Object.keys(d.bindings)) if (!DEFAULT_BINDINGS[a]) delete d.bindings[a]; // actions that no longer exist
+      fixBindings(d);
       sanitize(d);
       d._loaded = true;
     }
@@ -85,14 +120,21 @@ function sanitize(s) {
   if (typeof s.lastCar !== 'string') s.lastCar = d.lastCar;
   if (!s.paintIdx || typeof s.paintIdx !== 'object' || Array.isArray(s.paintIdx)) s.paintIdx = {};
   for (const [id, i] of Object.entries(s.paintIdx)) if (!Number.isInteger(i) || i < 0 || i >= PAINT_COUNT) delete s.paintIdx[id];
+  if (!Number.isFinite(s.savedAt) || s.savedAt < 0) s.savedAt = 0;
 }
 
+// called after every save (the account uploads the synced part)
+const saveListeners = [];
+export const onSave = f => saveListeners.push(f);
+
 export function save(s) {
+  s.savedAt = Date.now();
   try {
     const copy = { ...s };
     delete copy._loaded;
     localStorage.setItem(KEY, JSON.stringify(copy));
   } catch (e) { /* ignore */ }
+  for (const f of saveListeners) try { f(s); } catch (e) { /* a listener must never break saving */ }
 }
 
 // Guess a sensible starting preset from the GPU string and device hints.
