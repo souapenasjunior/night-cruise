@@ -1,0 +1,17 @@
+# Files in the repository that are not part of the website (Cloudflare does not publish them)
+node_modules
+.git
+.github
+.wrangler
+supabase
+docs
+package.json
+package-lock.json
+wrangler.jsonc
+wrangler.toml
+.gitignore
+.assetsignore
+*.md
+.env
+.env.*
+models/p_*

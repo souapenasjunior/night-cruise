@@ -8,3 +8,5 @@ supabase/.branches/
 # Premium car files: served only to their owners from the private Storage bucket 'premium'
 # (uploaded with the Supabase CLI, see docs/BACKEND.md); kept on disk for local testing only
 models/p_*
+# Cloudflare Wrangler local state
+.wrangler/
