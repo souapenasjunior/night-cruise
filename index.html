@@ -399,7 +399,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   <div class="strip">
     <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
     <div class="row">
-      <div class="hint" data-i18n-html="sel.hint"><span><kbd>←</kbd> <kbd>→</kbd> trocar</span><span><kbd>1</kbd>–<kbd>7</kbd> cor</span><span>arraste para girar</span><span><kbd>Enter</kbd> dirigir</span><span><kbd>Esc</kbd> voltar</span></div>
+      <div class="hint" data-i18n-html="sel.hint"><span><kbd>←</kbd> <kbd>→</kbd> trocar</span><span>arraste para girar</span><span><kbd>Enter</kbd> dirigir</span><span><kbd>Esc</kbd> voltar</span></div>
       <div style="display:flex;gap:8px">
         <button class="btn small" id="sel-back" data-i18n="sel.back">Voltar</button>
         <button class="btn go" id="sel-go" data-i18n="sel.go">Dirigir</button>
@@ -633,7 +633,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.17.0';
+  var V = '1.17.1';
   var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

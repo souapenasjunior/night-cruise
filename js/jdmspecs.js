@@ -6,7 +6,8 @@ const Q = Math.PI / 2;
 
 export const JDM_SPECS = [
   {
-    id: 'r32', short: 'R32', name: 'Skyline GT-R R32', brand: 'NISSAN', number: '32', cls: 'Grand tourer',
+    // (livery: every car keeps the paint of its file; there is no colour choice)
+    id: 'r32', short: 'R32', name: 'Skyline GT-R R32', brand: 'NISSAN', number: '32', cls: 'Grand tourer', livery: true,
     colors: { main: '#16171b', accent: '#c9ccd2' },
     stats: { top: 265, accel: 8.6, grip: 1.12, drift: 0.85, mass: 1430 },
     sound: { type: 'v6', turbo: true, pops: 0.5 },
@@ -14,7 +15,7 @@ export const JDM_SPECS = [
     glb: { file: 'models/r32.json', paint: /^paint$/, rotY: 0, length: 4.55, wheel: /^(tyre|rims|brake)$/, caliper: /^brake_caliper$/, headMat: /^headlights\.001$/, tailMat: /^rear_lights2?$/ },
   },
   {
-    id: 'nsx', short: 'NSX', name: 'NSX', brand: 'HONDA', number: '90', cls: 'Superesportivo',
+    id: 'nsx', short: 'NSX', name: 'NSX', brand: 'HONDA', number: '90', cls: 'Superesportivo', livery: true,
     colors: { main: '#f0f0ee', accent: '#141414' },
     stats: { top: 270, accel: 8.4, grip: 1.1, drift: 0.95, mass: 1370 },
     sound: { type: 'flat6', pops: 0.4 },
@@ -22,7 +23,7 @@ export const JDM_SPECS = [
     glb: { file: 'models/nsx.json', rotY: 0, length: 4.4, wheel: /^Material\.(011|018|021|023)$/, headMat: /^Material\.013$/, tailMat: /^Material\.009$/, paint: /^Material\.003$/ },
   },
   {
-    id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico',
+    id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico', livery: true,
     colors: { main: '#efefef', accent: '#1b1b1b' },
     stats: { top: 215, accel: 6.9, grip: 0.92, drift: 1.5, mass: 950 },
     sound: { type: 'i4rally', pops: 0.9 },
