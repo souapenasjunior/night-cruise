@@ -10,6 +10,7 @@ const MP_TOKEN = Deno.env.get('MP_ACCESS_TOKEN') || '';
 const ORIGINS = [
   'https://www.nightcruisegame.com',
   'https://nightcruisegame.com',
+  'https://night-cruise.contatoadoniasjunior.workers.dev',
   'http://localhost:8765',
   ...(Deno.env.get('SITE_ORIGINS') || '').split(',').map(s => s.trim()).filter(Boolean),
 ];
