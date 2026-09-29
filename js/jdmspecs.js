@@ -30,7 +30,8 @@ export const JDM_SPECS = [
     wheels: {},
     glb: { file: 'models/tiara83.json', paint: /Bodymat$/, rotY: -Q, length: 4.2, wheelNode: /WheelTuner/, caliperNode: /CaliperTuner/, headNode: /_Headlights_/, tailNode: /_Brakelights_/, revNode: /_Reverselights_/ },
   },
-  // Premium pack (sold as one product, 'premium_pack'): drivable only once the account owns it. Their
+  // Premium cars: each one is bought on its own with yen (the in-game money earned by driving; prices in
+  // the database, cars.price_coins) and drivable once the account owns it. Their
   // files load only when picked on the car select, never with the game. Each keeps its original livery
   // (painted in the texture), so there is no colour choice. The files were prepared (scale, wheels per
   // corner, simplified, WebP) so every wheel/caliper corner is its own mesh: wheel_* / caliper_* nodes.

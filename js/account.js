@@ -54,20 +54,7 @@ export async function initAccount(settings, h) {
     token = session ? session.access_token : null;
     setTimeout(() => onAuth(event, session), 0);
   });
-  // back from the Mercado Pago checkout (?pagamento=aprovado|pendente|falhou): only a hint for the message;
-  // the unlock itself comes from the server once the payment notification is verified there
-  const q = new URLSearchParams(location.search);
-  if (q.has('pagamento')) {
-    payReturn = q.get('pagamento');
-    for (const k of ['pagamento', 'collection_id', 'collection_status', 'payment_id', 'status', 'external_reference', 'payment_type', 'merchant_order_id', 'preference_id', 'site_id', 'processing_mode', 'merchant_account_id']) q.delete(k);
-    const rest = q.toString();
-    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
-    // this is the checkout tab the game opened: the game tab is already watching, so go back to it
-    let opener = null;
-    try { opener = window.opener && !window.opener.closed && window.opener.location.origin === location.origin ? window.opener : null; } catch (e) { opener = null; }
-    if (opener) { try { opener.focus(); } catch (e) { /* focus is a hint */ } window.close(); }
-    if (payReturn === 'falhou') { tellPurchase(t('shop.failed')); payReturn = null; }
-  }
+  loadPrices();
   if (pendingNotice && pendingNotice !== 'acc.confirmed') { history.replaceState(null, '', location.pathname + location.search); openAccount('login', t(pendingNotice)); pendingNotice = null; }
   SET.onSave(() => { if (user && !applying) scheduleSettingsUpload(); });
   window.addEventListener('pagehide', flushOnExit);
@@ -86,7 +73,6 @@ async function onAuth(event, session) {
   }
   if (user) await loadOwned();
   if (!user) { profile = null; stats = null; drive = null; owned = new Set(); }
-  if (user && payReturn) checkPurchase();
   render();
   if (hooks.changed) hooks.changed();
 }
@@ -95,26 +81,57 @@ async function loadProfile() {
   if (!user) return;
   const [p, s] = await Promise.all([
     sb.from('profiles').select('username, created_at, last_seen_at, selected_car, settings, settings_updated_at, username_changed_at').eq('id', user.id).maybeSingle(),
-    sb.from('player_stats').select('distance_m, play_time_s, drives').eq('user_id', user.id).maybeSingle(),
+    sb.from('player_stats').select('distance_m, play_time_s, drives, coins, coins_earned').eq('user_id', user.id).maybeSingle(),
   ]);
   if (!p.error) profile = p.data;
   if (!s.error) stats = s.data;
 }
 
-// ------------------------------------------------------------------ shop
-// What the player owns comes from car_unlocks (readable only by its owner, written only by the server).
-// Buying: the Edge Function create-checkout opens an order and a Mercado Pago checkout; the webhook
-// (mp-webhook) confirms the payment with Mercado Pago itself and only then unlocks the cars.
+// ------------------------------------------------------------------ yen and cars
+// There is no real money in the game: players earn yen (¥) by driving and buy cars with it. The balance
+// is kept and changed only by the server (report_drive pays for accepted distance, buy_car spends);
+// what the player owns comes from car_unlocks (readable only by its owner, written only by the server).
 let owned = new Set();
-let payReturn = null; // 'aprovado' | 'pendente' after coming back from the checkout
+let prices = new Map(); // car id -> price in yen (the catalogue, public)
 export const isSignedIn = () => !!user;
 export const ownsCar = id => owned.has(id);
+export const priceOf = id => prices.get(id) || 0;
+export const coinBalance = () => (stats ? Number(stats.coins) || 0 : 0);
 async function loadOwned() {
   if (!user) return;
   const { data, error } = await sb.from('car_unlocks').select('car_id').eq('user_id', user.id);
   if (!error) owned = new Set(data.map(r => r.car_id));
 }
-function tellPurchase(msg) { if (hooks.purchase) hooks.purchase(msg); }
+async function loadPrices() {
+  const { data, error } = await sb.from('cars').select('id, price_coins').not('price_coins', 'is', null);
+  if (!error) { prices = new Map(data.map(r => [r.id, r.price_coins])); if (hooks.changed) hooks.changed(); }
+}
+// buy one car with yen. Returns null when bought, else a message for the player.
+export async function buyCar(carId) {
+  if (!sb || !user) return t('coins.signIn');
+  const { data, error } = await sb.rpc('buy_car', { p_car: carId });
+  if (error) {
+    if (/not_enough_coins/.test(error.message)) return t('coins.notEnough');
+    if (/already_owned/.test(error.message)) { await loadOwned(); if (hooks.changed) hooks.changed(); return null; }
+    return t('acc.err.generic');
+  }
+  owned.add(carId);
+  if (stats) stats.coins = Number(data);
+  if (hooks.changed) hooks.changed();
+  return null;
+}
+// while driving: the server balance plus what this drive has earned since the last report (an
+// estimate; the server's figure replaces it at every report, once a minute)
+export function liveCoins() {
+  if (!user || !stats) return null;
+  const pending = drive ? Math.floor((drive.dist / 10) * cruiseBonus()) : 0;
+  return { balance: coinBalance(), pending, bonus: cruiseBonus() };
+}
+// cruise bonus of the running drive (same steps as the server: 10 / 30 / 60 minutes)
+function cruiseBonus() {
+  const s = drive ? drive.total : 0;
+  return s >= 3600 ? 2 : s >= 1800 ? 1.5 : s >= 600 ? 1.25 : 1;
+}
 
 // Premium car files are in the private Storage bucket 'premium' (one folder per car), readable only by
 // players who own the car. Returns Map(file name -> signed URL) or null. The URLs last 7 days and are
@@ -135,61 +152,6 @@ export async function premiumFiles(carId) {
   const files = signed.filter(s => s.signedUrl && !s.error).map(s => [s.path.split('/').pop(), s.signedUrl]);
   try { localStorage.setItem(key, JSON.stringify({ until: Date.now() + SIGN_FOR * 1000, files })); } catch (e) { /* fine */ }
   return new Map(files);
-}
-// The checkout opens in a new tab (`win`, opened by the click itself so it is not blocked as a pop-up);
-// the game stays here and unlocks the cars as soon as the server confirms the payment. Without a tab
-// (pop-ups blocked) the checkout replaces this page and the game picks up again on the way back.
-export async function buyProduct(product, win) {
-  const fail = msg => { if (win && !win.closed) win.close(); return msg; };
-  if (!sb || !user) return fail(t('shop.signInFirst'));
-  tellPurchase(t('shop.redirect'));
-  try {
-    const { data, error } = await sb.functions.invoke('create-checkout', { body: { product } });
-    if (error || !data || !data.url) {
-      // the function answers errors as { error: code } (supabase-js keeps the response in error.context)
-      let code = data && data.error;
-      if (!code && error && error.context && error.context.json) code = (await error.context.json().catch(() => ({}))).error;
-      if (code === 'already_owned') { await loadOwned(); if (hooks.changed) hooks.changed(); return fail(t('shop.approved')); }
-      if (code === 'too_frequent') return fail(t('acc.err.rate'));
-      return fail(t('shop.error'));
-    }
-    if (win && !win.closed) {
-      win.location.href = data.url;
-      watchPurchase(win);
-      return t('shop.inNewTab');
-    }
-    location.href = data.url;
-    return null;
-  } catch (e) { return fail(t('shop.error')); }
-}
-// while the checkout tab is open (and a few minutes after), look for the unlock
-let watching = 0;
-async function watchPurchase(win) {
-  const me = ++watching, before = owned.size, start = Date.now();
-  let closedAt = 0;
-  while (me === watching && user && Date.now() - start < 20 * 60 * 1000) {
-    await new Promise(r => setTimeout(r, 4000));
-    if (document.hidden && !(win && win.closed)) continue; // the player is on the checkout tab
-    await loadOwned();
-    if (owned.size > before) { tellPurchase(t('shop.approved')); if (hooks.changed) hooks.changed(); return; }
-    if (win && win.closed) {
-      closedAt = closedAt || Date.now();
-      if (Date.now() - closedAt > 3 * 60 * 1000) { tellPurchase(t('shop.pending')); return; }
-    }
-  }
-}
-// the webhook usually arrives within seconds of the return: look for the unlock for up to 2 minutes
-async function checkPurchase() {
-  const kind = payReturn;
-  payReturn = null;
-  tellPurchase(t(kind === 'aprovado' ? 'shop.checking' : 'shop.pending'));
-  const before = owned.size;
-  for (let i = 0; i < 40 && user; i++) {
-    await new Promise(r => setTimeout(r, i < 10 ? 3000 : 6000));
-    await loadOwned();
-    if (owned.size > before) { tellPurchase(t('shop.approved')); return; }
-  }
-  tellPurchase(t('shop.pending'));
 }
 
 // ------------------------------------------------------------------ settings sync
@@ -228,7 +190,7 @@ export async function driveStarted(carId) {
   drive = null;
   if (!user || !sb) return;
   const { data, error } = await sb.rpc('start_drive', { p_car: carId });
-  if (!error && data) drive = { id: data, lastOdo: null, dist: 0, time: 0, sentAt: performance.now() };
+  if (!error && data) drive = { id: data, lastOdo: null, dist: 0, time: 0, total: 0, sentAt: performance.now() };
 }
 // every frame while driving (not while paused): distance from the car's odometer, time from the clock
 export function driveTick(dt, odo) {
@@ -239,6 +201,7 @@ export function driveTick(dt, odo) {
   }
   drive.lastOdo = odo;
   drive.time += dt;
+  drive.total += dt;
   if (drive.time >= REPORT_EVERY && !drive.busy) report();
 }
 export function driveStopped() { if (drive && drive.time >= 1 && !drive.busy) report(); }
@@ -256,7 +219,11 @@ async function report() {
   }
   d.dist -= dist; d.time -= time; d.sentAt = performance.now();
   const row = Array.isArray(data) ? data[0] : data;
-  if (row && stats) { stats.distance_m = row.total_distance_m; stats.play_time_s = row.total_play_time_s; }
+  if (row && stats) {
+    stats.distance_m = row.total_distance_m; stats.play_time_s = row.total_play_time_s;
+    if (row.coins !== undefined) stats.coins = Number(row.coins);
+  }
+  if (row && row.earned > 0 && hooks.earned) hooks.earned(row.earned, Number(row.bonus) || 1);
 }
 // closing the tab: send what is left with a request that survives the page
 function flushOnExit() {
@@ -382,6 +349,7 @@ function renderPilotCard() {
   $('pf-garage-count').textContent = `${have}/${cars.length}`;
   const prem = cars.filter(c => c.premium);
   $('pf-premium').hidden = !prem.length || !prem.every(c => owned.has(c.id));
+  $('pf-coins').textContent = stats ? '¥ ' + coinBalance().toLocaleString(t('acc.locale')) : '—';
   const fav = cars.find(c => c.id === profile.selected_car);
   $('pf-fav').hidden = !fav;
   if (fav) $('pf-fav-name').textContent = fav.name;

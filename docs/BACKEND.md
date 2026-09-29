@@ -166,15 +166,15 @@ psql "<URL do banco>" -f backup/data.sql
 - **Nomes de usuário:** o "nome livre?" responde a qualquer visitante. Nomes são públicos por natureza, então isso não expõe nada privado.
 - **Dados pessoais (LGPD):** o jogo passa a guardar e-mails. Antes de abrir o cadastro ao público, publique uma política de privacidade simples (o que é guardado, por quê, e como excluir a conta) e um contato.
 
-## Loja (Pacote Premium, Mercado Pago)
+## Ienes (moeda do jogo) e compra de carros
 
-- Catálogo: `products` + `product_cars` (o preço vem do banco, nunca do navegador). Pedidos: `orders` (o jogador só lê os seus).
-- `supabase/functions/create-checkout`: confere o token do jogador, abre o pedido (`shop_create_order`) e cria a preferência do Checkout Pro (`external_reference` = id do pedido). Volta ao site com `?pagamento=aprovado|pendente|falhou`.
-- `supabase/functions/mp-webhook`: confere a assinatura `x-signature`, busca o pagamento na API do Mercado Pago e aplica (`shop_apply_payment`): aprovado com valor e moeda exatos libera os carros (`car_unlocks.source = 'purchase'`); reembolso/estorno retira. Repetir a mesma notificação não muda nada.
-- As funções `shop_*` só podem ser chamadas pelo `service_role` (Edge Functions). Testes: `npm run test:db`.
-- Secrets (só no painel do Supabase → Edge Functions → Secrets): `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`. Opcional: `SITE_ORIGINS` (outros domínios do site, separados por vírgula).
-- Webhook no Mercado Pago (Suas integrações → Webhooks, evento "Pagamentos"): `https://awynkbzkmyybrjbkqdsb.supabase.co/functions/v1/mp-webhook`
-- Os arquivos dos modelos premium ficam públicos no site (o jogo só bloqueia na interface); as estatísticas no servidor recusam carros não liberados.
+Não existe nenhuma compra com dinheiro real: o Mercado Pago foi removido (funções, chaves e tabelas).
+
+- **Ganho:** só no servidor, dentro de `report_drive`, a partir da distância que ele já aceitou como plausível: **¥ 1 a cada 10 m**, vezes o **bônus de cruzeiro** da viagem atual (×1,25 depois de 10 min, ×1,5 depois de 30 min, ×2 depois de 60 min, pelo relógio do servidor). O resto de metros que não fecha 10 m fica guardado (`coin_carry_m`).
+- **Saldo:** `player_stats.coins` (e `coins_earned`, total já ganho). O jogador só lê; não há permissão de escrita.
+- **Preços:** `cars.price_coins` (vazio = carro gratuito). Para mudar um preço: `update public.cars set price_coins = 50000 where id = 'p_r34';`
+- **Compra:** `buy_car(p_car)` confere se o carro está à venda, se ainda não é do jogador e se o saldo cobre o preço; desconta e libera o carro (`car_unlocks.source = 'purchase'`), tudo numa transação.
+- Testes: `npm run test:db`.
 
 ## Arquivos dos carros premium (Storage privado)
 

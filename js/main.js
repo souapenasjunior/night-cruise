@@ -19,7 +19,7 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
-import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyProduct, premiumFiles } from './account.js';
+import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles } from './account.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -444,7 +444,7 @@ $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
 // credits and the account panel sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('shop').hidden ? $('shop') : null; }
+function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -532,12 +532,17 @@ function updateSelect() {
   [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', locked(HERO_SPECS[i])); });
   const chip = $('sel-chips').children[selIndex];
   if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  // premium, not owned: a one-line link to the shop, and "Drive" becomes "Buy · price" (the strip at the
-  // bottom is never covered by the car details)
+  // a car not owned yet: its price and the player's yen in one line, and "Drive" becomes the buy button
+  // (the strip at the bottom is never covered by the car details)
   const lk = locked(s);
   $('sel-lock').hidden = !lk;
-  $('sel-go').textContent = lk ? t('shop.buyPrice') : t('sel.go');
-  $('sel-go').classList.toggle('buy', lk);
+  const price = priceOf(s.id), bal = coinBalance(), signed = isSignedIn();
+  if (lk) $('sel-lock-text').textContent = signed ? t('coins.lockLine', { price: yen(price), bal: yen(bal) }) : t('coins.lockGuest', { price: yen(price) });
+  $('sel-go').textContent = !lk ? t('sel.go') : !signed ? t('coins.signInBtn')
+    : confirmBuy === s.id ? t('coins.confirm', { price: yen(price) }) : bal >= price ? t('coins.buy', { price: yen(price) }) : t('coins.short', { missing: yen(price - bal) });
+  $('sel-go').classList.toggle('buy', lk && (!signed || bal >= price));
+  $('sel-go').classList.toggle('short', lk && signed && bal < price);
+  if (!lk || selMsgCar !== s.id) $('sel-msg').textContent = '';
   showModel(s);
   renderPaints();
   fitSelectInfo();
@@ -563,83 +568,48 @@ function goSelect() {
 }
 $('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else goTitle(); };
 $('sel-go').onclick = () => startDrive();
-// ------------------------------------------------------------------ shop
-// The Premium Pack: its cars, the price and the buy button. Opened from the title menu or from a locked car.
-const PACK_CARS = () => HERO_SPECS.filter(s => s.premium === 'premium_pack');
-const packOwned = () => PACK_CARS().every(s => !locked(s));
-let shopReturn = null; // element to focus when the shop closes
-let shopAfterLogin = false; // the player was sent to sign in to buy: back to the shop once signed in
-let shopPick = 0;       // car shown large in the shop
-const shopImg = s => `img/shop/${s.id}.webp?v=${VERSION}`; // pictures taken in the game's showroom
-function showShopCar(i) {
-  const cars = PACK_CARS(), s = cars[i];
-  if (!s) return;
-  shopPick = i;
-  const img = $('shop-show-img');
-  if (!img.src.includes(`/${s.id}.webp`)) {
-    img.classList.add('swap');
-    setTimeout(() => { img.src = shopImg(s); img.alt = s.name; img.onload = () => img.classList.remove('swap'); }, img.src ? 120 : 0);
+// yen on the HUD while driving (signed in only): balance, what this drive has earned since the last
+// report, and the cruise bonus once it starts
+let coinsHudT = 0;
+function coinsHud(dt) {
+  coinsHudT -= dt;
+  if (coinsHudT > 0) return;
+  coinsHudT = 0.25;
+  const c = liveCoins(), el = $('coins');
+  el.hidden = !c;
+  if (!c) return;
+  $('coins-bal').textContent = yen(c.balance + c.pending);
+  $('coins-bonus').textContent = c.bonus > 1 ? t('coins.bonus', { x: String(c.bonus).replace('.', t('acc.locale') === 'pt-BR' ? ',' : '.') }) : '';
+}
+
+// ------------------------------------------------------------------ buying cars with yen
+// No real money anywhere: the yen are earned by driving (report_drive on the server) and each car is
+// bought on its own, right here on the car select. Two presses: the first asks to confirm the price.
+const shopImg = s => `img/shop/${s.id}.webp?v=${VERSION}`; // pictures of the cars, taken in the showroom
+const yen = n => '¥ ' + Math.max(0, Math.round(n || 0)).toLocaleString(t('acc.locale'));
+let confirmBuy = null, confirmTimer = 0; // car waiting for the second press
+let selMsgCar = null;                    // car the message under the price belongs to
+let buyAfterLogin = null;                // car the player went to sign in for
+function selMessage(spec, msg) { selMsgCar = spec.id; $('sel-msg').textContent = msg; }
+async function buyCarFlow(spec) {
+  if (!isSignedIn()) { buyAfterLogin = spec.id; openAccount('login', t('coins.signIn')); return; }
+  const price = priceOf(spec.id), bal = coinBalance();
+  if (!price) return;
+  if (bal < price) { selMessage(spec, t('coins.notEnoughHint', { missing: yen(price - bal) })); audio.uiBlip && audio.uiBlip(); return; }
+  if (confirmBuy !== spec.id) {
+    confirmBuy = spec.id;
+    clearTimeout(confirmTimer);
+    confirmTimer = setTimeout(() => { confirmBuy = null; if (state === 'select') updateSelect(); }, 5000);
+    selMessage(spec, t('coins.confirmHint', { car: spec.name }));
+    updateSelect();
+    return;
   }
-  $('shop-show-name').textContent = s.name;
-  $('shop-show-brand').textContent = `${s.brand} · ${s.cls}`;
-  $('shop-show').style.borderColor = (s.colors && s.colors.main) || '';
-  [...$('shop-cars').children].forEach((li, k) => { li.classList.toggle('sel', k === i); li.setAttribute('aria-selected', k === i); });
-}
-function renderShop() {
-  const owned = packOwned();
-  $('shop').classList.toggle('shop-owned', owned);
-  $('shop-cars').innerHTML = '';
-  PACK_CARS().forEach((s, i) => {
-    const li = document.createElement('li');
-    li.tabIndex = 0;
-    li.setAttribute('role', 'option');
-    li.style.borderBottomColor = (s.colors && s.colors.main) || 'var(--line)';
-    const im = document.createElement('img'); im.src = shopImg(s); im.alt = ''; // (not lazy: built while the shop is hidden, they never started)
-    const b = document.createElement('b'); b.textContent = s.short;
-    li.append(im, b);
-    li.onmouseenter = li.onfocus = li.onclick = () => showShopCar(i);
-    $('shop-cars').appendChild(li);
-  });
-  showShopCar(shopPick);
-  $('shop-buy').textContent = owned ? t('shop.ownedBtn') : isSignedIn() ? t('shop.buy') : t('shop.signInToBuy');
-  if (owned) $('shop-msg').textContent = t('shop.owned');
-}
-function openShop(from, msg) {
-  shopReturn = from || document.activeElement;
-  // opened from a locked car on the car select: show that one first
-  const cur = state === 'select' ? PACK_CARS().indexOf(HERO_SPECS[selIndex]) : -1;
-  if (cur >= 0) shopPick = cur;
-  renderShop();
-  $('shop-msg').textContent = msg || (packOwned() ? t('shop.owned') : '');
-  $('shop').hidden = false;
-  setTimeout(() => $('shop-buy').focus(), 30);
-}
-function closeShop() {
-  $('shop').hidden = true;
+  confirmBuy = null;
+  clearTimeout(confirmTimer);
+  selMessage(spec, t('acc.wait'));
+  const err = await buyCar(spec.id);
+  selMessage(spec, err || t('coins.bought', { car: spec.name, bal: yen(coinBalance()) }));
   if (state === 'select') updateSelect();
-  if (shopReturn && shopReturn.focus && !shopReturn.closest('[hidden]')) shopReturn.focus();
-}
-const isShopOpen = () => !$('shop').hidden;
-$('btn-shop').onclick = () => openShop($('btn-shop'));
-$('sel-lock').onclick = () => openShop($('sel-go'));
-$('shop-close').onclick = closeShop;
-// buying: sign in first, then the Mercado Pago page (the server unlocks the cars once it is paid)
-$('shop-buy').onclick = () => {
-  if (packOwned()) { closeShop(); if (state !== 'select') { audio.init(); audio.setVolumes(S.audio); goSelect(); } return; }
-  buyPack();
-};
-async function buyPack() {
-  if (!isSignedIn()) { if (isShopOpen()) closeShop(); shopAfterLogin = true; openAccount('login', t('shop.signInFirst')); return; }
-  if (!isShopOpen()) openShop($('sel-go'));
-  $('shop-msg').textContent = t('acc.wait');
-  // the tab is opened now, inside the click, so the browser allows it; the checkout address follows
-  let win = null;
-  try {
-    win = window.open('', '_blank');
-    if (win) win.document.write(`<title>Mercado Pago</title><body style="background:#0b0e18;color:#cfd3df;font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0">${t('shop.redirect')}</body>`);
-  } catch (e) { win = null; }
-  const msg = await buyProduct('premium_pack', win);
-  if (msg) $('shop-msg').textContent = msg;
 }
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
@@ -727,7 +697,7 @@ function parkAtSlot(k) {
 // drive
 function startDrive() {
   const spec = HERO_SPECS[selIndex];
-  if (locked(spec)) { buyPack(); return; }
+  if (locked(spec)) { buyCarFlow(spec); return; }
   if (!glbReady(spec.id)) return; // still loading
   S.lastCar = spec.id;
   SET.save(S);
@@ -1019,7 +989,6 @@ onLangChange(() => {
   if (settingsOpen) { renderTabs(); renderOpts(); }
   if (state === 'select') { buildChips(); updateSelect(); }
   if (!$('credits').hidden) openCredits();
-  if (isShopOpen()) renderShop();
   if (player) {
     renderPauseKeys();
     $('pause-info').textContent = t('pause.info', { car: player.spec.name, km: num(Math.round(player.odo / 100) / 10) });
@@ -1068,12 +1037,6 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeAccount(); }
     return;
   }
-  if (isShopOpen()) {
-    if (e.code === 'Escape') { e.preventDefault(); closeShop(); }
-    if (e.code === 'ArrowDown' || e.code === 'ArrowRight') { e.preventDefault(); moveFocus(1); }
-    if (e.code === 'ArrowUp' || e.code === 'ArrowLeft') { e.preventDefault(); moveFocus(-1); }
-    return;
-  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -1106,7 +1069,7 @@ function padMenus() {
     else if (input.padPressed(3)) bigMap.center(player);
     return;
   }
-  if (state === 'select' && !settingsOpen && !isShopOpen() && !isAccountOpen()) {
+  if (state === 'select' && !settingsOpen && !isAccountOpen()) {
     if (right || left) { selIndex = (selIndex + (right ? 1 : -1) + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); audio.selectChime(selIndex, right); }
     const lb = input.padPressed(4), rb = input.padPressed(5);
     if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
@@ -1124,7 +1087,6 @@ function padMenus() {
     if (settingsOpen) closeSettings();
     else if (!$('credits').hidden) closeCredits();
     else if (isAccountOpen()) closeAccount();
-    else if (isShopOpen()) closeShop();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
@@ -1162,6 +1124,7 @@ function driveStep(dt) {
   }
   player.odo = (player.odo || 0) + Math.hypot(player.pos.x - x0, player.pos.z - z0);
   driveTick(dt, player.odo);
+  coinsHud(dt);
   traffic.update(dt, player, camera);
   // impacts
   let hit = 0;
@@ -1338,17 +1301,17 @@ async function boot() {
   // accounts load after the game is up and never hold it back (nothing happens without a configured backend)
   initAccount(S, {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
-    // signed in / out, or a purchase unlocked cars: the car select shows the new state
-    changed: () => { if (state === 'select') updateSelect(); if (isShopOpen()) renderShop(); },
+    // signed in / out, the prices loaded or a car bought: the car select shows the new state
+    changed: () => { if (state === 'select') updateSelect(); },
     cars: () => HERO_SPECS.map(s => ({ id: s.id, name: s.name, short: s.short || s.name, color: s.colors && s.colors.main, premium: !!s.premium })),
-    signedIn: () => { if (shopAfterLogin && (state === 'title' || state === 'select')) openShop($('sel-go')); shopAfterLogin = false; },
-    // news about a purchase (checkout opened, confirmed, pending...): shown in the shop, opened for it on
-    // the menus (not while driving)
-    purchase: msg => {
-      if (state === 'select') updateSelect();
-      if (!isShopOpen() && (state === 'title' || state === 'select') && !isAccountOpen()) openShop(null, msg);
-      else if (isShopOpen()) { renderShop(); $('shop-msg').textContent = msg; }
+    // back from signing in to buy a car: the car select, on that car
+    signedIn: () => {
+      const i = buyAfterLogin ? HERO_SPECS.findIndex(s => s.id === buyAfterLogin) : -1;
+      buyAfterLogin = null;
+      if (i >= 0 && state === 'select') { selIndex = i; updateSelect(); }
     },
+    // the server paid yen for the last minute of driving
+    earned: n => { if (state === 'drive' && hud) hud.toast(t('coins.earned', { n: yen(n) })); },
   }).catch(e => console.warn('[account]', e && e.message));
   if (location.hash === '#debug') {
     let fake = performance.now();
