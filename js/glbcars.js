@@ -50,6 +50,68 @@ function pcaAxle(mesh) {
   return { axle: new THREE.Vector3(x[0], x[1], x[2]), mean };
 }
 
+// geometry with only the given triangles (non-indexed, attributes kept as they are)
+function subGeometry(g, tris) {
+  const out = new THREE.BufferGeometry();
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.attributes[name], n = a.itemSize;
+    const arr = new a.array.constructor(tris.length * 3 * n);
+    let o = 0;
+    for (const t of tris) for (let v = 0; v < 3; v++) for (let c = 0; c < n; c++) arr[o++] = a.array[(t * 3 + v) * n + c];
+    out.setAttribute(name, new THREE.BufferAttribute(arr, n, a.normalized));
+  }
+  return out;
+}
+// see G.lampSplit in prepare(): cut every lamp-material mesh into head / tail / unlit parts by position
+function splitLamps(meshes, G, box) {
+  const LAMP = G.lampMat || /Light|glass|Glas_/i;
+  const frontZ = box.max.z - (G.lampDepth || 0.6), rearZ = box.min.z + (G.lampDepth || 0.6);
+  const minY = G.lampMinY !== undefined ? G.lampMinY : 0.3, headMaxY = G.headMaxY || 9;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (const m of [...meshes]) {
+    if (!m.parent || !test(LAMP, matName(m)) || test(/Window/i, matName(m))) continue;
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+    const pos = g.attributes.position, nt = pos.count / 3;
+    const buckets = { head: [], tail: [], none: [] };
+    m.updateWorldMatrix(true, false);
+    for (let t = 0; t < nt; t++) {
+      a.fromBufferAttribute(pos, t * 3).applyMatrix4(m.matrixWorld);
+      b.fromBufferAttribute(pos, t * 3 + 1).applyMatrix4(m.matrixWorld);
+      c.fromBufferAttribute(pos, t * 3 + 2).applyMatrix4(m.matrixWorld);
+      const y = (a.y + b.y + c.y) / 3, z = (a.z + b.z + c.z) / 3;
+      const key = y < minY ? 'none' : z > frontZ ? (y <= headMaxY ? 'head' : 'none') : z < rearZ ? 'tail' : 'none';
+      buckets[key].push(t);
+    }
+    const parts = Object.entries(buckets).filter(([, tris]) => tris.length);
+    if (parts.length === 1 && parts[0][0] === 'none') continue;
+    for (const [role, tris] of parts) {
+      const p = new THREE.Mesh(subGeometry(g, tris), m.material);
+      p.name = m.name + ':' + role;
+      p.position.copy(m.position); p.quaternion.copy(m.quaternion); p.scale.copy(m.scale);
+      if (role !== 'none') p.userData.lampRole = role;
+      m.parent.add(p);
+      meshes.push(p);
+    }
+    // (the original stays in the list, detached: wheels are addressed by their index in it)
+    m.parent.remove(m);
+  }
+}
+// glow anchors: centroid of a role's triangles per side
+function rolePts(meshes, pick) {
+  const acc = { L: [0, 0, 0, 0], R: [0, 0, 0, 0] }, v = new THREE.Vector3();
+  for (const m of meshes) {
+    if (!pick(m)) continue;
+    m.updateWorldMatrix(true, false);
+    const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+      const s = acc[v.x > 0 ? 'L' : 'R'];
+      s[0] += v.x; s[1] += v.y; s[2] += v.z; s[3]++;
+    }
+  }
+  return ['L', 'R'].filter(k => acc[k][3]).map(k => new THREE.Vector3(acc[k][0] / acc[k][3], acc[k][1] / acc[k][3], acc[k][2] / acc[k][3]));
+}
+
 function prepare(scene, spec) {
   const G = spec.glb;
   const root = new THREE.Group();
@@ -134,15 +196,20 @@ function prepare(scene, spec) {
       const p = new THREE.MeshPhysicalMaterial({
         name: src.name, color: src.color.clone(), map: src.map, normalMap: src.normalMap, aoMap: src.aoMap,
         metalnessMap: src.metalnessMap, roughnessMap: src.roughnessMap,
-        metalness: src.metalnessMap ? 0.35 : 0.12, roughness: THREE.MathUtils.clamp(src.roughness, 0.28, 0.5),
-        clearcoat: 0.75, clearcoatRoughness: 0.14, envMapIntensity: 0.85,
+        // (livery cars: a softer coat; under a lamp post the sharp one blew out into a white ball on the roof)
+        metalness: src.metalnessMap ? 0.35 : 0.12, roughness: THREE.MathUtils.clamp(src.roughness, spec.livery ? 0.42 : 0.28, 0.5),
+        clearcoat: 0.75, clearcoatRoughness: spec.livery ? 0.3 : 0.14, envMapIntensity: 0.85,
       });
       if (src.normalMap) p.normalScale.copy(src.normalScale);
       painted.set(src, p);
     }
     m.material = painted.get(src);
   }
-  // lamp anchor points (for glow sprites): centroids of the lamp meshes per side and end
+  // Lamps by position (G.lampSplit): some files use one lamp material for everything (headlamps, tail
+  // lamps, indicators, even parts under the car) or a lens material shared with a window. Each lamp mesh
+  // is cut by triangle: 'head' only at the nose at lamp height, 'tail' only at the tail; the rest never
+  // lights. G.headMaxY keeps the headlamps below a height (pop-up lamps: the fog lamps become the lights).
+  if (G.lampSplit) splitLamps(meshes, G, box);
   const lampPts = (re, reNode, front) => {
     const acc = { L: [0, 0, 0, 0], R: [0, 0, 0, 0] };
     const v = new THREE.Vector3();
@@ -160,20 +227,21 @@ function prepare(scene, spec) {
     for (const k of ['L', 'R']) { const a = acc[k]; if (a[3]) out.push(new THREE.Vector3(a[0] / a[3], a[1] / a[3], a[2] / a[3])); }
     return out;
   };
-  const head = G.headAt ? G.headAt.map(p => new THREE.Vector3(...p)) : lampPts(G.headPts || G.headMat, G.headNode, true);
-  const tail = G.tailAt ? G.tailAt.map(p => new THREE.Vector3(...p)) : lampPts(G.tailPts || G.tailMat, G.tailNode, false);
+  const byRole = role => m => m.userData.lampRole === role;
+  const head = G.headAt ? G.headAt.map(p => new THREE.Vector3(...p)) : G.lampSplit ? rolePts(meshes, byRole('head')) : lampPts(G.headPts || G.headMat, G.headNode, true);
+  const tail = G.tailAt ? G.tailAt.map(p => new THREE.Vector3(...p)) : G.lampSplit ? rolePts(meshes, byRole('tail')) : lampPts(G.tailPts || G.tailMat, G.tailNode, false);
   const size = box.getSize(new THREE.Vector3());
   // width from the wheel track (stray parts such as mirrors on a long arm must not widen the car)
   const track = wheels.length ? Math.max(...wheels.map(w => Math.abs(w.c.x))) * 2 + 0.5 : size.x;
   // Merge the static body into one mesh per material (these files carry 30-110 separate parts,
   // i.e. as many draw calls per car). Wheels, calipers and lamps stay separate: they move or light up.
-  const isLamp = m => ['head', 'tail', 'rev', 'blink'].some(r => test(G[r + 'Mat'], matName(m)) || test(G[r + 'Node'], m.name));
+  const isLamp = m => G.lampSplit ? !!m.userData.lampRole : ['head', 'tail', 'rev', 'blink'].some(r => test(G[r + 'Mat'], matName(m)) || test(G[r + 'Node'], m.name));
   const keep = new Set();
   for (const w of wheels) for (const i of [...w.idx, ...w.cal]) keep.add(meshes[i]);
   for (const m of meshes) if (isLamp(m)) keep.add(m);
   const byMat = new Map();
   for (const m of meshes) {
-    if (keep.has(m)) continue;
+    if (keep.has(m) || !m.parent) continue;
     if (!byMat.has(m.material)) byMat.set(m.material, []);
     byMat.get(m.material).push(m);
   }
@@ -256,6 +324,8 @@ export class GlbCarModel {
       mesh.material = own.get(k);
     };
     for (const m of meshes) {
+      const lr = m.userData.lampRole;
+      if (G.lampSplit) { if (lr === 'head') claim(m, 'head', '#fff2dc'); else if (lr === 'tail') claim(m, 'tail', '#ff2030'); continue; }
       if (role(m, G.headMat, G.headNode)) claim(m, 'head', '#fff2dc');
       else if (role(m, G.tailMat, G.tailNode)) claim(m, 'tail', '#ff2030');
       else if (role(m, G.revMat, G.revNode)) claim(m, 'rev', '#ffffff');
@@ -275,7 +345,8 @@ export class GlbCarModel {
     const tailLevel = st.brake ? 1 : st.head ? 0.38 : 0.12;
     for (const m of this._own) {
       const r = m.userData.role;
-      m.emissiveIntensity = r === 'head' ? (st.head ? 1.5 : 0.15) : r === 'tail' ? tailLevel * 2.2 : r === 'rev' ? (st.reverse ? 2 : 0) : (st.left || st.right ? 1.6 : 0);
+      // (lampSplit cars light their textured reflectors, darker than a plain lamp: a little more drive)
+      m.emissiveIntensity = r === 'head' ? (st.head ? (this.spec.glb.lampSplit ? 2.6 : 1.5) : 0.15) : r === 'tail' ? tailLevel * 2.2 : r === 'rev' ? (st.reverse ? 2 : 0) : (st.left || st.right ? 1.6 : 0);
     }
     this.blink.left = !!st.left;
     this.blink.right = !!st.right;

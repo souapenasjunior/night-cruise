@@ -34,20 +34,24 @@ export const JDM_SPECS = [
   // (painted in the texture), so there is no colour choice. The files were prepared (scale, wheels per
   // corner, simplified, WebP) so every wheel/caliper corner is its own mesh: wheel_* / caliper_* nodes.
   ...[
-    ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 290, accel: 9.0, grip: 1.15, drift: 0.9, mass: 1560 }, { type: 'v6', turbo: true, pops: 0.5 }],
-    ['p_rx7', 'RX-7', "Julius's RX-7", 'MAZDA', '7', 'Esportivo', '#d4262c', '#141414', 4.3, { top: 270, accel: 8.8, grip: 1.05, drift: 1.3, mass: 1280 }, { type: 'i4turbo', turbo: true, pops: 1.0 }],
+    ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 290, accel: 9.0, grip: 1.15, drift: 0.9, mass: 1560 }, { type: 'i6rb', turbo: true, pops: 0.7 }],
+    ['p_rx7', 'RX-7', "Julius's RX-7", 'MAZDA', '7', 'Esportivo', '#d4262c', '#141414', 4.3, { top: 270, accel: 8.8, grip: 1.05, drift: 1.3, mass: 1280 }, { type: 'rotary', turbo: true, pops: 1.6 }],
     ['p_eclipse', 'ECLIPSE', 'Eclipse 1995', 'MITSUBISHI', '95', 'Esportivo', '#27a55b', '#141414', 4.4, { top: 245, accel: 7.9, grip: 1.0, drift: 1.0, mass: 1300 }, { type: 'i4turbo', turbo: true, pops: 0.8 }],
-    ['p_s15', 'S15', 'Silvia S15 "Mona Lisa"', 'NISSAN', '15', 'Drift', '#e8761c', '#141414', 4.45, { top: 255, accel: 8.2, grip: 1.0, drift: 1.45, mass: 1250 }, { type: 'i4turbo', turbo: true, pops: 0.9 }],
-    ['p_supra2', 'SUPRA SJ', "Slap Jack's Supra", 'TOYOTA', '94', 'Superesportivo', '#e05a1c', '#f2c21c', 4.51, { top: 285, accel: 9.1, grip: 1.08, drift: 1.1, mass: 1500 }, { type: 'v6', turbo: true, pops: 0.6 }],
-    ['p_s2000', 'S2000', "Suki's S2000", 'HONDA', '20', 'Esportivo', '#e86aa6', '#f4f4f4', 4.13, { top: 250, accel: 8.0, grip: 1.1, drift: 1.05, mass: 1260 }, { type: 'i4rally', pops: 0.5 }],
-    ['p_supra', 'SUPRA', 'Supra MK IV', 'TOYOTA', '80', 'Superesportivo', '#f07818', '#141414', 4.51, { top: 295, accel: 9.3, grip: 1.07, drift: 1.15, mass: 1510 }, { type: 'v6', turbo: true, pops: 0.7 }],
+    ['p_s15', 'S15', 'Silvia S15 "Mona Lisa"', 'NISSAN', '15', 'Drift', '#e8761c', '#141414', 4.45, { top: 255, accel: 8.2, grip: 1.0, drift: 1.45, mass: 1250 }, { type: 'i4sr', turbo: true, pops: 1.0 }],
+    ['p_supra2', 'SUPRA SJ', "Slap Jack's Supra", 'TOYOTA', '94', 'Superesportivo', '#e05a1c', '#f2c21c', 4.51, { top: 285, accel: 9.1, grip: 1.08, drift: 1.1, mass: 1500 }, { type: 'i6jz', turbo: true, pops: 0.6 }],
+    ['p_s2000', 'S2000', "Suki's S2000", 'HONDA', '20', 'Esportivo', '#e86aa6', '#f4f4f4', 4.13, { top: 250, accel: 8.0, grip: 1.1, drift: 1.05, mass: 1260 }, { type: 'i4vtec', pops: 0.4 }],
+    ['p_supra', 'SUPRA', 'Supra MK IV', 'TOYOTA', '80', 'Superesportivo', '#f07818', '#141414', 4.51, { top: 295, accel: 9.3, grip: 1.07, drift: 1.15, mass: 1510 }, { type: 'i6jz', turbo: true, pops: 0.8 }],
   ].map(([id, short, name, brand, number, cls, main, accent, length, stats, sound]) => ({
     id, short, name, brand, number, cls, premium: 'premium_pack', livery: true,
     colors: { main, accent }, stats, sound, wheels: {},
     glb: {
       file: `models/${id}.json`, rotY: 0, length, paint: /Paint/,
       wheelNode: /^wheel_/, caliperNode: /^caliper_/,
-      headMat: /LightA/, tailMat: /red_glass|Glas_R/, tailPts: /red_glass|Glas_R|LightA/,
+      // one lamp material covers every lamp (and parts under the car): lamps are told apart by position
+      // (only the textured reflectors light up; the lenses in front of them are tinted glass)
+      lampSplit: true, lampMat: /LightA/,
+      // the RX-7's pop-up headlamps stay down: its bumper fog lamps are the lights
+      ...(id === 'p_rx7' ? { headMaxY: 0.45 } : {}),
     },
   })),
 ];

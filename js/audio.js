@@ -14,6 +14,18 @@ export const ENGINES = {
   flat6:     { cyl: 6,  uneven: 0.06, res: [240, 980],  rad: [0.99, 0.97],   mix: [1, 0.75], noise: 0.28, decay: 0.0022, diesel: 0,   drive: 1.6, idle: 950,  red: 8800,  lp: 5200, gear: 6 },
   diesel6:   { cyl: 6,  uneven: 0.05, res: [62, 250],   rad: [0.994, 0.98],  mix: [1, 0.55], noise: 0.5,  decay: 0.005,  diesel: 0.7, drive: 1.4, idle: 620,  red: 3000,  lp: 1500, gear: 8 },
   v10:       { cyl: 10, uneven: 0.02, res: [420, 1700], rad: [0.988, 0.965], mix: [1, 0.85], noise: 0.18, decay: 0.0017, diesel: 0,   drive: 1.3, idle: 1300, red: 12800, lp: 7500, gear: 7 },
+  // premium pack engines
+  // Nissan RB26DETT (R34): smooth straight six with a raspy, metallic top end, revs to 8000
+  i6rb:      { cyl: 6,  uneven: 0.02, res: [165, 700],  rad: [0.991, 0.972], mix: [1, 0.72], noise: 0.3,  decay: 0.0024, diesel: 0,   drive: 1.7, idle: 900,  red: 8000,  lp: 4600, gear: 6 },
+  // Toyota 2JZ-GTE (Supras): deeper, fuller straight six, big turbo, about 7000 rpm
+  i6jz:      { cyl: 6,  uneven: 0.03, res: [118, 510],  rad: [0.992, 0.975], mix: [1, 0.6],  noise: 0.3,  decay: 0.0028, diesel: 0,   drive: 1.85, idle: 750, red: 7000,  lp: 3600, gear: 6 },
+  // Mazda 13B twin rotor (RX-7): two rotors fire once per shaft turn each (the rate of a four-stroke
+  // four), with sharp exhaust pulses: a bright, buzzing rasp, lumpy idle, 9000 rpm
+  rotary:    { cyl: 4,  uneven: 0.22, res: [230, 960],  rad: [0.989, 0.968], mix: [1, 0.85], noise: 0.5,  decay: 0.0016, diesel: 0,   drive: 2.2, idle: 1000, red: 9000,  lp: 5800, gear: 5 },
+  // Honda F20C (S2000): naturally aspirated four that screams to 9000
+  i4vtec:    { cyl: 4,  uneven: 0.04, res: [205, 860],  rad: [0.99, 0.97],   mix: [1, 0.75], noise: 0.3,  decay: 0.0022, diesel: 0,   drive: 1.7, idle: 950,  red: 9000,  lp: 5600, gear: 6 },
+  // Nissan SR20DET (S15): raspy turbo four
+  i4sr:      { cyl: 4,  uneven: 0.06, res: [175, 740],  rad: [0.99, 0.972],  mix: [1, 0.68], noise: 0.4,  decay: 0.0025, diesel: 0,   drive: 1.7, idle: 850,  red: 7500,  lp: 4400, gear: 6 },
 };
 const GEAR_TOPS = { 5: [0.3, 0.46, 0.63, 0.81, 1.0], 6: [0.26, 0.4, 0.54, 0.68, 0.84, 1.0], 7: [0.24, 0.35, 0.47, 0.58, 0.7, 0.84, 1.0], 8: [0.14, 0.22, 0.31, 0.41, 0.52, 0.65, 0.8, 1.0] };
 

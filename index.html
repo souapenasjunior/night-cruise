@@ -104,28 +104,56 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .paints[hidden], .sel-loading[hidden], .lock[hidden] { display: none; }
 .sel-loading { color: var(--dim); font-size: 13px; }
 /* premium car not owned: one line where the colour row would be (these cars have no colour choice) */
-.lock { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--sodium); font: 700 16px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.lock { all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--sodium); font: 700 16px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .lock svg { width: 14px; height: 14px; flex: none; }
+.lock u { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--sodium); margin-left: 6px; font-size: 13px; }
+.lock:hover u, .lock:focus-visible u { color: var(--sodium); }
+.lock:focus-visible { outline: 2px solid var(--sodium); outline-offset: 4px; }
+#sel-go.buy { background: linear-gradient(180deg, #ffc35c, #ff9f1c); color: #1a1206; box-shadow: 0 0 24px rgba(255, 170, 40, 0.35); }
 /* the car details never run into the car strip: on short screens the description, then the stats, give way */
 #select .info.fit1 .desc { display: none; }
 #select .info.fit2 .stats { display: none; }
 /* shop */
-#shop .panel { width: min(760px, 100%); }
-.shop-body { overflow-y: auto; padding: 18px 22px; display: grid; gap: 16px; align-content: start; }
-.pack-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
-.pack-head h3 { margin: 4px 0 6px; font: 900 30px/1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; }
-.pack-head p { margin: 0; color: #c3c8d6; font-size: 14px; max-width: 420px; }
-.pack-head .eyebrow { color: var(--sodium); font: 700 11px/1 var(--body); letter-spacing: 0.18em; text-transform: uppercase; }
-.pack-buy { display: grid; justify-items: end; gap: 6px; }
-.pack-buy .price { font: 900 40px/1 var(--display); letter-spacing: 0.02em; }
-.pack-buy small { color: var(--dim); font-size: 12px; }
-.pack-cars { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.pack-cars li { border: 1px solid var(--line); padding: 10px 12px 9px; display: grid; gap: 3px; border-bottom-width: 3px; }
-.pack-cars b { font: 700 18px/1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
-.pack-cars span { color: var(--dim); font-size: 12px; }
-.shop-msg { margin: 0; min-height: 1.2em; color: #cfd4e2; font-size: 14px; }
-.shop-owned .pack-buy .price, .shop-owned .pack-buy small { display: none; }
+#shop .panel { width: min(1040px, 100%); max-height: min(760px, calc(100vh - 32px)); background: linear-gradient(160deg, #141a2e 0%, #0b0e18 55%, #120d08 100%); border-color: rgba(255, 178, 63, 0.28); box-shadow: 0 0 80px rgba(255, 150, 40, 0.08); }
+#shop header h2 { background: linear-gradient(90deg, #fff, #ffcf7a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.shop-body { overflow-y: auto; overflow-x: hidden; padding: 18px 22px 20px; display: grid; gap: 14px; align-content: start; }
+.pack-hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, 1fr); gap: 22px; align-items: stretch; }
+.pack-show { position: relative; margin: 0; min-height: 250px; overflow: hidden; border: 1px solid var(--line); background: radial-gradient(120% 90% at 50% 100%, rgba(255, 170, 60, 0.28), rgba(255, 170, 60, 0) 60%), radial-gradient(80% 70% at 85% 10%, rgba(60, 170, 255, 0.22), rgba(60, 170, 255, 0) 60%), #070910; }
+.pack-show img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .25s ease, transform .5s ease; }
+.pack-show img.swap { opacity: 0; transform: scale(1.03); }
+.pack-show::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(5, 6, 12, 0.92) 0%, rgba(5, 6, 12, 0) 45%); pointer-events: none; }
+.pack-show figcaption { position: absolute; left: 16px; bottom: 12px; z-index: 1; display: grid; gap: 2px; }
+.pack-show figcaption small { color: var(--sodium); font: 700 11px/1 var(--body); letter-spacing: 0.18em; }
+.pack-show figcaption b { font: 900 30px/1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.8); }
+.pack-owned { position: absolute; top: 12px; right: 12px; z-index: 1; display: none; padding: 5px 9px; background: #1f9d55; color: #fff; font: 700 11px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; }
+.shop-owned .pack-owned { display: block; }
+.pack-info { display: grid; gap: 10px; align-content: start; }
+.pack-info .eyebrow { color: var(--sodium); font: 700 11px/1 var(--body); letter-spacing: 0.2em; text-transform: uppercase; }
+.pack-info h3 { margin: 0; font: 900 38px/0.95 var(--display); letter-spacing: 0.02em; text-transform: uppercase; }
+.pack-info p { margin: 0; color: #c3c8d6; font-size: 14px; }
+.pack-perks { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 6px; }
+.pack-perks li { position: relative; padding-left: 22px; color: #dfe3ee; font-size: 13px; }
+.pack-perks li::before { content: ""; position: absolute; left: 2px; top: 4px; width: 10px; height: 6px; border-left: 2px solid var(--sodium); border-bottom: 2px solid var(--sodium); transform: rotate(-45deg); }
+.pack-buy { display: grid; gap: 6px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pack-buy .price { display: flex; align-items: flex-start; gap: 4px; line-height: 1; }
+.pack-buy .price small { font: 700 18px/1 var(--display); color: var(--sodium); margin-top: 6px; }
+.pack-buy .price b { font: 900 54px/0.9 var(--display); letter-spacing: 0.01em; }
+.pack-buy .once { color: var(--dim); font-size: 12px; }
+#shop-buy { width: 100%; justify-content: center; padding: 14px 18px; font-size: 18px; background: linear-gradient(180deg, #ffc35c, #ff9f1c); color: #1a1206; box-shadow: 0 0 28px rgba(255, 170, 40, 0.35); }
+#shop-buy:hover, #shop-buy:focus-visible { box-shadow: 0 0 40px rgba(255, 170, 40, 0.6); }
+.shop-owned .pack-buy .price, .shop-owned .pack-buy .once { display: none; }
+.shop-owned #shop-buy { background: #1f9d55; color: #fff; box-shadow: none; }
+.pack-cars { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.pack-cars li { all: unset; cursor: pointer; position: relative; display: grid; border: 1px solid var(--line); border-bottom-width: 3px; background: #0a0d17; overflow: hidden; transition: transform .15s ease, border-color .15s ease; }
+.pack-cars li img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.pack-cars li b { padding: 6px 8px 7px; font: 700 13px/1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pack-cars li:hover, .pack-cars li:focus-visible { transform: translateY(-2px); outline: none; }
+.pack-cars li.sel { border-color: var(--sodium); box-shadow: 0 0 18px rgba(255, 178, 63, 0.25); }
+.shop-msg { margin: 0; min-height: 1.2em; color: #ffd28a; font-size: 14px; }
+.shop-msg:empty { display: none; }
 #shop footer a { color: var(--sodium); }
+@media (max-width: 860px) { .pack-hero { grid-template-columns: 1fr; } .pack-cars { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .pack-cars { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pack-info h3 { font-size: 30px; } }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 #select .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .hint { color: var(--dim); font-size: 12.5px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
@@ -238,6 +266,39 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 #title-user i { width: 7px; height: 7px; border-radius: 50%; background: #43e27a; box-shadow: 0 0 8px rgba(67, 226, 122, 0.7); }
 #title-user[hidden] { display: none; }
 @media (max-width: 520px) { .acct-stats { grid-template-columns: 1fr 1fr; } }
+/* profile */
+#account.pf .panel { width: min(640px, 100%); background: linear-gradient(165deg, #141a2e 0%, #0b0e18 60%); }
+.pf-card { display: flex; gap: 16px; align-items: center; padding: 16px; border: 1px solid var(--line); background: radial-gradient(120% 140% at 0% 0%, rgba(255, 178, 63, 0.16), rgba(255, 178, 63, 0) 55%), radial-gradient(90% 120% at 100% 100%, rgba(60, 150, 255, 0.14), rgba(60, 150, 255, 0) 60%), #0c1020; }
+.pf-avatar { flex: none; width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; font: 900 32px/1 var(--display); color: #fff; letter-spacing: 0.02em; background: linear-gradient(135deg, var(--a1, #ff9f1c), var(--a2, #7a3cff)); box-shadow: 0 0 0 3px #0b0e18, 0 0 0 5px rgba(255, 178, 63, 0.55), 0 8px 26px rgba(0, 0, 0, 0.5); text-transform: uppercase; }
+.pf-id { display: grid; gap: 7px; min-width: 0; }
+.pf-name { font: 900 30px/1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.pf-badge { padding: 4px 8px; border: 1px solid var(--line); font: 700 10.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #cfd4e2; background: rgba(255, 255, 255, 0.03); }
+.pf-badge.gold { color: #1a1206; background: linear-gradient(180deg, #ffc35c, #ff9f1c); border-color: transparent; }
+.pf-badge[hidden] { display: none; }
+.acct-stats div { position: relative; padding: 12px 12px 10px; background: rgba(255, 255, 255, 0.02); }
+.acct-stats b { font-size: 26px; }
+.ic { width: 16px; height: 16px; color: var(--sodium); display: block; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+.ic-road { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 1h2l-1 14H3zM9 1h2l2 14h-3zM7.5 3h1v2h-1zm0 4h1v2h-1zm0 4h1v2h-1z'/%3E%3C/svg%3E"); }
+.ic-clock { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 2a5 5 0 1 1 0 10A5 5 0 0 1 8 3zm-.8 1.5v4.2l3.2 1.9.8-1.3-2.4-1.4V4.5z'/%3E%3C/svg%3E"); }
+.ic-flag { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 1h1.6v14H3zM5.4 2h8l-2 3.5 2 3.5h-8z'/%3E%3C/svg%3E"); }
+.pf-garage { display: grid; gap: 10px; }
+.pf-garage-h { display: flex; justify-content: space-between; align-items: baseline; }
+.pf-garage-h h3 { margin: 0; font: 600 11.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.pf-garage-h span { color: var(--sodium); font: 700 14px/1 var(--display); letter-spacing: 0.06em; }
+.pf-cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.pf-car { position: relative; border: 1px solid var(--line); border-bottom-width: 3px; padding: 7px 8px 6px; font: 700 13px/1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(255, 255, 255, 0.02); }
+.pf-car.off { opacity: 0.35; }
+.pf-car.off::after { content: ""; position: absolute; right: 6px; top: 7px; width: 9px; height: 9px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z'/%3E%3C/svg%3E") center / contain no-repeat; }
+.pf-fav { color: var(--dim); font-size: 12.5px; }
+.pf-fav b { color: #e7e9f0; font-weight: 600; }
+.pf-fav[hidden] { display: none; }
+.pf-more > summary { cursor: pointer; list-style: none; font: 600 11.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 8px; }
+.pf-more > summary::-webkit-details-marker { display: none; }
+.pf-more > summary::before { content: "›"; font-size: 16px; color: var(--sodium); transition: transform .15s ease; }
+.pf-more[open] > summary::before { transform: rotate(90deg); }
+.pf-more > summary:focus-visible { outline: 2px solid var(--sodium); outline-offset: 4px; }
+@media (max-width: 520px) { .pf-name { font-size: 24px; } .pf-avatar { width: 58px; height: 58px; font-size: 26px; } }
 
 /* ---------- HUD */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
@@ -324,7 +385,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
     <div class="stats" id="sel-stats"></div>
     <div class="paints"><span class="plabel" data-i18n="sel.paint">Cor</span><div class="swatches" id="sel-paints" role="radiogroup" aria-label="Cor do carro" data-i18n-aria="sel.paintAria"></div></div>
     <div class="sel-loading" id="sel-loading" hidden data-i18n="shop.loading">Carregando o carro…</div>
-    <div class="lock" id="sel-lock" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span data-i18n="shop.lockLine">Pacote Premium · R$ 19,90</span></div>
+    <button class="lock" id="sel-lock" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span data-i18n="shop.lockLine">Pacote Premium · 7 carros</span><u data-i18n="shop.seeInShop">Ver na loja</u></button>
   </div>
   <div class="strip">
     <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
@@ -381,20 +442,30 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   <div class="panel" role="dialog" aria-labelledby="shop-title">
     <header><h2 id="shop-title" data-i18n="shop.title">Loja</h2><span class="chipinfo" data-i18n="shop.sub">Carros extras para a sua garagem</span></header>
     <div class="shop-body">
-      <div class="pack-head">
-        <div>
+      <div class="pack-hero">
+        <figure class="pack-show" id="shop-show">
+          <img id="shop-show-img" alt="">
+          <figcaption><small id="shop-show-brand"></small><b id="shop-show-name"></b></figcaption>
+          <span class="pack-owned" data-i18n="shop.inGarage">Na sua garagem</span>
+        </figure>
+        <div class="pack-info">
           <div class="eyebrow" data-i18n="shop.packEyebrow">Pacote</div>
           <h3 data-i18n="shop.packTitle">Pacote Premium</h3>
           <p data-i18n="shop.packDesc">7 carros lendários dos filmes de corrida, para sempre na sua conta.</p>
-        </div>
-        <div class="pack-buy">
-          <b class="price" data-i18n="shop.price">R$ 19,90</b>
-          <small data-i18n="shop.once">pagamento único</small>
-          <button class="btn go" id="shop-buy">Comprar</button>
+          <ul class="pack-perks">
+            <li data-i18n="shop.perk1">7 carros com a pintura original de cada filme</li>
+            <li data-i18n="shop.perk2">Som de motor próprio: 6 em linha, rotativo, VTEC…</li>
+            <li data-i18n="shop.perk3">Seus para sempre, em qualquer computador</li>
+          </ul>
+          <div class="pack-buy">
+            <div class="price"><small>R$</small><b data-i18n="shop.priceNum">19,90</b></div>
+            <small class="once" data-i18n="shop.once">pagamento único · Pix ou cartão</small>
+            <button class="btn go" id="shop-buy">Comprar</button>
+          </div>
         </div>
       </div>
-      <ul class="pack-cars" id="shop-cars"></ul>
       <p class="shop-msg" id="shop-msg" role="status" aria-live="polite"></p>
+      <ul class="pack-cars" id="shop-cars" role="listbox" aria-label="Carros do pacote"></ul>
     </div>
     <footer><span class="chipinfo"><span data-i18n="shop.terms">Pagamento pelo Mercado Pago. 7 dias para desistir.</span> <a href="legal.html#compras" target="_blank" rel="noopener" data-i18n="shop.termsLink">Termos e reembolso</a></span><button class="btn small" id="shop-close" data-i18n="close">Fechar</button></footer>
   </div>
@@ -451,12 +522,26 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
       </div>
 
       <div class="acct-view" data-view="profile" hidden>
-        <div class="acct-stats">
-          <div><b id="pf-dist">—</b><span data-i18n="acc.statDist">Distância</span></div>
-          <div><b id="pf-time">—</b><span data-i18n="acc.statTime">Tempo dirigindo</span></div>
-          <div><b id="pf-drives">—</b><span data-i18n="acc.statDrives">Viagens</span></div>
+        <div class="pf-card">
+          <div class="pf-avatar" id="pf-avatar" aria-hidden="true">?</div>
+          <div class="pf-id">
+            <div class="pf-name" id="pf-name">—</div>
+            <div class="pf-badges"><span class="pf-badge" id="pf-rank">—</span><span class="pf-badge gold" id="pf-premium" hidden data-i18n="acc.premiumBadge">Pacote Premium</span></div>
+            <div class="acct-meta"><span><span data-i18n="acc.since">Membro desde</span> <b id="pf-since">—</b></span><span><span data-i18n="acc.seen">Último acesso</span> <b id="pf-seen">—</b></span></div>
+          </div>
         </div>
-        <div class="acct-meta"><span><span data-i18n="acc.since">Membro desde</span> <b id="pf-since">—</b></span><span><span data-i18n="acc.seen">Último acesso</span> <b id="pf-seen">—</b></span></div>
+        <div class="acct-stats">
+          <div><i class="ic ic-road"></i><b id="pf-dist">—</b><span data-i18n="acc.statDist">Distância</span></div>
+          <div><i class="ic ic-clock"></i><b id="pf-time">—</b><span data-i18n="acc.statTime">Tempo dirigindo</span></div>
+          <div><i class="ic ic-flag"></i><b id="pf-drives">—</b><span data-i18n="acc.statDrives">Viagens</span></div>
+        </div>
+        <div class="pf-garage">
+          <div class="pf-garage-h"><h3 data-i18n="acc.garage">Garagem</h3><span id="pf-garage-count">—</span></div>
+          <div class="pf-cars" id="pf-cars"></div>
+          <div class="pf-fav" id="pf-fav" hidden><span data-i18n="acc.favCar">Último carro</span> <b id="pf-fav-name"></b></div>
+        </div>
+        <details class="acct-sec pf-more">
+          <summary data-i18n="acc.settingsSec">Dados da conta e segurança</summary>
         <form class="acct-sec" id="pf-name-form" novalidate>
           <h3 data-i18n="acc.username">Nome de usuário</h3>
           <div class="acct-row">
@@ -472,6 +557,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
           <div class="ts-box"></div>
           <div class="acct-actions"><span></span><button class="btn small" type="submit" data-i18n="acc.changePassword">Alterar senha</button></div>
         </form>
+        </details>
         <div class="acct-sec">
           <div class="acct-actions">
             <button type="button" class="btn small" id="pf-logout" data-i18n="acc.signOut">Sair</button>
@@ -538,7 +624,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.15.0';
+  var V = '1.16.0';
   var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

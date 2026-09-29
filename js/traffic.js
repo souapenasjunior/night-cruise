@@ -867,8 +867,13 @@ export class Traffic {
       player.model.group.updateMatrixWorld();
       const pm = player.model.group.matrixWorld;
       const f = player.lights.head ? 1 : 0.15;
-      for (const h of player.model.headLocal) this._glowAt(pm, h.x, h.y, h.z, HEAD_COL, 0.25 * f, 0.7);
-      for (const t of player.model.tailLocal) this._glowAt(pm, t.x, t.y, t.z, TAIL_COL, player.braking ? 0.7 : 0.25, player.braking ? 0.75 : 0.5);
+      // like the traffic's: a lamp's glow shows only from the side it faces (seen from behind, the
+      // headlamp glows would shine through the glass as a blob over the roof, and the reverse at the front)
+      const e = pm.elements, dxP = cam.x - e[12], dzP = cam.z - e[14];
+      const pf = (e[8] * dxP + e[10] * dzP) / ((Math.hypot(dxP, dzP) * Math.hypot(e[8], e[10])) || 1); // >0: front faces camera
+      const headF = Math.max(0, Math.min(1, pf * 3)), tailF = Math.max(0, Math.min(1, -pf * 3));
+      for (const h of player.model.headLocal) this._glowAt(pm, h.x, h.y, h.z, HEAD_COL, 0.25 * f * headF, 0.7);
+      for (const t of player.model.tailLocal) this._glowAt(pm, t.x, t.y, t.z, TAIL_COL, (player.braking ? 0.7 : 0.25) * tailF, player.braking ? 0.75 : 0.5);
       if (player.model.blink) this._blinkGlows(pm, player.model, player.model.blink.left, player.model.blink.right);
     }
     this.types.forEach((t, i) => {

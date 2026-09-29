@@ -318,7 +318,9 @@ function render() {
   $('acct-sub').textContent = user && user.email ? user.email : '';
   const form = $('account').querySelector(`[data-view="${view}"]`);
   if (form && form.tagName === 'FORM') prepareCaptcha(form);
+  $('account').classList.toggle('pf', view === 'profile');
   if (view === 'profile' && profile) {
+    renderPilotCard();
     $('pf-username').value = profile.username;
     const date = iso => (iso ? new Date(iso).toLocaleDateString(t('acc.locale'), { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
     $('pf-since').textContent = date(profile.created_at);
@@ -328,6 +330,40 @@ function render() {
     $('pf-time').textContent = stats ? (mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`) : '—';
     $('pf-drives').textContent = stats ? String(stats.drives) : '—';
   }
+}
+
+// the profile's driver card: avatar (initials on colours picked from the name), rank by distance driven,
+// the garage (every car, the locked ones dimmed) and the last car driven
+function renderPilotCard() {
+  const name = profile.username || '';
+  $('pf-name').textContent = name;
+  const av = $('pf-avatar');
+  av.textContent = (name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2) || '?');
+  let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  av.style.setProperty('--a1', `hsl(${h % 360} 85% 55%)`);
+  av.style.setProperty('--a2', `hsl(${(h >> 8) % 360} 75% 40%)`);
+  const km = stats ? stats.distance_m / 1000 : 0;
+  $('pf-rank').textContent = t(km >= 2000 ? 'acc.rank4' : km >= 500 ? 'acc.rank3' : km >= 50 ? 'acc.rank2' : 'acc.rank1');
+  const cars = hooks.cars ? hooks.cars() : [];
+  const box = $('pf-cars');
+  box.innerHTML = '';
+  let have = 0;
+  for (const c of cars) {
+    const ok = !c.premium || owned.has(c.id);
+    if (ok) have++;
+    const d = document.createElement('div');
+    d.className = 'pf-car' + (ok ? '' : ' off');
+    d.textContent = c.short;
+    d.title = c.name;
+    if (c.color) d.style.borderBottomColor = c.color;
+    box.appendChild(d);
+  }
+  $('pf-garage-count').textContent = `${have}/${cars.length}`;
+  const prem = cars.filter(c => c.premium);
+  $('pf-premium').hidden = !prem.length || !prem.every(c => owned.has(c.id));
+  const fav = cars.find(c => c.id === profile.selected_car);
+  $('pf-fav').hidden = !fav;
+  if (fav) $('pf-fav-name').textContent = fav.name;
 }
 
 // errors from Auth and from the database functions, in the player's language
@@ -376,7 +412,10 @@ function bindUi() {
     const { error } = await sb.auth.signInWithPassword({ email: val('li-email'), password: $('li-pass').value, options: { captchaToken: captchaToken(f) } });
     if (error) throw error;
     $('li-pass').value = '';
-    show('profile');
+    // signed in: the panel gets out of the way (the title shows the player's name); the game may pick up
+    // what the sign-in was for (the shop)
+    closeAccount();
+    if (hooks.signedIn) hooks.signedIn();
   }); };
 
   let checkT = 0;

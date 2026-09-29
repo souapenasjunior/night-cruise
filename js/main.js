@@ -439,7 +439,8 @@ const paintIdx = spec => Math.min((S.paintIdx && S.paintIdx[spec.id]) || 0, PAIN
 // (a car with a livery keeps its original paint: null)
 const paintOf = spec => (spec.livery ? null : PAINTS[paintIdx(spec)].hex);
 // a premium car the account does not own yet: shown on the car select, not drivable
-const locked = spec => !!spec.premium && !ownsCar(spec.id);
+let devOwnAll = false; // local testing only (window.__nc.devUnlock on localhost#debug); the server still decides stats
+const locked = spec => !!spec.premium && !ownsCar(spec.id) && !devOwnAll;
 function choosePaint(i) {
   const s = HERO_SPECS[selIndex];
   if (s.livery || i < 0 || i >= PAINTS.length) return;
@@ -509,10 +510,12 @@ function updateSelect() {
   [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', locked(HERO_SPECS[i])); });
   const chip = $('sel-chips').children[selIndex];
   if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  // premium, not owned: a one-line note, and "Drive" becomes "See in the shop"
+  // premium, not owned: a one-line link to the shop, and "Drive" becomes "Buy · price" (the strip at the
+  // bottom is never covered by the car details)
   const lk = locked(s);
   $('sel-lock').hidden = !lk;
-  $('sel-go').textContent = lk ? t('shop.seeInShop') : t('sel.go');
+  $('sel-go').textContent = lk ? t('shop.buyPrice') : t('sel.go');
+  $('sel-go').classList.toggle('buy', lk);
   showModel(s);
   renderPaints();
   fitSelectInfo();
@@ -543,23 +546,47 @@ $('sel-go').onclick = () => startDrive();
 const PACK_CARS = () => HERO_SPECS.filter(s => s.premium === 'premium_pack');
 const packOwned = () => PACK_CARS().every(s => !locked(s));
 let shopReturn = null; // element to focus when the shop closes
+let shopAfterLogin = false; // the player was sent to sign in to buy: back to the shop once signed in
+let shopPick = 0;       // car shown large in the shop
+const shopImg = s => `img/shop/${s.id}.webp?v=${VERSION}`; // pictures taken in the game's showroom
+function showShopCar(i) {
+  const cars = PACK_CARS(), s = cars[i];
+  if (!s) return;
+  shopPick = i;
+  const img = $('shop-show-img');
+  if (!img.src.includes(`/${s.id}.webp`)) {
+    img.classList.add('swap');
+    setTimeout(() => { img.src = shopImg(s); img.alt = s.name; img.onload = () => img.classList.remove('swap'); }, img.src ? 120 : 0);
+  }
+  $('shop-show-name').textContent = s.name;
+  $('shop-show-brand').textContent = `${s.brand} · ${s.cls}`;
+  $('shop-show').style.borderColor = (s.colors && s.colors.main) || '';
+  [...$('shop-cars').children].forEach((li, k) => { li.classList.toggle('sel', k === i); li.setAttribute('aria-selected', k === i); });
+}
 function renderShop() {
   const owned = packOwned();
   $('shop').classList.toggle('shop-owned', owned);
   $('shop-cars').innerHTML = '';
-  for (const s of PACK_CARS()) {
+  PACK_CARS().forEach((s, i) => {
     const li = document.createElement('li');
+    li.tabIndex = 0;
+    li.setAttribute('role', 'option');
     li.style.borderBottomColor = (s.colors && s.colors.main) || 'var(--line)';
-    const b = document.createElement('b'); b.textContent = s.name;
-    const sp = document.createElement('span'); sp.textContent = `${s.brand} · ${s.cls}`;
-    li.append(b, sp);
+    const im = document.createElement('img'); im.src = shopImg(s); im.alt = ''; im.loading = 'lazy';
+    const b = document.createElement('b'); b.textContent = s.short;
+    li.append(im, b);
+    li.onmouseenter = li.onfocus = li.onclick = () => showShopCar(i);
     $('shop-cars').appendChild(li);
-  }
+  });
+  showShopCar(shopPick);
   $('shop-buy').textContent = owned ? t('shop.ownedBtn') : isSignedIn() ? t('shop.buy') : t('shop.signInToBuy');
   if (owned) $('shop-msg').textContent = t('shop.owned');
 }
 function openShop(from, msg) {
   shopReturn = from || document.activeElement;
+  // opened from a locked car on the car select: show that one first
+  const cur = state === 'select' ? PACK_CARS().indexOf(HERO_SPECS[selIndex]) : -1;
+  if (cur >= 0) shopPick = cur;
   renderShop();
   $('shop-msg').textContent = msg || (packOwned() ? t('shop.owned') : '');
   $('shop').hidden = false;
@@ -572,11 +599,16 @@ function closeShop() {
 }
 const isShopOpen = () => !$('shop').hidden;
 $('btn-shop').onclick = () => openShop($('btn-shop'));
+$('sel-lock').onclick = () => openShop($('sel-go'));
 $('shop-close').onclick = closeShop;
 // buying: sign in first, then the Mercado Pago page (the server unlocks the cars once it is paid)
-$('shop-buy').onclick = async () => {
+$('shop-buy').onclick = () => {
   if (packOwned()) { closeShop(); if (state !== 'select') { audio.init(); audio.setVolumes(S.audio); goSelect(); } return; }
-  if (!isSignedIn()) { closeShop(); openAccount('login', t('shop.signInFirst')); return; }
+  buyPack();
+};
+async function buyPack() {
+  if (!isSignedIn()) { if (isShopOpen()) closeShop(); shopAfterLogin = true; openAccount('login', t('shop.signInFirst')); return; }
+  if (!isShopOpen()) openShop($('sel-go'));
   $('shop-msg').textContent = t('acc.wait');
   // the tab is opened now, inside the click, so the browser allows it; the checkout address follows
   let win = null;
@@ -586,7 +618,7 @@ $('shop-buy').onclick = async () => {
   } catch (e) { win = null; }
   const msg = await buyProduct('premium_pack', win);
   if (msg) $('shop-msg').textContent = msg;
-};
+}
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
 canvas.addEventListener('pointerup', () => { show.drag = null; });
@@ -673,7 +705,7 @@ function parkAtSlot(k) {
 // drive
 function startDrive() {
   const spec = HERO_SPECS[selIndex];
-  if (locked(spec)) { openShop($('sel-go')); return; }
+  if (locked(spec)) { buyPack(); return; }
   if (!glbReady(spec.id)) return; // still loading
   S.lastCar = spec.id;
   SET.save(S);
@@ -1286,6 +1318,8 @@ async function boot() {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
     // signed in / out, or a purchase unlocked cars: the car select shows the new state
     changed: () => { if (state === 'select') updateSelect(); if (isShopOpen()) renderShop(); },
+    cars: () => HERO_SPECS.map(s => ({ id: s.id, name: s.name, short: s.short || s.name, color: s.colors && s.colors.main, premium: !!s.premium })),
+    signedIn: () => { if (shopAfterLogin && (state === 'title' || state === 'select')) openShop($('sel-go')); shopAfterLogin = false; },
     // news about a purchase (checkout opened, confirmed, pending...): shown in the shop, opened for it on
     // the menus (not while driving)
     purchase: msg => {
@@ -1301,7 +1335,10 @@ async function boot() {
       get state() { return state; },
       step(n = 1, ms = 16.7) { for (let i = 0; i < n; i++) { fake = Math.max(fake + ms, performance.now()); tick(fake); } },
       startDrive: () => startDrive(), goSelect: () => goSelect(), parkAtSlot,
+      get show() { return show; },
+      selectCar: id => { const i = HERO_SPECS.findIndex(s => s.id === id); if (i >= 0) { selIndex = i; updateSelect(); } return i; },
     };
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') window.__nc.devUnlock = () => { devOwnAll = true; if (state === 'select') updateSelect(); };
   }
 }
 
