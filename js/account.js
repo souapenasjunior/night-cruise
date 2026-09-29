@@ -9,9 +9,9 @@ import * as SET from './settings.js';
 
 // Public configuration (safe to publish). Secrets (service key, SMTP key, captcha secret) never go here.
 export const BACKEND = {
-  url: '',              // https://<project-ref>.supabase.co
-  anonKey: '',          // Supabase: Project Settings → API Keys → anon (publishable) key
-  turnstileSiteKey: '', // Cloudflare Turnstile site key (public); leave empty while captcha is off
+  url: 'https://awynkbzkmyybrjbkqdsb.supabase.co',
+  anonKey: 'sb_publishable_StGYW7U48omZkK3WNu8v_A_s5m9Nwpl', // publishable key: public by design
+  turnstileSiteKey: '0x4AAAAAAFIjnADnPZVjXNaf', // Cloudflare Turnstile site key (public)
 };
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
 const TURNSTILE_JS = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
