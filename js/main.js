@@ -429,7 +429,7 @@ function updateSelect() {
   $('sel-loading').hidden = glbReady(s.id);
   if (!glbReady(s.id)) loadCar(s).then(() => { if (state === 'select') updateSelect(); });
   $('sel-online').hidden = !onlineWant;
-  audio.setCar({ ...s.sound, top: s.stats.top });
+  audio.setCar({ ...s.sound, id: s.id, top: s.stats.top });
 }
 // a car's model: loaded with the game (the traffic uses every one); fetched here if that failed
 const carLoads = new Map();
@@ -681,7 +681,9 @@ function startDrive() {
   for (const a of traffic.agents) if (a.active && Math.hypot(a.x - player.pos.x, a.z - player.pos.z) < 40) traffic._despawn(a);
   if (!spawn) traffic.populate(player.pos);
   audio.init();
-  audio.setCar({ ...spec.sound, top: spec.stats.top });
+  audio.setCar({ ...spec.sound, id: spec.id, top: spec.stats.top });
+  // (a fresh drive starts with the engine off: the starter, then it catches)
+  if (!spawn) audio.engineStart();
   camMode = 0;
   rig.snapNext = true;
   state = 'drive';
@@ -1083,6 +1085,8 @@ function driveStep(dt) {
   // (Esc always pauses, even with the pause command removed: it cannot be given to any other action)
   if (input.pressed('pause') || input.edges.has('Escape')) { pauseGame(); return; }
   if (input.pressed('map')) { openMap(); return; }
+  // siren (police, ambulance, fire engine): off, wail, yelp, phaser
+  if (input.pressed('siren')) { const m = audio.cycleSiren(); if (audio.prof && audio.prof.siren) hud.toast(t('toast.siren').split('|')[m]); }
   if (input.pressed('lights')) { player.lights.head = !player.lights.head; hud.toast(t(player.lights.head ? 'toast.lightsOn' : 'toast.lightsOff')); }
   if (input.pressed('camera')) { camMode = (camMode + 1) % 4; rig.snapNext = true; hud.toast(t('toast.cam').split('|')[camMode]); }
   if (input.pressed('reset')) { player.reset(); rig.snapNext = true; hud.toast(t('toast.reset')); }

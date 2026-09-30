@@ -4,7 +4,7 @@ import { t } from './i18n.js';
 
 // action names follow the language (getters: the keys stay the list of actions, in display order)
 export const ACTION_LABELS = {};
-for (const a of ['accel', 'brake', 'left', 'right', 'horn', 'lights', 'lookLeft', 'lookRight', 'camera', 'lookback', 'reset', 'map', 'pause']) {
+for (const a of ['accel', 'brake', 'left', 'right', 'horn', 'siren', 'lights', 'lookLeft', 'lookRight', 'camera', 'lookback', 'reset', 'map', 'pause']) {
   Object.defineProperty(ACTION_LABELS, a, { get: () => t('act.' + a), enumerable: true });
 }
 // standard-mapping button names: Xbox style, or PlayStation's when a DualShock 4 / DualSense is connected

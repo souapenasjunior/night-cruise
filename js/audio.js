@@ -1,6 +1,7 @@
 // Web Audio: physically-inspired engines (per-cylinder pulses in an AudioWorklet), gearbox,
 // turbo/supercharger, exhaust pops, tires, wind, horn, tunnel reverb and city ambience.
 import { clamp, lerp } from './util.js';
+import { VEHICLE_AUDIO, DEFAULT_AUDIO } from './vehicleaudio.js';
 
 // Engine families. cyl = cylinders, uneven = firing irregularity (crossplane V8 burble),
 // res = exhaust/intake resonances (Hz), idle/red = rpm, lp = muffler brightness.
@@ -39,6 +40,14 @@ export const ENGINES = {
   diesel8:   { cyl: 8,  uneven: 0.3,  res: [70, 280],   rad: [0.994, 0.979], mix: [1, 0.5],  noise: 0.45, decay: 0.0045, diesel: 0.6, drive: 1.5, idle: 650,  red: 3800,  lp: 1800, gear: 6 },
   // small four-cylinder truck diesel (Tow Truck): rattly, busy, 3200 rpm
   diesel4:   { cyl: 4,  uneven: 0.06, res: [88, 350],   rad: [0.994, 0.979], mix: [1, 0.55], noise: 0.5,  decay: 0.005,  diesel: 0.8, drive: 1.4, idle: 700,  red: 3200,  lp: 1600, gear: 6 },
+  // refined four for a mid-size sedan (and the taxi): smooth, isolated, 6500
+  i4sedan:   { cyl: 4,  uneven: 0.03, res: [180, 740],  rad: [0.991, 0.973], mix: [1, 0.55], noise: 0.24, decay: 0.0026, diesel: 0,   drive: 1.4, idle: 750,  red: 6500,  lp: 3600, gear: 6 },
+  // modern production V6 coupe: an even, rasping note that opens up top, 7400
+  v6coupe:   { cyl: 6,  uneven: 0.08, res: [140, 600],  rad: [0.992, 0.973], mix: [1, 0.62], noise: 0.28, decay: 0.0028, diesel: 0,   drive: 1.7, idle: 800,  red: 7400,  lp: 4200, gear: 6 },
+  // truck-style V6 of a 4x4: low, rough, 6000
+  v6truck:   { cyl: 6,  uneven: 0.16, res: [110, 460],  rad: [0.993, 0.975], mix: [1, 0.48], noise: 0.33, decay: 0.0032, diesel: 0,   drive: 1.6, idle: 700,  red: 6000,  lp: 2800, gear: 6 },
+  // the biggest six diesel (fire engine, refuse truck): very low, heavy clatter, governed near 2200
+  diesel6big:{ cyl: 6,  uneven: 0.06, res: [52, 210],   rad: [0.995, 0.981], mix: [1, 0.5],  noise: 0.52, decay: 0.0055, diesel: 0.9, drive: 1.45, idle: 560, red: 2200,  lp: 1250, gear: 8 },
   i4sr:      { cyl: 4,  uneven: 0.06, res: [175, 740],  rad: [0.99, 0.972],  mix: [1, 0.68], noise: 0.4,  decay: 0.0025, diesel: 0,   drive: 1.7, idle: 850,  red: 6900,  lp: 4400, gear: 6 },
 };
 const GEAR_TOPS = { 5: [0.3, 0.46, 0.63, 0.81, 1.0], 6: [0.26, 0.4, 0.54, 0.68, 0.84, 1.0], 7: [0.24, 0.35, 0.47, 0.58, 0.7, 0.84, 1.0], 8: [0.14, 0.22, 0.31, 0.41, 0.52, 0.65, 0.8, 1.0] };
@@ -62,6 +71,7 @@ export class AudioSys {
     this.blinkState = false;
     this.car = { type: 'v8' };
     this.eng = ENGINES.v8;
+    this.prof = DEFAULT_AUDIO;
     this.lastSpeed = 0;
     this.otherType = null;
   }
@@ -194,6 +204,34 @@ export class AudioSys {
     this.whooshF = ctx.createBiquadFilter(); this.whooshF.type = 'bandpass'; this.whooshF.frequency.value = 700; this.whooshF.Q.value = 1.6;
     this.whooshG = ctx.createGain(); this.whooshG.gain.value = 0;
     this.whoosh.connect(this.whooshF).connect(this.whooshG).connect(this.engineBus);
+    // transmission: gear whine (a narrow tone that follows the road speed through the gearbox)
+    this.whine = ctx.createOscillator(); this.whine.type = 'triangle';
+    this.whineF = ctx.createBiquadFilter(); this.whineF.type = 'bandpass'; this.whineF.Q.value = 6;
+    this.whineG = ctx.createGain(); this.whineG.gain.value = 0;
+    this.whine.connect(this.whineF).connect(this.whineG).connect(this.engineBus);
+    this.whine.start();
+    // off throttle: engine braking / retarder rumble (low, dark flow noise in the exhaust)
+    this.overrun = this._loop(this.brown, 0.8);
+    this.overrunF = ctx.createBiquadFilter(); this.overrunF.type = 'lowpass'; this.overrunF.frequency.value = 220; this.overrunF.Q.value = 0.8;
+    this.overrunG = ctx.createGain(); this.overrunG.gain.value = 0;
+    this.overrun.connect(this.overrunF).connect(this.overrunG).connect(this.engineBus);
+    // siren (police, ambulance, fire engine): two detuned voices, a speaker-horn band, its own level
+    this.siren = [ctx.createOscillator(), ctx.createOscillator()];
+    this.siren[0].type = 'sawtooth'; this.siren[1].type = 'square';
+    this.sirenS = ctx.createWaveShaper();
+    { const c = new Float32Array(512); for (let i = 0; i < 512; i++) { const x = (i / 511) * 2 - 1; c[i] = Math.tanh(x * 2.2); } this.sirenS.curve = c; }
+    this.sirenF = ctx.createBiquadFilter(); this.sirenF.type = 'bandpass'; this.sirenF.frequency.value = 1300; this.sirenF.Q.value = 0.8;
+    this.sirenG = ctx.createGain(); this.sirenG.gain.value = 0;
+    for (const o of this.siren) { o.connect(this.sirenS); o.frequency.value = 800; o.start(); }
+    this.sirenS.connect(this.sirenF).connect(this.sirenG).connect(this.sfxBus);
+    this.sirenMode = 0; this.sirenT = 0;
+    // starter motor: a geared whine chopped by the compression strokes
+    this.starter = ctx.createOscillator(); this.starter.type = 'sawtooth';
+    this.starterF = ctx.createBiquadFilter(); this.starterF.type = 'lowpass'; this.starterF.frequency.value = 900;
+    this.starterG = ctx.createGain(); this.starterG.gain.value = 0;
+    this.starter.connect(this.starterF).connect(this.starterG).connect(this.engineBus);
+    this.starter.start();
+    this.startT = 0;
   }
   _attachWorklet() {
     const ctx = this.ctx;
@@ -253,8 +291,10 @@ export class AudioSys {
       const k = fresh ? 0.001 : 0.06;
       v.o1.frequency.setTargetAtTime(fire, t, k);
       v.o2.frequency.setTargetAtTime(fire * 0.5, t, k);
-      v.lp.frequency.setTargetAtTime((heavy ? 260 : 420) + push * 500 + kmh * 2, t, 0.1);
-      v.rf.frequency.setTargetAtTime((260 + kmh * 3.2) * doppler, t, 0.1);
+      // (far away the highs go first: distance darkens the sound, it does not only turn it down)
+      const near = clamp(1 - c.dist / 70, 0, 1);
+      v.lp.frequency.setTargetAtTime(((heavy ? 260 : 420) + push * 500 + kmh * 2) * (0.45 + 0.55 * near), t, 0.1);
+      v.rf.frequency.setTargetAtTime((260 + kmh * 3.2) * doppler * (0.5 + 0.5 * near), t, 0.1);
       v.eng.gain.setTargetAtTime((heavy ? 0.1 : 0.06) * (0.55 + 0.45 * push), t, 0.1);
       v.rg.gain.setTargetAtTime(Math.pow(clamp(kmh / 110, 0, 1.2), 1.5) * (heavy ? 0.16 : 0.11), t, 0.1);
       v.level = att * 0.36;
@@ -269,7 +309,7 @@ export class AudioSys {
   }  _sendProfile() {
     if (!this.wEngine) return;
     const e = this.eng;
-    this.wEngine.port.postMessage({ cyl: e.cyl, uneven: e.uneven, res: e.res, rad: e.rad, mix: e.mix, noise: e.noise, decay: e.decay, diesel: e.diesel, drive: e.drive });
+    this.wEngine.port.postMessage({ cyl: e.cyl, uneven: e.uneven, res: e.res, rad: e.rad, mix: e.mix, noise: e.noise, decay: e.decay, diesel: e.diesel, drive: e.drive, red: e.red, mech: (this.prof && this.prof.mech) || 0.1 });
   }
   _buildLoops() {
     const ctx = this.ctx;
@@ -330,17 +370,24 @@ export class AudioSys {
   }
   setCar(sound) {
     this.car = sound || { type: 'v8' };
-    this.eng = ENGINES[this.car.type] || ENGINES.v8;
+    // the vehicle's sound identity (vehicleaudio.js); its engine family wins over the spec's
+    this.prof = VEHICLE_AUDIO[this.car.id] || DEFAULT_AUDIO;
+    this.eng = ENGINES[this.prof.eng] || ENGINES[this.car.type] || ENGINES.v8;
+    this.diesel = /^diesel/.test(this.prof.eng || this.car.type);
+    this.boost = 0;
+    this.setSiren(0);
     this.gear = 0;
     this.rpm = this.eng.idle;
     if (!this.ctx) return;
-    const e = this.eng, diesel = /^diesel/.test(this.car.type);
+    const e = this.eng, diesel = this.diesel, P = this.prof;
     this.eFilter.frequency.value = Math.min(3000, e.lp * 0.6);
     this.eFilter2.frequency.value = Math.min(3900, e.lp * 0.8);
-    this.eBody.gain.value = e.cyl >= 8 ? 7 : diesel ? 8 : 5;
+    // (bigger bodies resonate more: vans, buses)
+    this.eBody.gain.value = (e.cyl >= 8 ? 7 : diesel ? 8 : 5) + ((P.body || 1) - 1) * 6;
     // horns: trucks get an air horn chord, small cars a thin beep
-    const horn = this.car.horn || (diesel ? 'air' : e.cyl <= 4 ? 'small' : 'car');
-    const H = { air: [185, 233, 900], car: [415, 523, 1000], small: [520, 660, 1400] }[horn];
+    const horn = P.horn || this.car.horn || (diesel ? 'truck' : e.cyl <= 4 ? 'small' : 'car');
+    // two notes and the horn's band: small cars high and short, trucks low, the air horn lowest
+    const H = { small: [520, 660, 1400], car: [415, 523, 1000], firm: [392, 494, 950], deep: [330, 415, 800], truck: [220, 277, 650], bus: [196, 247, 600], air: [150, 185, 520] }[horn] || [415, 523, 1000];
     this.h1.frequency.value = H[0]; this.h2.frequency.value = H[1]; this.hornF.frequency.value = H[2];
     this._sendProfile();
   }
@@ -391,8 +438,8 @@ export class AudioSys {
       this.gearHold = Math.max(0, (this.gearHold || 0) - dt);
       if (this.shiftT <= 0 && this.gearHold <= 0) {
         if (g < tops.length - 1 && p.brake < 0.3 && rpmIn(g) > e.red * up) {
-          g++; this.shiftT = e.cyl >= 10 ? 0.06 : /^diesel/.test(car.type) ? 0.35 : 0.14; this.gearHold = 0.6;
-        } else if (g > 0 && rpmIn(g - 1) < e.red * down) { g--; this.shiftT = 0.1; this.gearHold = 0.45; }
+          g++; this.shiftT = this.prof.shift.t; this.gearHold = 0.6; this._gearEvent(true);
+        } else if (g > 0 && rpmIn(g - 1) < e.red * down) { g--; this.shiftT = this.prof.shift.t * 0.6; this.gearHold = 0.45; this._gearEvent(false); }
       }
       this.gear = g;
       target = Math.max(e.idle, rpmIn(g));
@@ -402,7 +449,16 @@ export class AudioSys {
     }
     if (this.shiftT > 0) this.shiftT -= dt;
     const shifting = this.shiftT > 0;
-    this.rpm = lerp(this.rpm, target, 1 - Math.exp(-dt * (shifting ? 18 : 10)));
+    // starting: the starter turns the engine over, then it catches and flares above idle
+    if (this.startT > 0) {
+      this.startT -= dt;
+      target = this.startT > 0 ? e.idle * 0.25 : e.idle * 1.5;
+      if (this.startT <= 0) { this.starterG.gain.setTargetAtTime(0, ctx.currentTime, 0.04); this.rpm = e.idle * 1.5; }
+    }
+    // a downshift blip: the revs jump before the gear takes hold
+    if (this.blipT > 0) { this.blipT -= dt; target = Math.max(target, this.rpm + e.red * 0.12 * this.prof.shift.blip); }
+    const rate = shifting ? 16 : target > this.rpm ? this.prof.rev : this.prof.revDn;
+    this.rpm = lerp(this.rpm, target, 1 - Math.exp(-dt * rate));
     const load = shifting ? 0.05 : clamp(p.throttle, 0, 1);
     this.throttleLP = lerp(this.throttleLP, load, 1 - Math.exp(-dt * 12));
     const rn = this.rpm / e.red;
@@ -416,26 +472,40 @@ export class AudioSys {
       const fire = (this.rpm / 60) * (e.cyl / 2);
       for (const [o, mul] of this.fb) o.frequency.setTargetAtTime(fire * mul * 0.5, t, 0.02);
     }
-    this.eOut.gain.setTargetAtTime(0.22 + this.throttleLP * 0.18, t, 0.05);
+    const P = this.prof;
+    // (the engine is not just louder on throttle: load reshapes it in the worklet; this is the exhaust)
+    const starting = this.startT > 0 ? 0 : 1;
+    this.eOut.gain.setTargetAtTime((0.22 + this.throttleLP * 0.14) * P.exhaust * starting, t, 0.05);
     // (capped: above ~3 kHz the synthetic pulses only add a whine)
-    const lpf = Math.min(3000, e.lp * 0.6) * (0.5 + 0.35 * this.throttleLP + 0.3 * rn);
+    // (a sealed cabin muffles the engine: the minivan and the ambulance more than the sports car)
+    const lpf = Math.min(3000, e.lp * 0.6) * (0.5 + 0.35 * this.throttleLP + 0.3 * rn) * (1 - 0.4 * P.cabin);
     this.eFilter.frequency.setTargetAtTime(lpf, t, 0.05);
     this.eFilter2.frequency.setTargetAtTime(lpf * 1.3, t, 0.05);
     // intake roar rises with rpm and load
     this.roarF.frequency.setTargetAtTime(200 + this.rpm * 0.12, t, 0.05);
-    this.roarG.gain.setTargetAtTime((0.006 + this.throttleLP * 0.03) * (0.3 + rn), t, 0.06);
+    this.roarG.gain.setTargetAtTime((0.006 + this.throttleLP * 0.03) * (0.3 + rn) * P.intake, t, 0.06);
+    // gear whine: follows the road speed, louder under load and on the overrun of trucks
+    this.whine.frequency.setTargetAtTime(90 + kmh * 7 * (this.diesel ? 0.6 : 1), t, 0.05);
+    this.whineF.frequency.setTargetAtTime(90 + kmh * 7 * (this.diesel ? 0.6 : 1), t, 0.05);
+    this.whineG.gain.setTargetAtTime(P.whine * 0.012 * clamp(kmh / 40, 0, 1) * (0.4 + 0.6 * Math.abs(this.throttleLP - 0.3)), t, 0.1);
+    // engine braking: off throttle at speed, the exhaust rumbles (a retarder's hum on buses)
+    const over = kmh > 12 && !p.reverse ? clamp(1 - this.throttleLP * 2, 0, 1) * clamp(rn * 1.4, 0, 1) : 0;
+    this.overrunF.frequency.setTargetAtTime((this.diesel ? 140 : 200) + rn * 260, t, 0.1);
+    this.overrunG.gain.setTargetAtTime(over * P.ebrake * 0.05, t, 0.12);
     // forced induction
-    if (car.turbo) {
+    const TB = P.turbo;
+    if (TB) {
+      // boost builds with load and revs at the turbo's own pace (small: quick; diesel: slow and strong)
       const want = clamp(this.throttleLP * (rn * 1.5 - 0.25), 0, 1);
-      this.boost = lerp(this.boost, want, 1 - Math.exp(-dt * (want > this.boost ? 1.8 : 7)));
+      this.boost = lerp(this.boost, want, 1 - Math.exp(-dt * (want > this.boost ? TB.spool : 6)));
       const b = this.boost;
       // (the spool is felt more than heard: a lower, softer band, or at full boost it reads as a hiss)
       this.whooshF.frequency.setTargetAtTime((/^diesel/.test(car.type) ? 450 : 550) + b * 750, t, 0.12);
-      this.whooshG.gain.setTargetAtTime(b * b * 0.02, t, 0.1);
-      const f = (/^diesel/.test(car.type) ? 700 : 950) + b * 1100;
+      this.whooshG.gain.setTargetAtTime(b * b * 0.02 * TB.level, t, 0.1);
+      const f = TB.whistle * (0.45 + 0.55 * b);
       this.turbo.frequency.setTargetAtTime(f, t, 0.12);
       this.turbo2.frequency.setTargetAtTime(f * 1.5, t, 0.12);
-      this.turboG.gain.setTargetAtTime(b * b * 0.0035, t, 0.1);
+      this.turboG.gain.setTargetAtTime(b * b * 0.004 * TB.level, t, 0.1);
       // (no blow-off hiss: it read as an exhaust crack)
     } else if (car.blower) {
       this.turbo.frequency.setTargetAtTime(this.rpm * 0.3, t, 0.05);
@@ -449,7 +519,7 @@ export class AudioSys {
     // (no exhaust crackle: the pops read as clicks)
     void pops;
     // diesel air brake when coming to a stop
-    if (/^diesel/.test(car.type) && this.lastSpeed > 3 && kmh <= 3 && p.brake > 0.2) this._airBrake();
+    if (this.diesel && this.lastSpeed > 3 && kmh <= 3 && p.brake > 0.2) { this._airBrake(); if (P.extra === 'bus') this.doorT = 1.2; }
     this.lastSpeed = kmh;
     this.lastThrottle = p.throttle;
     // tires
@@ -466,9 +536,12 @@ export class AudioSys {
     // the changing surface
     this.treadWob = clamp(this.treadWob + (Math.random() - 0.5) * dt * 1.2, 0.85, 1.15);
     const tr = Math.pow(clamp(kmh / 160, 0, 1.4), 1.3);
-    this.tread.g.gain.setTargetAtTime(tr * 0.12 * this.treadWob * (1 + this.inTunnel * 0.3), t, 0.08);
-    this.tread.fl.frequency.setTargetAtTime(Math.min(1300, 380 + kmh * 3.5), t, 0.1);
-    this.treadHi.g.gain.setTargetAtTime(tr * 0.01, t, 0.1);
+    const TY = P.tyre;
+    this.tread.g.gain.setTargetAtTime(tr * 0.12 * TY.g * this.treadWob * (1 + this.inTunnel * 0.3), t, 0.08);
+    this.tread.fl.frequency.setTargetAtTime(Math.min(1300, 380 + kmh * 3.5) * TY.f, t, 0.1);
+    // (coarse tyres: more of the texture band)
+    this.treadHi.g.gain.setTargetAtTime(tr * (0.01 + TY.rough * 0.02), t, 0.1);
+    this.roll.fl.frequency.setTargetAtTime((110 + kmh * 1.1) * TY.f, t, 0.1);
     // expansion joints of the elevated road: a soft double thump (front, then rear axle) every 40 m
     if (kmh > 25 && !p.reverse) {
       this.jointD += (kmh / 3.6) * dt;
@@ -483,7 +556,7 @@ export class AudioSys {
     const v = kmh / 100;
     // (a low rush that stays low: above ~250 km/h the old curve opened up into a loud hiss)
     // (pink noise is quieter up top than white: the gains are a little higher for the same body)
-    this.wind.g.gain.setTargetAtTime(clamp(v * v * 0.09, 0, 0.26) * (1 - this.inTunnel * 0.4), t, 0.1);
+    this.wind.g.gain.setTargetAtTime(clamp(v * v * 0.09 * P.wind, 0, 0.3) * (1 - this.inTunnel * 0.4), t, 0.1);
     this.wind.fl.frequency.setTargetAtTime(Math.min(900, 300 + kmh * 2.6), t, 0.1);
     this.windHi.g.gain.setTargetAtTime(clamp((v - 1.2) * 0.01, 0, 0.015), t, 0.2);
     // ambience
@@ -493,7 +566,9 @@ export class AudioSys {
     this.revSend.gain.setTargetAtTime(this.inTunnel * 0.55, t, 0.1);
     this.tunnelHum.g.gain.setTargetAtTime(this.inTunnel * 0.08, t, 0.3);
     // horn
-    this.horn.gain.setTargetAtTime(p.horn ? 0.14 : 0, t, p.horn ? 0.008 : 0.04);
+    this.horn.gain.setTargetAtTime(p.horn ? (P.horn === 'air' ? 0.2 : 0.14) : 0, t, p.horn ? 0.008 : 0.04);
+    this._updateSiren(dt, t);
+    this._updateExtras(dt, kmh, p);
     // blinker relay click
     if (p.blinkOn !== this.blinkState) { this.blinkState = p.blinkOn; if (p.blinkActive) this._tick(p.blinkOn); }
     // nearest cruiser's engine, with doppler
@@ -557,6 +632,79 @@ export class AudioSys {
   _shiftPop() { this._burst(0.07, 'lowpass', 800, 0.8, 0.1, this.engineBus); }
   // blow-off: a short, soft 'pssh' (band-passed, falling) instead of a bright hiss
   _blowOff(diesel) { this._burst(diesel ? 0.5 : 0.35, 'bandpass', diesel ? 1100 : 1600, 0.9, 0.05, this.engineBus, diesel ? 500 : 700, 0.01); this.boost = 0; }
+  // a gear change you hear: the torque cuts (shiftT), the gearbox makes its sound, the revs fall and
+  // the engine takes the load again. Automatics barely register; trucks clunk; a downshift can blip.
+  _gearEvent(up) {
+    const S = this.prof.shift;
+    if (S.clunk > 0.02) {
+      const g = S.clunk * (S.auto ? 0.4 : 1) * (up ? 1 : 0.8);
+      this._burst(0.06 + (this.diesel ? 0.08 : 0), 'bandpass', S.f, 1.6, g * 0.08, this.engineBus);
+      if (this.diesel) setTimeout(() => { if (this.ready) this._burst(0.12, 'lowpass', S.f * 0.5, 0.9, g * 0.06, this.engineBus); }, 90);
+    }
+    if (!up && S.blip > 0 && this.throttleLP > 0.2) this.blipT = 0.12;
+  }
+  // start the engine: starter whine chopped by compressions, then it catches (drive start)
+  engineStart() {
+    if (!this.ready) return;
+    const st = this.prof.start || { f: 170, t: 0.6 };
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.startT = st.t;
+    this.rpm = 0;
+    this.starter.frequency.setValueAtTime(st.f, t);
+    this.starterF.frequency.setValueAtTime(st.heavy ? 600 : 1100, t);
+    // cranking: the level pulses with each compression (faster as it spins up)
+    const g = this.starterG.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(0, t);
+    const lvl = st.heavy ? 0.07 : 0.05;
+    let x = t;
+    for (let k = 0; x < t + st.t; k++) { const per = (st.heavy ? 0.16 : 0.11) * (1 - k * 0.03); g.linearRampToValueAtTime(lvl, x + per * 0.3); g.linearRampToValueAtTime(lvl * 0.35, x + per); x += per; }
+    g.linearRampToValueAtTime(0, t + st.t + 0.05);
+  }
+  // siren: 0 off, 1 wail (slow sweep), 2 yelp (fast sweep), 3 phaser (very fast warble)
+  setSiren(mode) {
+    this.sirenMode = this.prof && this.prof.siren ? mode % 4 : 0;
+    if (this.ctx) this.sirenG.gain.setTargetAtTime(this.sirenMode ? 0.075 : 0, this.ctx.currentTime, 0.05);
+    return this.sirenMode;
+  }
+  cycleSiren() { return this.setSiren((this.sirenMode || 0) + 1); }
+  _updateSiren(dt, t) {
+    if (!this.sirenMode) return;
+    this.sirenT += dt;
+    const low = this.prof.sirenLow ? 0.72 : 1;
+    let f;
+    if (this.sirenMode === 1) { const u = 0.5 - 0.5 * Math.cos(this.sirenT * 2 * Math.PI / 4.4); f = 620 + 780 * u; }
+    else if (this.sirenMode === 2) { const u = 0.5 - 0.5 * Math.cos(this.sirenT * 2 * Math.PI / 0.32); f = 650 + 750 * u; }
+    else { const u = (Math.sin(this.sirenT * 2 * Math.PI * 11) > 0 ? 1 : 0) * 0.7 + 0.3 * Math.random(); f = 1150 + 500 * u; }
+    f *= low;
+    this.siren[0].frequency.setTargetAtTime(f, t, 0.012);
+    this.siren[1].frequency.setTargetAtTime(f * 1.006, t, 0.012);
+    this.sirenF.frequency.setTargetAtTime(f * 1.4, t, 0.02);
+  }
+  // vehicle extras: the refuse truck's compactor when stopped, the bus's doors and air compressor
+  _updateExtras(dt, kmh, p) {
+    const X = this.prof.extra;
+    if (!X) return;
+    this.stillT = kmh < 2 ? (this.stillT || 0) + dt : 0;
+    if (this.doorT > 0) { this.doorT -= dt; if (this.doorT <= 0) this._burst(0.5, 'bandpass', 1800, 0.9, 0.05, this.sfxBus, 900, 0.01); }
+    this.extraT = (this.extraT || 0) - dt;
+    if (this.extraT > 0) return;
+    if (X === 'garbage' && this.stillT > 3) {
+      // hydraulic pump rising, then the compactor blade's thud
+      this.extraT = 18 + Math.random() * 14;
+      const ctx = this.ctx, t = ctx.currentTime, o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(70, t); o.frequency.linearRampToValueAtTime(115, t + 2.4);
+      f.type = 'lowpass'; f.frequency.value = 500;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.4); g.gain.setValueAtTime(0.05, t + 2.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.8);
+      o.connect(f).connect(g).connect(this.sfxBus); o.start(t); o.stop(t + 2.9);
+      setTimeout(() => { if (this.ready) this._burst(0.25, 'lowpass', 160, 0.8, 0.12); }, 2700);
+    } else if (X === 'bus' && this.stillT > 2) {
+      // the air compressor topping up: a few low chugs
+      this.extraT = 12 + Math.random() * 10;
+      for (let k = 0; k < 6; k++) setTimeout(() => { if (this.ready) this._burst(0.09, 'lowpass', 180, 0.9, 0.035); }, k * 190);
+    } else this.extraT = 1;
+    void p;
+  }
   _airBrake() { this._burst(0.9, 'highpass', 3000, 0.5, 0.12, this.sfxBus, 1800, 0.01); }
   _tick(on) {
     const ctx = this.ctx, t = ctx.currentTime;

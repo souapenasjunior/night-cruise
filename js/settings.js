@@ -10,13 +10,13 @@ export const PRESETS = {
 
 export const DEFAULT_BINDINGS = {
   accel: ['KeyW', 'ArrowUp'], brake: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-  horn: ['KeyH'], lights: ['KeyL'], lookLeft: ['KeyQ'], lookRight: ['KeyE'],
+  horn: ['KeyH'], siren: ['KeyG'], lights: ['KeyL'], lookLeft: ['KeyQ'], lookRight: ['KeyE'],
   camera: ['KeyV'], lookback: ['KeyC'], reset: ['KeyR'], map: ['KeyM'], pause: ['Escape'],
 };
 
 // controller buttons (standard mapping) per action; accelerate (RT), brake (LT) and steering (left stick,
 // d-pad left / right) stay fixed. An empty list: the action has no button.
-export const DEFAULT_PAD = { horn: [1], lights: [3], lookLeft: [4], lookRight: [5], camera: [8], lookback: [11], reset: [12], map: [13], pause: [9] };
+export const DEFAULT_PAD = { horn: [1], siren: [2], lights: [3], lookLeft: [4], lookRight: [5], camera: [8], lookback: [11], reset: [12], map: [13], pause: [9] };
 export const PAD_FIXED = [6, 7, 14, 15]; // triggers and d-pad left / right: driving, not remappable
 
 export function defaults() {
