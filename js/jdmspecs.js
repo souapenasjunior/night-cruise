@@ -3,16 +3,32 @@
 import { t } from './i18n.js';
 
 const Q = Math.PI / 2;
+// the premium cars' tailpipe tips (see `exhaust` below)
+const EXHAUST = {
+  p_eclipse: [[0.45, 0.3]], p_s2000: [[0.41, 0.29], [-0.4, 0.29]], p_s15: [[0.36, 0.27]], p_rx7: [[-0.5, 0.31]],
+  p_supra2: [[0.47, 0.29], [0.31, 0.29]], p_supra: [[0.52, 0.3]], p_r34: [[0.4, 0.32]],
+};
 
+// In the order of the car select: weakest first, the dearest premium car last.
+// (livery: every car keeps the paint of its file; there is no colour choice)
+// exhaust: the tailpipe tips, [x, y] in metres (x from the centre line, + = the car's left; y from the
+// ground), measured on rear renders of each model: where the backfire flames come out (flames.js)
 export const JDM_SPECS = [
   {
-    // (livery: every car keeps the paint of its file; there is no colour choice)
+    id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico', livery: true,
+    colors: { main: '#efefef', accent: '#1b1b1b' },
+    stats: { top: 195, accel: 6.2, grip: 0.88, drift: 1.5, mass: 950 },
+    sound: { type: 'i4rally', pops: 0.9 },
+    wheels: {},
+    glb: { file: 'models/tiara83.json', paint: /Bodymat$/, rotY: -Q, length: 4.2, wheelNode: /WheelTuner/, caliperNode: /CaliperTuner/, headNode: /_Headlights_/, tailNode: /_Brakelights_/, revNode: /_Reverselights_/, windowNode: /^TiaraGT83_(Glass|Trunkdoor_Glass|Windshield|Glass_Driver|Glass_Passenger)_UCB/, exhaust: [[0.36, 0.28]] },
+  },
+  {
     id: 'r32', short: 'R32', name: 'Skyline GT-R R32', brand: 'NISSAN', number: '32', cls: 'Grand tourer', livery: true,
     colors: { main: '#16171b', accent: '#c9ccd2' },
     stats: { top: 225, accel: 7.2, grip: 1.0, drift: 0.85, mass: 1430 },
     sound: { type: 'v6', turbo: true, pops: 0.5 },
     wheels: {},
-    glb: { file: 'models/r32.json', paint: /^paint$/, rotY: 0, length: 4.55, wheel: /^(tyre|rims|brake)$/, caliper: /^brake_caliper$/, headMat: /^headlights\.001$/, tailMat: /^rear_lights2?$/, windowMat: /^widnows$/ },
+    glb: { file: 'models/r32.json', paint: /^paint$/, rotY: 0, length: 4.55, wheel: /^(tyre|rims|brake)$/, caliper: /^brake_caliper$/, headMat: /^headlights\.001$/, tailMat: /^rear_lights2?$/, windowMat: /^widnows$/, exhaust: [[0.53, 0.3]] },
   },
   {
     id: 'nsx', short: 'NSX', name: 'NSX', brand: 'HONDA', number: '90', cls: 'Superesportivo', livery: true,
@@ -20,15 +36,7 @@ export const JDM_SPECS = [
     stats: { top: 230, accel: 7.4, grip: 0.98, drift: 0.95, mass: 1370 },
     sound: { type: 'flat6', pops: 0.4 },
     wheels: {},
-    glb: { file: 'models/nsx.json', rotY: 0, length: 4.4, wheel: /^Material\.(011|018|021|023)$/, headMat: /^Material\.013$/, tailMat: /^Material\.009$/, paint: /^Material\.003$/, windowMat: /^Material\.004$/ },
-  },
-  {
-    id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico', livery: true,
-    colors: { main: '#efefef', accent: '#1b1b1b' },
-    stats: { top: 195, accel: 6.2, grip: 0.88, drift: 1.5, mass: 950 },
-    sound: { type: 'i4rally', pops: 0.9 },
-    wheels: {},
-    glb: { file: 'models/tiara83.json', paint: /Bodymat$/, rotY: -Q, length: 4.2, wheelNode: /WheelTuner/, caliperNode: /CaliperTuner/, headNode: /_Headlights_/, tailNode: /_Brakelights_/, revNode: /_Reverselights_/, windowNode: /^TiaraGT83_(Glass|Trunkdoor_Glass|Windshield|Glass_Driver|Glass_Passenger)_UCB/ },
+    glb: { file: 'models/nsx.json', rotY: 0, length: 4.4, wheel: /^Material\.(011|018|021|023)$/, headMat: /^Material\.013$/, tailMat: /^Material\.009$/, paint: /^Material\.003$/, windowMat: /^Material\.004$/, exhaust: [[0.51, 0.37], [-0.5, 0.37]] },
   },
   // Premium cars: each one is bought on its own with yen (the in-game money earned by driving; prices in
   // the database, cars.price_coins) and drivable once the account owns it. All are quicker than the free
@@ -55,6 +63,7 @@ export const JDM_SPECS = [
       lampSplit: true, lampMat: /LightA/,
       // the RX-7's pop-up headlamps stay down: its bumper fog lamps are the lights
       ...(id === 'p_rx7' ? { headMaxY: 0.45 } : {}),
+      exhaust: EXHAUST[id],
     },
   })),
 ];

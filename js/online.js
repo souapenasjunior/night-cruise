@@ -161,7 +161,7 @@ export class Online {
     const want = r.car;
     const ok = await this.hooks.load(spec);
     if (!ok || !this.remotes.has(r.id) || r.car !== want) return;
-    if (r.model) { this.scene.remove(r.model.group); r.model.dispose && r.model.dispose(); }
+    if (r.model) { if (r.model.flames) r.model.flames.dispose(); this.scene.remove(r.model.group); r.model.dispose && r.model.dispose(); }
     r.model = this.hooks.model(spec);
     r.model.group.add(r.tag);
     r.tag.position.set(0, 2.1, 0);
@@ -170,7 +170,7 @@ export class Online {
   removeRemote(id) {
     const r = this.remotes.get(id);
     if (!r) return;
-    if (r.model) { this.scene.remove(r.model.group); r.model.dispose && r.model.dispose(); }
+    if (r.model) { if (r.model.flames) r.model.flames.dispose(); this.scene.remove(r.model.group); r.model.dispose && r.model.dispose(); }
     r.tag.material.map.dispose(); r.tag.material.dispose();
     this.remotes.delete(id);
   }
@@ -184,7 +184,9 @@ export class Online {
       if (this.sendT <= 0) {
         this.sendT = SEND_EVERY;
         const L = player.lights;
-        const flags = (L.head ? 1 : 0) | (player.braking ? 2 : 0) | (player.blinkOn && (L.left || L.hazard) ? 4 : 0) | (player.blinkOn && (L.right || L.hazard) ? 8 : 0) | (player.reversing ? 16 : 0);
+        // (32: a backfire since the last update, so the others see the flame too)
+        const flags = (L.head ? 1 : 0) | (player.braking ? 2 : 0) | (player.blinkOn && (L.left || L.hazard) ? 4 : 0) | (player.blinkOn && (L.right || L.hazard) ? 8 : 0) | (player.reversing ? 16 : 0) | (player.popped ? 32 : 0);
+        player.popped = false;
         const s = [player.pos.x, player.pos.y, player.pos.z, player.yaw, player.pitch || 0, player.vf || 0, player.steer || 0, flags];
         if (s.every(Number.isFinite)) this.ws.send(JSON.stringify({ t: 's', s: s.map((v, i) => (i === 7 ? v : Math.round(v * 100) / 100)) }));
       }
@@ -207,6 +209,11 @@ export class Online {
       const speed = s[5] + (e[5] - s[5]) * k, steer = s[6] + (e[6] - s[6]) * k, f = e[7];
       r.model.updateWheels(dt, speed, -steer * 0.35);
       r.model.setLights({ head: !!(f & 1), brake: !!(f & 2), left: !!(f & 4), right: !!(f & 8), reverse: !!(f & 16) });
+      // backfire flames: once per update that carried one
+      if (r.model.flames) {
+        if (f & 32 && r.popSeen !== e) { r.popSeen = e; r.model.flames.burst(); }
+        r.model.flames.update(dt);
+      }
       // old updates are dropped once passed
       while (r.buf.length > 2 && r.buf[1].t < at) r.buf.shift();
     }

@@ -16,7 +16,8 @@ export const ENGINES = {
   v10:       { cyl: 10, uneven: 0.02, res: [420, 1700], rad: [0.988, 0.965], mix: [1, 0.85], noise: 0.18, decay: 0.0017, diesel: 0,   drive: 1.3, idle: 1300, red: 12800, lp: 7500, gear: 7 },
   // premium pack engines
   // Nissan RB26DETT (R34): smooth straight six with a raspy, metallic top end, revs to 8000
-  i6rb:      { cyl: 6,  uneven: 0.02, res: [165, 700],  rad: [0.991, 0.972], mix: [1, 0.72], noise: 0.3,  decay: 0.0024, diesel: 0,   drive: 1.7, idle: 900,  red: 8000,  lp: 4600, gear: 6 },
+  // (less combustion noise and a lower ceiling than before: the top end hissed)
+  i6rb:      { cyl: 6,  uneven: 0.02, res: [160, 660],  rad: [0.991, 0.972], mix: [1, 0.66], noise: 0.2,  decay: 0.0024, diesel: 0,   drive: 1.7, idle: 900,  red: 8000,  lp: 3700, gear: 6 },
   // Toyota 2JZ-GTE (Supras): deeper, fuller straight six, big turbo, about 7000 rpm
   i6jz:      { cyl: 6,  uneven: 0.03, res: [118, 510],  rad: [0.992, 0.975], mix: [1, 0.6],  noise: 0.3,  decay: 0.0028, diesel: 0,   drive: 1.85, idle: 750, red: 7000,  lp: 3600, gear: 6 },
   // Mazda 13B twin rotor (RX-7): two rotors fire once per shaft turn each (the rate of a four-stroke
@@ -407,8 +408,9 @@ export class AudioSys {
       const want = clamp(this.throttleLP * (rn * 1.5 - 0.25), 0, 1);
       this.boost = lerp(this.boost, want, 1 - Math.exp(-dt * (want > this.boost ? 1.8 : 7)));
       const b = this.boost;
-      this.whooshF.frequency.setTargetAtTime((car.type === 'diesel6' ? 450 : 600) + b * 1300, t, 0.12);
-      this.whooshG.gain.setTargetAtTime(b * b * 0.035, t, 0.1);
+      // (the spool is felt more than heard: a lower, softer band, or at full boost it reads as a hiss)
+      this.whooshF.frequency.setTargetAtTime((car.type === 'diesel6' ? 450 : 550) + b * 750, t, 0.12);
+      this.whooshG.gain.setTargetAtTime(b * b * 0.02, t, 0.1);
       const f = (car.type === 'diesel6' ? 700 : 950) + b * 1100;
       this.turbo.frequency.setTargetAtTime(f, t, 0.12);
       this.turbo2.frequency.setTargetAtTime(f * 1.5, t, 0.12);
@@ -457,9 +459,10 @@ export class AudioSys {
     }
     // wind
     const v = kmh / 100;
-    this.wind.g.gain.setTargetAtTime(clamp(v * v * 0.09, 0, 0.32) * (1 - this.inTunnel * 0.4), t, 0.1);
-    this.wind.fl.frequency.setTargetAtTime(350 + kmh * 5, t, 0.1);
-    this.windHi.g.gain.setTargetAtTime(clamp((v - 1) * 0.03, 0, 0.05), t, 0.2);
+    // (a low rush that stays low: above ~250 km/h the old curve opened up into a loud hiss)
+    this.wind.g.gain.setTargetAtTime(clamp(v * v * 0.07, 0, 0.22) * (1 - this.inTunnel * 0.4), t, 0.1);
+    this.wind.fl.frequency.setTargetAtTime(Math.min(1150, 320 + kmh * 3.2), t, 0.1);
+    this.windHi.g.gain.setTargetAtTime(clamp((v - 1) * 0.012, 0, 0.02), t, 0.2);
     // ambience
     this.city.g.gain.setTargetAtTime(0.14 * (1 - this.inTunnel * 0.7), t, 0.4);
     this.traffic.g.gain.setTargetAtTime(clamp(p.trafficNear * 0.008, 0, 0.03), t, 0.4);
@@ -516,7 +519,8 @@ export class AudioSys {
     s.stop(t + dur + 0.05);
   }
   _pop(e) {
-    // backfire: a low thump plus a sharp crack
+    // backfire: a low thump plus a sharp crack (and the game shows the flame: onPop)
+    if (this.onPop) this.onPop();
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.frequency.setValueAtTime(e.res[0] * 1.2, t);

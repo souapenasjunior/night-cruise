@@ -22,6 +22,7 @@ import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
 import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken, myName } from './account.js';
 import { Online, newPrivateCode, normaliseCode, isCode, roomLabel } from './online.js';
 import { initFriends, openFriends, closeFriends, isFriendsOpen, friendsChanged } from './friends.js';
+import { ExhaustFlames } from './flames.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -67,6 +68,8 @@ composer.addPass(new OutputPass());
 const input = new Input(S.bindings, S.pad);
 const audio = new AudioSys();
 let net, world, traffic, hud, player = null, bigMap;
+let flames = null; // the player's exhaust flames (flames.js), fired by the engine sound's pops
+audio.onPop = () => { if (flames && state === 'drive') { flames.burst(); if (player) player.popped = true; } };
 let state = 'loading';
 let settingsOpen = false;
 // the car select always opens on the first car (the R32)
@@ -595,7 +598,7 @@ function makeOnline() {
     token: accessToken,
     spec: id => HERO_SPECS.find(s => s.id === id),
     load: spec => (glbReady(spec.id) ? Promise.resolve(true) : loadCar(spec)),
-    model: spec => new CarModel(spec, { hq: false, paint: paintOf(spec) }),
+    model: spec => { const m = new CarModel(spec, { hq: false, paint: paintOf(spec) }); m.flames = new ExhaustFlames(m, spec); return m; },
     status: (kind, info) => {
       if (kind === 'joined') hud.toast(t(isCode(onlineWant) || /^p-/.test(onlineWant) ? 'on.joinedPrivate' : 'on.joined', { room: info.room, n: info.count }));
       else if (kind === 'player') hud.toast(t(info.joined ? 'on.playerIn' : 'on.playerOut', { name: info.name }));
@@ -623,24 +626,33 @@ function onlineHud() {
   $('online-badge').hidden = !text;
   $('online-badge-text').textContent = text;
 }
-// the players in the room, beside the full-screen map (M) while playing online
-let playersT = 0;
-function playersPanel(dt) {
-  const el = $('players');
-  el.hidden = !(onlineWant && online.connected && player);
-  if (el.hidden) return;
-  playersT -= dt;
-  if (playersT > 0) return;
-  playersT = 0.25;
-  const carName = id => { const s = HERO_SPECS.find(x => x.id === id); return s ? s.name : id; };
-  const dist = m => (m >= 1000 ? `${num(m / 1000, 1)} km` : `${Math.round(m / 10) * 10} m`);
-  const kmh = v => `${Math.round((S.gameplay.units === 'mph' ? 2.237 : 3.6) * v)} ${S.gameplay.units === 'mph' ? 'mph' : 'km/h'}`;
+// the players in the room, always on the HUD while online (right edge, between the yen and the
+// speedometer): nick, car, speed; you first, then the nearest. The rows shrink to fit a full room.
+let rosterT = 0, rosterHtml = '';
+function rosterHud(dt) {
+  const el = $('roster');
+  const on = !!(onlineWant && online.connected && player) && state !== 'map';
+  if (el.hidden === on) el.hidden = !on;
+  if (!on) return;
+  rosterT -= dt;
+  if (rosterT > 0) return;
+  rosterT = 0.25;
+  const carName = id => { const s = HERO_SPECS.find(x => x.id === id); return s ? (s.short || s.name) : id; };
+  const mph = S.gameplay.units === 'mph';
+  const spd = v => String(Math.round((mph ? 2.237 : 3.6) * Math.abs(v)));
   const rows = online.others().map(o => ({ ...o, d: o.x === null ? Infinity : Math.hypot(o.x - player.pos.x, o.z - player.pos.z) })).sort((a, b) => a.d - b.d);
-  $('players-room').textContent = t('on.playersRoom', { room: roomLabel(online.room), n: online.count, max: online.max });
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  let html = `<tr class="me"><td>${esc(myName() || t('on.you'))} <em>${t('on.you')}</em></td><td>${esc(player.spec.name)}</td><td>—</td><td>${kmh(Math.abs(player.vf || 0))}</td></tr>`;
-  for (const r of rows) html += `<tr><td>${esc(r.name)}</td><td>${esc(carName(r.car))}</td><td>${r.d === Infinity ? '…' : dist(r.d)}</td><td>${kmh(r.speed)}</td></tr>`;
-  $('players-list').innerHTML = html;
+  let html = `<li class="me"><b>${esc(myName() || t('on.you'))}</b><span>${esc(carName(player.spec.id))}</span><i>${spd(player.vf || 0)}</i></li>`;
+  for (const r of rows) html += `<li><b>${esc(r.name)}</b><span>${esc(carName(r.car))}</span><i>${spd(r.speed)}</i></li>`;
+  const head = t('on.playersRoom', { room: roomLabel(online.room), n: online.count, max: online.max }) + ` · ${mph ? 'mph' : 'km/h'}`;
+  if ($('roster-head').textContent !== head) $('roster-head').textContent = head;
+  if (html !== rosterHtml) { rosterHtml = html; $('roster-list').innerHTML = html; }
+  // row height: the room left between the list's top and the speedometer, shared by the rows
+  const sp = document.querySelector('#hud .speedo').getBoundingClientRect();
+  const top = $('roster-list').getBoundingClientRect().top;
+  const n = rows.length + 1;
+  const rh = Math.max(12, Math.min(22, Math.floor((sp.top - 14 - top) / n)));
+  el.style.setProperty('--rh', rh + 'px');
 }
 function openOnline() {
   const signed = isSignedIn();
@@ -767,6 +779,7 @@ function goTitle() {
   driveStopped();
   leaveOnline();
   if (player) { player.dispose(); player = null; }
+  if (flames) { flames.dispose(); flames = null; }
   scene.add(idleLights);
   state = 'title';
   showScreen('title');
@@ -857,6 +870,8 @@ function startDrive() {
     player.dispose();
   }
   const model = new CarModel(spec, { hq: S.graphics.quality !== 'low', paint: paintOf(spec) });
+  if (flames) flames.dispose();
+  flames = new ExhaustFlames(model, spec); // (before the car is placed: the tips are measured in its own frame)
   player = new Player(net, model, spec, scene);
   scene.remove(idleLights);
   player.odo = spawn ? spawn.odo : 0;
@@ -1329,6 +1344,7 @@ function driveStep(dt) {
   });
   hud.others = onlineWant && online ? online.others() : null;
   hud.update(dt, player, traffic);
+  if (flames) flames.update(dt);
   updateLampLights(dt, Math.sin(player.yaw), Math.cos(player.yaw), player.pos.x, player.pos.z);
   hemi.intensity = damp(hemi.intensity, tunnel ? 0.3 : 0.62, 3, dt);
   hemi.color.set(tunnel ? 0x8a6a40 : 0x5b6aa6);
@@ -1397,14 +1413,14 @@ function tick(now) {
   const mute = state !== 'drive' || settingsOpen;
   if (mute !== audio.muted) audio.mute(mute);
   // online: the other players keep moving while we pause (ours is sent only while driving)
-  if (online && (state === 'drive' || state === 'pause' || state === 'map')) { online.update(dt, state === 'drive' && !settingsOpen ? player : null); onlineHud(); }
+  if (online && (state === 'drive' || state === 'pause' || state === 'map')) { online.update(dt, state === 'drive' && !settingsOpen ? player : null); onlineHud(); rosterHud(dt); }
   if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map') {
     if (state === 'title') { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
     if (state !== 'pause' && state !== 'map') world.update(dt, camera);
     renderPass.scene = scene; renderPass.camera = camera;
     if (bloom.enabled) composer.render(); else renderer.render(scene, camera);
     if (state === 'drive' && S.gameplay.mirror && player) renderMirror();
-    if (state === 'map') { bigMap.draw(player, traffic, onlineWant && online ? online.others() : []); playersPanel(dt); }
+    if (state === 'map') bigMap.draw(player, traffic, onlineWant && online ? online.others() : []);
   } else if (state === 'select') {
     updateShowroom(dt);
     audio.idle(false);

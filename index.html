@@ -189,19 +189,19 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 #online-badge { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(8, 10, 20, 0.62); border: 1px solid rgba(90, 220, 140, 0.35); font: 700 12px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #cff5dd; pointer-events: none; }
 #online-badge[hidden] { display: none; }
 #online-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fe07a; box-shadow: 0 0 8px #3fe07a; }
-/* players in the room, beside the full-screen map */
-#players { position: absolute; top: clamp(64px, 10vh, 96px); right: clamp(16px, 3vw, 36px); width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 200px); overflow: auto; padding: 14px 16px 12px; background: rgba(8, 10, 20, 0.86); border: 1px solid rgba(90, 220, 140, 0.35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); pointer-events: none; }
-#players[hidden] { display: none; }
-#players header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
-#players header b { font: 800 20px/1 var(--display); letter-spacing: 0.05em; text-transform: uppercase; }
-#players header span { color: #9fd6b7; font: 700 11px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; }
-#players table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-#players th { text-align: left; color: var(--dim); font: 600 10.5px/1 var(--body); letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--line); }
-#players td { padding: 7px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap; font-variant-numeric: tabular-nums; }
-#players td:first-child { font-weight: 700; color: #eceff7; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-#players tr.me td { color: #ffd27a; }
-#players em { font-style: normal; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-left: 4px; }
-@media (max-width: 560px) { #players th:nth-child(4), #players td:nth-child(4) { display: none; } }
+/* the players in the room, always on the HUD while online: the right edge between the yen (top) and the
+   speedometer (bottom). Up to 20 rows: the row height (--rh, set by the game) shrinks to fit the room. */
+#roster { position: absolute; right: clamp(16px, 3vw, 40px); top: calc(76px + env(safe-area-inset-top, 0px)); width: 236px; --rh: 22px; pointer-events: none; font-variant-numeric: tabular-nums; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9); }
+#roster[hidden] { display: none; }
+#roster header { font: 700 10.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #9fd6b7; text-align: right; padding: 0 8px 5px; }
+#roster ol { list-style: none; margin: 0; padding: 0; background: linear-gradient(90deg, rgba(8, 10, 20, 0), rgba(8, 10, 20, 0.55) 30%); }
+#roster li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; height: var(--rh); padding: 0 8px; font: 600 calc(var(--rh) * 0.58)/1 var(--body); color: #e3e7f2; white-space: nowrap; }
+#roster li b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+#roster li span { color: var(--dim); font-size: 0.86em; min-width: 5.5ch; text-align: right; }
+#roster li i { font-style: normal; min-width: 4.5ch; text-align: right; }
+#roster li.me { color: #ffd27a; }
+#roster li.me span { color: #d9b56a; }
+@media (max-width: 760px) { #roster { width: 180px; } #roster li span { display: none; } }
 /* yen on the HUD while driving */
 #coins { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); right: clamp(16px, 3vw, 36px); display: grid; justify-items: end; gap: 3px; pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
 #coins[hidden] { display: none; }
@@ -484,14 +484,11 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
   <div id="toast"></div>
   <div id="coins" hidden><b id="coins-bal">¥ 0</b><small id="coins-bonus"></small></div>
   <div id="online-badge" hidden><i></i><span id="online-badge-text"></span></div>
+  <div id="roster" hidden><header id="roster-head"></header><ol id="roster-list"></ol></div>
 </div>
 
 <div id="map" class="screen" hidden>
   <canvas id="map-c" aria-label="Mapa da via expressa" data-i18n-aria="map.aria"></canvas>
-  <div id="players" hidden>
-    <header><b data-i18n="on.players">Jogadores na sala</b><span id="players-room"></span></header>
-    <table><thead><tr><th data-i18n="on.colName">Jogador</th><th data-i18n="on.colCar">Carro</th><th data-i18n="on.colDist">Distância</th><th data-i18n="on.colSpeed">Velocidade</th></tr></thead><tbody id="players-list"></tbody></table>
-  </div>
   <div class="map-head"><h2 data-i18n="map.title">Mapa</h2><span data-i18n="map.sub">Anel K1 · Estacionamento Nishi</span></div>
   <div class="map-keys" data-i18n-html="map.keys"><span><kbd>Roda</kbd> zoom</span><span><kbd>Arrastar</kbd> mover</span><span><kbd>C</kbd> centralizar no carro</span><span><kbd>M</kbd> / <kbd>Esc</kbd> fechar</span></div>
   <div class="map-legend">
@@ -728,8 +725,8 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.22.0';
-  var MODULES = ['account', 'audio', 'cars', 'friends', 'glbcars', 'hud','i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
+  var V = '1.23.0';
+  var MODULES = ['account', 'audio', 'cars', 'flames', 'friends', 'glbcars', 'hud','i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',
