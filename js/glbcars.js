@@ -178,11 +178,13 @@ function prepare(scene, spec) {
   const cz0 = (box.min.z + box.max.z) / 2;
   // reference centre for left/right: the wheels themselves (some files are off-centre or carry stray parts)
   let wx = 0, wn = 0;
-  meshes.forEach(m => { if (test(G.wheel, matName(m)) || test(G.wheelNode, m.name)) { wx += new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()).x; wn++; } });
+  // (a wheel node with several materials loads as a group: its meshes go by the group's name)
+  const wheelNamed = m => test(G.wheelNode, m.name) || (!!m.parent && test(G.wheelNode, m.parent.name));
+  meshes.forEach(m => { if (test(G.wheel, matName(m)) || wheelNamed(m)) { wx += new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()).x; wn++; } });
   const cx0 = wn ? wx / wn : (box.min.x + box.max.x) / 2;
   const corners = new Map();
   meshes.forEach((m, i) => {
-    const isWheel = test(G.wheel, matName(m)) || test(G.wheelNode, m.name);
+    const isWheel = test(G.wheel, matName(m)) || wheelNamed(m);
     const isCaliper = test(G.caliper, matName(m)) || test(G.caliperNode, m.name);
     if (!isWheel && !isCaliper) return;
     const b = new THREE.Box3().setFromObject(m);
@@ -210,7 +212,8 @@ function prepare(scene, spec) {
     const { axle, mean } = pcaAxle(tyre);
     if (axle.x < 0) axle.negate();
     const tilt = Math.acos(Math.min(1, axle.x));
-    if (tilt > 0.01) {
+    // (G.wheelsTrue: the file's wheels are already straight; the measure misreads wide dual tyres)
+    if (tilt > 0.01 && !G.wheelsTrue) {
       const q = new THREE.Quaternion().setFromUnitVectors(axle, new THREE.Vector3(1, 0, 0));
       const M = new THREE.Matrix4().makeTranslation(mean.x, mean.y, mean.z)
         .multiply(new THREE.Matrix4().makeRotationFromQuaternion(q))

@@ -391,8 +391,8 @@ function buildChips() {
     b.className = 'card c-' + s.clsKey;
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', `${s.name} (${s.cls})`);
-    b.innerHTML = `<span class="tag"></span><img alt="" loading="lazy" decoding="async"><span class="nm"></span>`;
-    b.querySelector('.tag').textContent = s.cls;
+    b.innerHTML = `<span class="ctag"></span><img alt="" loading="lazy" decoding="async"><span class="nm"></span>`;
+    b.querySelector('.ctag').textContent = s.cls;
     b.querySelector('img').src = carImg(s);
     b.querySelector('.nm').textContent = s.name;
     b.onclick = () => { if (i === selIndex) { startDrive(); return; } const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
@@ -407,7 +407,7 @@ function statRow(label, frac, value) {
 function updateSelect() {
   const s = HERO_SPECS[selIndex];
   $('sel-class').textContent = s.cls;
-  $('sel-class').className = 'tag c-' + s.clsKey;
+  $('sel-class').className = 'ctag c-' + s.clsKey;
   $('sel-name').textContent = s.name;
   $('sel-brand').textContent = s.brand;
   $('sel-desc').textContent = s.desc;

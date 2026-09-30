@@ -38,6 +38,8 @@ export const JDM_SPECS = CARS.map(([id, name, cls, brand, main, stats, sound]) =
     file: `models/${id}.json`, rotY: 0, length: null, paint: /^Body$/, wheelNode: /^wheel_/, windowMat: /^Glass$/,
     // one lamp material (a lamp texture) for every lamp: head / tail told apart by position
     lampSplit: true, lampMat: /^Optics$/,
+    // (the wheels were modelled straight: no axle correction)
+    wheelsTrue: true,
     // traffic: the body tinted by `colors`, the lamp glows where the head / tail lamps are
     tint: /^Body$/,
   },
