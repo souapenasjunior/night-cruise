@@ -42,7 +42,9 @@ export class Traffic {
     this.scene = scene;
     this.net = net;
     this.world = world;
-    this.count = count;
+    // (no traffic models yet: the roads stay empty)
+    this.empty = !TRAFFIC_GLB.length && !TRAFFIC_KEEP.length;
+    this.count = this.empty ? 0 : count;
     this.maxCruisers = 0; // the playable cars no longer appear in traffic
     this.heroSpecs = heroSpecs;
     void cruisers;

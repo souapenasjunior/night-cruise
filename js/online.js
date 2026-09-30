@@ -9,19 +9,9 @@ import { RIDE } from './util.js';
 export const ONLINE_ORIGIN = 'https://night-cruise.contatoadoniasjunior.workers.dev';
 const SEND_EVERY = 1 / 6;     // s
 const DELAY = 0.25;           // s behind the latest update (interpolation window)
-const PRIVATE_CODE = /^[A-Z0-9]{6}$/;
 
-export const newPrivateCode = () => {
-  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // (no 0/O, 1/I)
-  let s = '';
-  const r = crypto.getRandomValues(new Uint8Array(6));
-  for (const b of r) s += abc[b % abc.length];
-  return s;
-};
-export const normaliseCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-export const isCode = c => PRIVATE_CODE.test(c);
-// room names as the players read them: public "K1-03", private "#ABC123"
-export const roomLabel = room => (room || '').startsWith('p-') ? '#' + room.slice(2) : (room || '').toUpperCase();
+// room names as the players read them: "K1-03"
+export const roomLabel = room => (room || '').toUpperCase();
 
 // ------------------------------------------------------------------ name tag above a car
 function nameTag(text) {
@@ -59,24 +49,17 @@ export class Online {
     this.want = null;         // the room we are (re)connecting to
     this.retry = 0;
     this.max = 20;            // the room's player limit (from the server)
-    this.create = null;
   }
   get connected() { return !!(this.ws && this.ws.readyState === 1 && this.myId); }
   get count() { return this.remotes.size + (this.myId ? 1 : 0); }
 
-  // room: 'auto' (a public room with space), a private code (6 letters/digits), or a room id as friends
-  // see it ('k1-03', 'p-ABC123'); create: the player limit of a private room we are creating (2-20)
-  async join(room, carId, create = null) {
+  // a public room with space (up to 20 players each)
+  async join(carId) {
     this.leave();
     this.car = carId;
-    this.create = create;
-    let id = room;
-    if (room === 'auto') {
-      const r = await fetch(`${ONLINE_ORIGIN}/api/online/join`).then(x => x.json()).catch(() => null);
-      if (!r || !r.room) { this.hooks.status('error', 'net'); return false; }
-      id = r.room;
-    } else if (/^k1-\d{2}$/.test(room)) id = room;
-    else id = 'p-' + normaliseCode(String(room).replace(/^p-/, ''));
+    const r = await fetch(`${ONLINE_ORIGIN}/api/online/join`).then(x => x.json()).catch(() => null);
+    if (!r || !r.room) { this.hooks.status('error', 'net'); return false; }
+    const id = r.room;
     this.want = id;
     this.retry = 0;
     return this.connect();
@@ -89,7 +72,7 @@ export class Online {
     const ws = new WebSocket(`${ONLINE_ORIGIN.replace(/^http/, 'ws')}/api/online/room/${id}`);
     this.ws = ws;
     this.hooks.status('connecting', roomLabel(id));
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token, car: this.car, ...(this.create ? { create: true, max: this.create } : {}) }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token, car: this.car }));
     ws.onmessage = e => { try { this.onMessage(JSON.parse(e.data)); } catch (err) { /* ignore a bad message */ } };
     ws.onclose = e => {
       if (this.ws !== ws) return; // replaced or left on purpose
@@ -155,7 +138,7 @@ export class Online {
     this.remotes.set(p.id, r);
     this.buildModel(r);
   }
-  // the model is loaded when needed (premium cars come from Storage); until then the name tag shows alone
+  // the model is loaded when needed; until then the name tag shows alone
   async buildModel(r) {
     const spec = this.hooks.spec(r.car);
     if (!spec) return;

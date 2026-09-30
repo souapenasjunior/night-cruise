@@ -166,31 +166,9 @@ psql "<URL do banco>" -f backup/data.sql
 - **Nomes de usuário:** o "nome livre?" responde a qualquer visitante. Nomes são públicos por natureza, então isso não expõe nada privado.
 - **Dados pessoais (LGPD):** o jogo passa a guardar e-mails. Antes de abrir o cadastro ao público, publique uma política de privacidade simples (o que é guardado, por quê, e como excluir a conta) e um contato.
 
-## NCP (Night Cruise Points, a moeda do jogo) e compra de carros
+## Versão 1.27: sem loja, sem amigos, sem salas privadas
 
-No banco as colunas continuam `coins`, `coins_earned` e `price_coins`; no jogo a moeda se chama NCP.
+O jogo não usa mais NCP, compra de carros, amigos nem salas privadas, e está sem carros e sem trânsito até os novos chegarem (`js/jdmspecs.js`, `models/`). O perfil mostra só nome, data de cadastro, troca de nome e de senha, sair e excluir a conta.
 
-Não existe nenhuma compra com dinheiro real: o Mercado Pago foi removido (funções, chaves e tabelas).
-
-- **Ganho:** só no servidor, dentro de `report_drive`, a partir da distância que ele já aceitou como plausível: **1 NCP a cada 10 m**, vezes o **bônus de cruzeiro** da viagem atual (×1,25 depois de 10 min, ×1,5 depois de 30 min, ×2 depois de 60 min, pelo relógio do servidor). O resto de metros que não fecha 10 m fica guardado (`coin_carry_m`).
-- **Saldo:** `player_stats.coins` (e `coins_earned`, total já ganho). O jogador só lê; não há permissão de escrita.
-- **Preços:** `cars.price_coins` (vazio = carro gratuito). Só o Tiara GT '83 é grátis (e só ele vem liberado em conta nova); os outros 20 sobem em escada pelo desempenho (dados reais; os carros de filme como preparados nos filmes), do Shelby GT350 (6.000 NCP) ao 911 Turbo S (120.000 NCP): a lista completa está na migração `car_lineup`, e a mesma ordem em `CAR_ORDER` (`js/jdmspecs.js`). No jogo, `free: true` marca o carro grátis. Para mudar um preço: `update public.cars set price_coins = 50000 where id = 'p_r34';`
-- **Compra:** `buy_car(p_car)` confere se o carro está à venda, se ainda não é do jogador e se o saldo cobre o preço; desconta e libera o carro (`car_unlocks.source = 'purchase'`), tudo numa transação.
-- Testes: `npm run test:db`.
-
-## Arquivos dos carros premium (Storage privado)
-
-- Os modelos dos carros premium **não ficam no site**: estão no bucket privado `premium` do Supabase Storage, uma pasta por carro (`premium/p_r34/p_r34.json` + texturas `.webp`).
-- Qualquer pessoa pode ler a pasta (política "premium cars: everyone reads"), para a seleção mostrar todo carro girando em 3D, até os bloqueados e para visitantes sem conta. Dirigir continua exigindo ter o carro (`start_drive` e a sala online conferem `car_unlocks`). O jogo pede links assinados válidos por 7 dias (`premiumFiles` em `js/account.js`).
-- A foto do carro (`img/shop/<id>.webp`) só aparece se o modelo não carregar.
-- `models/p_*` está no `.gitignore`: os arquivos ficam no seu PC para testes locais (`localhost:8765/#debug` → `__nc.devUnlock()`).
-- Para atualizar um carro depois de reconstruí-lo, rode dentro da pasta com as subpastas de cada carro:
-  `npx.cmd supabase storage cp -r p_r34 ss:///premium/p_r34 --linked --experimental --workdir <pasta do jogo>`
-
-## Amigos e quem está online
-
-- **Tabelas:** `friendships` (um par por linha, `pending` até o outro aceitar) e `presence` (o que cada jogador está fazendo agora). Ninguém escreve nelas direto; o jogador só lê as próprias amizades.
-- **Funções:** `friend_request(nome)` (se o outro já tinha pedido, viram amigos na hora), `friend_respond(id, aceitar)`, `friend_remove(id)` (desfaz amizade ou cancela pedido), `my_friends()` (lista com status), `heartbeat(atividade, sala, carro)` e `go_offline()`.
-- **Online:** o jogo manda `heartbeat` a cada ~45 s (e logo que algo muda); some da lista 2 min sem sinal, ou na hora ao fechar a aba / sair da conta. Só amigos aceitos veem atividade, carro e sala (inclusive o código de sala privada, para poderem entrar junto).
-- **Limites:** 30 pedidos pendentes enviados e 200 amigos por conta.
-- Código do jogo: `js/friends.js` (painel "Amigos" no menu inicial e na pausa).
+- **Online:** só salas públicas (`k1-01` a `k1-50`) de até 20 jogadores. A sala confere o token e o nome; o carro é conferido só pelo formato do id (todo carro é de todos).
+- **Ainda no banco (sem uso pelo jogo):** as tabelas e funções de NCP, loja e amigos (`player_stats.coins*`, `cars.price_coins`, `car_unlocks`, `buy_car`, `report_drive`, `start_drive`, `friendships`, `presence`, `friend_*`, `heartbeat`, `go_offline`) e o bucket `premium` do Storage. Apagar isso é uma decisão à parte (fazer backup antes).

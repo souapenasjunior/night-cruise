@@ -4,11 +4,10 @@
 //   WS   /api/online/room/<id>       -> the room itself (a Durable Object per room, up to 20 players)
 //   everything else                   -> the static site (assets)
 //
-// Only signed-in players play online. The first message on the socket is { t: 'hello', token, car }
-// (plus create: true and max: 2-20 from whoever creates a private room, its player limit):
+// Only signed-in players play online. The first message on the socket is { t: 'hello', token, car }:
 // the room checks the Supabase access token (signature against the project's public keys, expiry,
-// issuer), reads the player's name from the database with that token, and checks that the car is
-// theirs. Nothing the browser says about who it is is taken on trust.
+// issuer) and reads the player's name from the database with that token. Nothing the browser says about
+// who it is is taken on trust. (Every car is everyone's: the car id is only checked for its form.)
 // Messages (JSON): 's' = the car's state ~6 times a second, relayed to the others in the room.
 import { DurableObject } from 'cloudflare:workers';
 
@@ -39,7 +38,7 @@ export default {
       const r = await lobby.fetch('https://lobby/pick');
       return json(await r.json(), 200, cors(origin));
     }
-    const m = /^\/api\/online\/room\/(k1-\d{2}|p-[A-Z0-9]{6})$/.exec(url.pathname);
+    const m = /^\/api\/online\/room\/(k1-\d{2})$/.exec(url.pathname);
     if (m) {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('websocket expected', { status: 426 });
       if (!ORIGINS.has(origin)) return new Response('origin not allowed', { status: 403 });
@@ -91,7 +90,7 @@ async function asPlayer(env, token, path) {
   return r.ok ? r.json() : null;
 }
 const CAR_ID = /^[a-z0-9_]{1,32}$/;
-const ownsCar = async (env, token, car) => CAR_ID.test(car) && !!(await asPlayer(env, token, `car_unlocks?select=car_id&car_id=eq.${car}`) || []).length;
+const carOk = car => typeof car === 'string' && CAR_ID.test(car);
 
 // ------------------------------------------------------------------ lobby: which public room to join
 export class Lobby extends DurableObject {
@@ -164,7 +163,7 @@ export class Room extends DurableObject {
       p.state = st.map((v, i) => (i === 7 ? v | 0 : Math.round(v * 100) / 100));
       this.others(ws, { t: 's', id: p.id, s: p.state });
     } else if (m.t === 'car' && typeof m.car === 'string' && typeof m.token === 'string') {
-      if (!(await ownsCar(this.env, m.token, m.car))) { this.send(ws, { t: 'err', e: 'car' }); return; }
+      if (!carOk(m.car)) { this.send(ws, { t: 'err', e: 'car' }); return; }
       p.car = m.car;
       ws.serializeAttachment({ id: p.id, uid: p.uid, name: p.name, car: p.car });
       this.others(ws, { t: 'car', id: p.id, car: p.car });
@@ -177,17 +176,11 @@ export class Room extends DurableObject {
     const prof = await asPlayer(this.env, m.token, `profiles?select=username&id=eq.${uid}`);
     const name = prof && prof[0] && prof[0].username;
     if (!name) { this.send(ws, { t: 'err', e: 'auth' }); ws.close(4003, 'auth'); return; }
-    if (!(await ownsCar(this.env, m.token, m.car))) { this.send(ws, { t: 'err', e: 'car' }); ws.close(4004, 'car'); return; }
+    if (!carOk(m.car)) { this.send(ws, { t: 'err', e: 'car' }); ws.close(4004, 'car'); return; }
     // the same account again (a second tab): the older connection leaves
     for (const [w, q] of this.players) if (q.uid === uid) { this.send(w, { t: 'err', e: 'elsewhere' }); w.close(4005, 'elsewhere'); this.leave(w); }
-    // a private room's player limit: set by whoever creates it (while it is empty), kept for the others
     const room = await this.roomName();
-    if (this.max === undefined) this.max = (await this.ctx.storage.get('max')) || MAX_PLAYERS;
-    if (/^p-/.test(room) && m.create === true && !this.players.size) {
-      this.max = Math.min(MAX_PLAYERS, Math.max(2, Number.isInteger(m.max) ? m.max : MAX_PLAYERS));
-      await this.ctx.storage.put('max', this.max);
-    }
-    if (!/^p-/.test(room)) this.max = MAX_PLAYERS;
+    this.max = MAX_PLAYERS;
     if (this.players.size >= this.max) { this.send(ws, { t: 'err', e: 'full' }); ws.close(4009, 'full'); return; }
     const id = crypto.randomUUID().slice(0, 8);
     const p = { id, uid, name, car: m.car, state: null, win: 0, cnt: 0 };
@@ -214,7 +207,6 @@ export class Room extends DurableObject {
   }
   async report() {
     const room = await this.roomName();
-    if (!/^k1-/.test(room)) return;
     const lobby = this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby'));
     await lobby.fetch('https://lobby/count', { method: 'POST', body: JSON.stringify({ room, n: this.players.size }) }).catch(() => {});
   }

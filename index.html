@@ -22,7 +22,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Chakra+Petch:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
 :root {
   color-scheme: dark;
@@ -42,7 +42,6 @@
   --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
   --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
-  --ncp: "Chakra Petch", "Big Shoulders Display", sans-serif; /* the NCP figures */
 }
 html, body { height: 100%; margin: 0; background: var(--ink); color: var(--text); font: 15px/1.45 var(--body); overflow: hidden; }
 * { box-sizing: border-box; }
@@ -74,6 +73,7 @@ button { font: inherit; color: inherit; }
 .menu-btn:hover, .menu-btn:focus-visible, .menu-btn.sel { color: var(--text); outline: none; }
 .menu-btn:hover::before, .menu-btn:focus-visible::before, .menu-btn.sel::before { width: 34px; }
 .menu-btn.primary { color: var(--text); }
+.title-note { margin: 14px 0 0; min-height: 1.3em; color: var(--sodium); font-size: 14px; }
 .menu-btn[hidden] { display: none; } /* (all: unset above also undid the hidden attribute) */
 kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; color: var(--text); background: rgba(255, 255, 255, 0.03); }
 
@@ -98,12 +98,8 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .swatch:focus-visible { outline: 2px solid var(--sodium); outline-offset: 2px; }
 .stat b { font: 600 12.5px/1 var(--mono); color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
 #select .strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px clamp(16px, 5vw, 72px) calc(18px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(0deg, rgba(7, 9, 18, 0.92), rgba(7, 9, 18, 0)); display: grid; gap: 14px; }
-/* the garage grid: all 21 cars in sight (no scrolling), a tier label per row */
-#select .garage { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; align-items: stretch; }
-#select .tiers { display: grid; grid-template-rows: repeat(3, 1fr); gap: 6px; }
-#select .tiers span { display: flex; align-items: center; justify-content: flex-end; font: 700 11px/1 var(--body); letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); writing-mode: horizontal-tb; min-width: 92px; }
-#select .tiers span::after { content: ''; width: 18px; height: 1px; margin-left: 10px; background: var(--line-2); }
-#select .chips { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: repeat(3, 48px); gap: 6px; }
+/* the cars, seven to a row */
+#select .chips { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: 48px; gap: 6px; }
 .chip { all: unset; cursor: pointer; box-sizing: border-box; min-width: 0; position: relative; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; border: 1px solid var(--line); background: linear-gradient(90deg, rgba(20, 24, 42, 0.86), rgba(10, 13, 24, 0.78)); overflow: hidden; transition: border-color .15s, background .15s, box-shadow .15s; }
 .chip .n { flex: 1; min-width: 0; font: 800 19px/1 var(--display); font-style: italic; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; color: #ffffff; }
 /* the car's colour: a bar down the left edge */
@@ -111,60 +107,10 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .chip:hover { border-color: var(--line-2); background: linear-gradient(90deg, rgba(30, 36, 60, 0.9), rgba(14, 18, 32, 0.8)); }
 .chip.sel { border-color: var(--sodium); background: linear-gradient(90deg, rgba(64, 44, 14, 0.92), rgba(24, 18, 10, 0.85)); box-shadow: 0 0 0 1px var(--sodium), 0 6px 22px rgba(255, 170, 40, 0.22); }
 .chip:focus-visible { outline: 2px solid var(--sodium); outline-offset: 2px; }
-.chip .pl { width: 12px; height: 12px; flex: none; color: var(--sodium); display: none; }
-.chip.locked .pl { display: block; }
-.chip.locked .n { color: #9aa1b5; }
-.chip.can .pl { color: #7ee2a2; }
 /* (narrower screens: the long names still fit) */
-@media (max-width: 1500px) { .chip { gap: 6px; padding: 0 9px 0 13px; } .chip .n { font-size: 16px; } .chip .pr { font-size: 11px; } #select .tiers span { min-width: 76px; letter-spacing: 0.12em; } }
-/* a locked car in the showroom: a padlock over it */
-#sel-padlock { position: absolute; right: clamp(24px, 22vw, 420px); top: 16%; display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: rgba(8, 10, 20, 0.78); border: 1px solid rgba(255, 176, 60, 0.55); color: var(--sodium); font: 800 18px/1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; pointer-events: none; }
-#sel-padlock svg { width: 26px; height: 26px; }
-#sel-padlock[hidden] { display: none; }
-@media (max-width: 760px) { #sel-padlock { right: 50%; transform: translateX(50%); top: 10%; } }
+@media (max-width: 1500px) { .chip { gap: 6px; padding: 0 9px 0 13px; } .chip .n { font-size: 16px; } }
 .paints[hidden], .sel-loading[hidden], .lock[hidden] { display: none; }
 .sel-loading { color: var(--dim); font-size: 13px; }
-/* premium car not owned: its picture in the showroom (the 3D model is only served to owners) */
-#sel-photo { position: absolute; right: clamp(8px, 4vw, 64px); top: 50%; transform: translateY(-58%); width: min(56vw, 920px); aspect-ratio: 16 / 9; object-fit: cover; pointer-events: none; mix-blend-mode: lighten; -webkit-mask: radial-gradient(62% 58% at 52% 55%, #000 55%, transparent 100%); mask: radial-gradient(62% 58% at 52% 55%, #000 55%, transparent 100%); }
-#sel-photo[hidden] { display: none; }
-@media (max-width: 760px) { #sel-photo { width: 100vw; right: 0; top: 30%; } }
-/* car not owned yet: price and the player's yen in one line where the colour row would be, a short
-   message under it; the buy button is the Drive button in the bottom strip */
-.lock { display: grid; gap: 5px; margin-top: 6px; }
-.lock-line { display: flex; align-items: center; gap: 8px; color: var(--sodium); font: 700 16px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
-.lock svg { width: 14px; height: 14px; flex: none; }
-.lock small { color: #cfd4e2; font-size: 12.5px; min-height: 1em; }
-.lock-how { margin: 0; max-width: 420px; color: #cfd4e2; font-size: 12.5px; line-height: 1.4; }
-.lock-how b { display: block; color: var(--text); font: 700 10.5px/1.6 var(--body); letter-spacing: 0.12em; text-transform: uppercase; }
-.lock small:empty { display: none; }
-#sel-go.buy { background: linear-gradient(180deg, #ffc35c, #ff9f1c); color: #1a1206; box-shadow: 0 0 24px rgba(255, 170, 40, 0.35); }
-#sel-go.short { opacity: 0.75; }
-/* friends: add by name, requests, who is online (and where), who is not */
-#friends .panel { width: min(600px, 100%); }
-.fr-body { overflow-y: auto; padding: 16px 22px 18px; display: grid; gap: 10px; align-content: start; }
-.fr-add { display: flex; gap: 8px; }
-.fr-add input { flex: 1; min-width: 0; font: 600 16px/1 var(--body); padding: 9px 12px; background: #0a0d17; color: var(--text); border: 1px solid var(--line); }
-.fr-add input:focus { outline: none; border-color: var(--sodium); }
-.fr-msg { margin: 0; color: #ffd28a; font-size: 13px; }
-.fr-msg.bad { color: #ff8a80; }
-.fr-msg:empty { display: none; }
-#fr-list h3 { margin: 14px 0 6px; display: flex; gap: 8px; align-items: baseline; color: var(--dim); font: 700 11px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
-#fr-list h3 b { color: var(--text); }
-.fr-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); margin-bottom: 6px; }
-.fr-row.on { border-color: rgba(90, 220, 140, 0.35); }
-.fr-row.off { opacity: 0.72; }
-.fr-av { flex: none; width: 34px; height: 34px; display: grid; place-items: center; font: 800 14px/1 var(--display); font-style: normal; text-transform: uppercase; color: #fff; background: linear-gradient(135deg, var(--a1), var(--a2)); }
-.fr-who { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.fr-who b { font: 800 17px/1.1 var(--display); letter-spacing: 0.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
-.fr-who span { color: var(--dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fr-row.on .fr-who span { color: #9fd6b7; }
-.fr-dot { width: 8px; height: 8px; border-radius: 50%; background: #3fe07a; box-shadow: 0 0 8px #3fe07a; flex: none; }
-.fr-acts { display: flex; gap: 6px; flex: none; }
-.fr-x { min-width: 34px; padding-left: 8px; padding-right: 8px; }
-.fr-x.sure { color: #ff8a80; border-color: #ff8a80; }
-.fr-empty { margin: 0 0 6px; color: var(--dim); font-size: 13px; }
-/* the number of friends online + requests, on the menu button */
-.menu-btn[data-badge]:not([data-badge=""])::after { content: attr(data-badge); display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 10px; padding: 0 5px; border-radius: 10px; background: #3fe07a; color: #06140b; font: 800 12px/1 var(--body); vertical-align: middle; }
 /* online: room picker and the HUD badge */
 #online .panel { width: min(640px, 100%); }
 .on-body { overflow-y: auto; padding: 18px 22px 20px; display: grid; gap: 14px; align-content: start; }
@@ -176,27 +122,8 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .on-card b { font: 800 20px/1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
 .on-card span { color: var(--dim); font-size: 13px; }
 button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium); background: rgba(255, 178, 63, 0.08); outline: none; }
-.on-code { cursor: default; }
-.on-code-row { display: flex; gap: 8px; margin-top: 6px; }
-.on-code-row input { flex: 1; min-width: 0; font: 800 22px/1 var(--display); letter-spacing: 0.3em; text-transform: uppercase; padding: 8px 12px; background: #0a0d17; color: var(--text); border: 1px solid var(--line); }
-.on-code-row input:focus { outline: none; border-color: var(--sodium); }
 .on-msg { margin: 0; min-height: 1.2em; color: #ffd28a; font-size: 13.5px; }
 .on-msg:empty { display: none; }
-/* creating a private room: the code right away, then its settings */
-.on-private { display: grid; gap: 14px; }
-.on-private[hidden], .on-lead[hidden] { display: none; }
-.on-pcode-box { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 18px 16px; border: 1px solid rgba(255, 178, 63, 0.45); background: rgba(255, 178, 63, 0.06); }
-.on-plabel { color: var(--dim); font: 700 11px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
-.on-pcode { font: 900 clamp(40px, 9vw, 58px)/1 var(--display); letter-spacing: 0.22em; padding-left: 0.22em; color: var(--sodium); user-select: all; }
-.on-phint { color: #c3c8d6; font-size: 13px; }
-.on-prow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.on-prow.end { justify-content: space-between; }
-.on-setting { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); }
-.on-setting b { display: block; font: 800 17px/1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
-.on-setting span { color: var(--dim); font-size: 12.5px; }
-.on-stepper { display: flex; align-items: center; gap: 6px; flex: none; }
-.on-stepper .btn { min-width: 38px; padding-left: 0; padding-right: 0; font-size: 18px; }
-.on-stepper output { min-width: 2.2ch; text-align: center; font: 800 26px/1 var(--display); font-variant-numeric: tabular-nums; }
 #online-badge { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(8, 10, 20, 0.62); border: 1px solid rgba(90, 220, 140, 0.35); font: 700 12px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #cff5dd; pointer-events: none; }
 #online-badge[hidden] { display: none; }
 #online-badge i { width: 8px; height: 8px; border-radius: 50%; background: #3fe07a; box-shadow: 0 0 8px #3fe07a; }
@@ -213,16 +140,6 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 #roster li.me { color: #ffd27a; }
 #roster li.me span { color: #d9b56a; }
 @media (max-width: 760px) { #roster { width: 180px; } #roster li span { display: none; } }
-/* yen on the HUD while driving */
-#coins { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); right: clamp(16px, 3vw, 36px); display: grid; justify-items: end; gap: 3px; pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
-#coins[hidden] { display: none; }
-/* (quiet: small, a little translucent; the "+N" of a server payment slides in beside it and fades) */
-#coins .coins-row { display: flex; align-items: baseline; gap: 6px; opacity: 0.88; }
-#coins b { font: 600 20px/1 var(--ncp); letter-spacing: 0.02em; color: #ffd27a; font-variant-numeric: tabular-nums; }
-#coins i { font: 700 10px/1 var(--ncp); font-style: normal; letter-spacing: 0.16em; color: #d9b56a; }
-#coins .coins-gain { font: 600 13px/1 var(--ncp); color: rgba(159, 240, 191, 0); }
-#coins small { font: 600 10px/1 var(--ncp); letter-spacing: 0.14em; text-transform: uppercase; color: #9fd8ff; opacity: 0.8; }
-#coins small:empty { display: none; }
 /* the car details never run into the car strip: on short screens the description, then the stats, give way */
 #select .info.fit1 .desc { display: none; }
 #select .info.fit2 .stats { display: none; }
@@ -325,118 +242,17 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 .btn.danger:hover, .btn.danger:focus-visible { border-color: var(--brake); color: var(--text); background: rgba(255, 59, 79, 0.16); }
 .acct-sec { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 12px; }
 .acct-sec h3 { margin: 0; font: 600 11.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-.acct-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.acct-stats .gold b { color: #ffd27a; }
-.acct-stats div { border: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 4px; }
-.acct-stats b { font: 700 22px/1 var(--display); letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
-.acct-stats span { color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; }
 .acct-meta { display: flex; gap: 18px; flex-wrap: wrap; color: var(--dim); font-size: 12.5px; }
 .acct-meta b { color: #cfd4e2; font-weight: 500; }
 .ts-box:empty { display: none; }
 #acct-msg { min-height: 1.2em; }
 #acct-msg.bad { color: #ff8b97; }
-/* ---------- yen: the title's card, the "yen and garage" panel, the car select and pause */
-.wcard { position: absolute; right: clamp(16px, 3vw, 40px); top: calc(clamp(16px, 3vh, 30px) + 22px + env(safe-area-inset-top, 0px)); width: min(330px, calc(100vw - 32px)); box-sizing: border-box; display: grid; gap: 12px; padding: 16px 18px; background: linear-gradient(160deg, rgba(34, 26, 10, 0.86), rgba(10, 12, 22, 0.86) 55%); border: 1px solid rgba(255, 178, 63, 0.4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.wcard[hidden] { display: none; }
-.wc-head { display: flex; align-items: center; gap: 12px; }
-.wc-av { flex: none; width: 40px; height: 40px; display: grid; place-items: center; font: 800 16px/1 var(--display); font-style: normal; text-transform: uppercase; color: #fff; background: linear-gradient(135deg, var(--a1, #ffb23f), var(--a2, #7a3cff)); }
-.wc-who { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.wc-who b { font: 800 19px/1.05 var(--display); letter-spacing: 0.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wc-who span { color: var(--dim); font-size: 12px; }
-.wc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #43e27a; box-shadow: 0 0 8px rgba(67, 226, 122, 0.7); }
-.wc-bal { display: grid; gap: 2px; }
-.wc-bal small { color: #d9b56a; font: 700 10.5px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
-.wc-bal b { display: flex; align-items: baseline; gap: 8px; font: 700 42px/1 var(--ncp); letter-spacing: 0; color: #ffd27a; text-shadow: 0 0 22px rgba(255, 190, 70, 0.35); font-variant-numeric: tabular-nums; }
-.wc-next { display: grid; gap: 6px; }
-.wc-next[hidden] { display: none; }
-.wc-next-top { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: #cfd4e2; }
-.wc-next-top span:last-child { color: var(--dim); white-space: nowrap; }
-.ybar { height: 6px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
-.ybar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff9f1c, #ffd27a); transition: width .4s ease; }
-.ybar.full i { background: linear-gradient(90deg, #3fe07a, #b6ffcf); }
-.wc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.wc-actions .btn { flex: 1; justify-content: center; text-align: center; }
-.wc-coin { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; font: 700 12px/1 var(--ncp); letter-spacing: 0.04em; color: #2a1a02; background: radial-gradient(circle at 35% 30%, #ffe7a6, #ffb23f 60%, #b06d10); box-shadow: 0 0 24px rgba(255, 178, 63, 0.4); }
-.wg-title { font: 800 24px/1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; color: #ffd27a; }
-#wallet-guest p { margin: 0; color: #cfd4e2; font-size: 13.5px; line-height: 1.45; }
-@media (max-width: 760px) { .wcard { top: calc(38px + env(safe-area-inset-top, 0px)); right: 12px; width: min(300px, calc(100vw - 24px)); padding: 12px 14px; gap: 8px; } .wc-bal b { font-size: 32px; } #wallet-guest p { display: none; } .wc-actions .btn { font-size: 13px; } }
-.ncp-u { font: 700 0.36em/1 var(--ncp); letter-spacing: 0.16em; color: #d9b56a; text-shadow: none; }
-.ncp-n { font-variant-numeric: tabular-nums; }
-/* the panel */
-#wallet .panel { width: min(720px, 100%); }
-.wl-bal { display: flex; align-items: baseline; gap: 6px; font: 700 26px/1 var(--ncp); color: #ffd27a; font-variant-numeric: tabular-nums; }
-.wl-body { overflow-y: auto; padding: 16px 22px 20px; display: grid; gap: 12px; align-content: start; }
-.wl-how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.wl-how div { display: grid; gap: 5px; align-content: start; padding: 12px 14px; border: 1px solid rgba(255, 178, 63, 0.28); background: rgba(255, 178, 63, 0.05); }
-.wl-how b { font: 800 18px/1.05 var(--display); letter-spacing: 0.03em; text-transform: uppercase; color: #ffd27a; }
-.wl-how span { color: #c3c8d6; font-size: 12.5px; line-height: 1.4; }
-@media (max-width: 640px) { .wl-how { grid-template-columns: 1fr; } }
-.wl-body h3 { margin: 8px 0 0; color: var(--dim); font: 700 11px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
-.wl-car { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.025); }
-.wl-car:hover, .wl-car:focus-visible { border-color: var(--sodium); background: rgba(255, 178, 63, 0.07); outline: none; }
-.wl-car .nm { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.wl-car .nm b { font: 800 19px/1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wl-car .nm span { color: var(--dim); font-size: 12px; white-space: nowrap; }
-.wl-car .st { font: 600 14px/1 var(--ncp); letter-spacing: 0.02em; text-transform: uppercase; color: #ffd27a; text-align: right; white-space: nowrap; }
-.wl-car.own .st { color: #7ee2a2; }
-.wl-car .ybar { grid-column: 1 / -1; }
-.wl-car.own .ybar { display: none; }
-#wl-cars { display: grid; gap: 6px; }
-/* the car select: the balance, always in sight (opens the panel) */
-.sel-wallet { all: unset; cursor: pointer; position: absolute; right: clamp(16px, 5vw, 72px); top: calc(clamp(16px, 4vh, 40px) + env(safe-area-inset-top, 0px)); z-index: 2; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 10px 14px; background: rgba(10, 12, 22, 0.72); border: 1px solid rgba(255, 178, 63, 0.4); }
-.sel-wallet small { grid-column: 1; color: #d9b56a; font: 700 10px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
-.sel-wallet b { grid-column: 1; display: flex; align-items: baseline; gap: 6px; font: 700 26px/1 var(--ncp); color: #ffd27a; font-variant-numeric: tabular-nums; }
-.sel-wallet .q { grid-column: 2; grid-row: 1 / span 2; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(255, 178, 63, 0.6); color: #ffd27a; font: 700 13px/1 var(--body); }
-.sel-wallet:hover, .sel-wallet:focus-visible { border-color: var(--sodium); outline: none; }
-.sel-wallet.guest b { font-size: 18px; color: var(--text); }
-@media (max-width: 760px) {
-  .sel-wallet { top: calc(8px + env(safe-area-inset-top, 0px)); right: 12px; padding: 6px 10px; }
-  .sel-wallet small { display: none; }
-  .sel-wallet b { grid-row: 1 / span 2; font-size: 20px; }
-  #sel-padlock:not([hidden]) { display: none; } /* (the price line in the details says it) */
-}
-/* the chip's state on its right: price (locked), GRÁTIS, or a check (owned) */
-.chip .pr { flex: none; font: 600 12px/1 var(--ncp); letter-spacing: 0.02em; color: #ffd27a; white-space: nowrap; }
-.chip .pr:empty { display: none; }
-.chip.can .pr { color: #7ee2a2; }
-.chip.own .pr, .chip.free .pr { color: #7ee2a2; font-size: 11px; letter-spacing: 0.1em; }
-.lock-bar { max-width: 340px; }
-.lock-bar[hidden] { display: none; }
-/* pause */
-.p-wallet { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px 12px; padding: 0 0 12px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
-.p-wallet[hidden] { display: none; }
-.p-wallet small { grid-column: 1 / -1; color: #d9b56a; font: 700 10px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
-.p-wallet b { display: flex; align-items: baseline; gap: 6px; font: 700 28px/1 var(--ncp); color: #ffd27a; font-variant-numeric: tabular-nums; }
-.p-wallet span { color: #9fd8ff; font-size: 12.5px; }
-@media (max-width: 520px) { .acct-stats { grid-template-columns: 1fr 1fr; } }
 /* profile */
 #account.pf .panel { width: min(640px, 100%); background: linear-gradient(165deg, #141a2e 0%, #0b0e18 60%); }
 .pf-card { display: flex; gap: 16px; align-items: center; padding: 16px; border: 1px solid var(--line); background: radial-gradient(120% 140% at 0% 0%, rgba(255, 178, 63, 0.16), rgba(255, 178, 63, 0) 55%), radial-gradient(90% 120% at 100% 100%, rgba(60, 150, 255, 0.14), rgba(60, 150, 255, 0) 60%), #0c1020; }
 .pf-avatar { flex: none; width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; font: 900 32px/1 var(--display); color: #fff; letter-spacing: 0.02em; background: linear-gradient(135deg, var(--a1, #ff9f1c), var(--a2, #7a3cff)); box-shadow: 0 0 0 3px #0b0e18, 0 0 0 5px rgba(255, 178, 63, 0.55), 0 8px 26px rgba(0, 0, 0, 0.5); text-transform: uppercase; }
 .pf-id { display: grid; gap: 7px; min-width: 0; }
 .pf-name { font: 900 30px/1 var(--display); letter-spacing: 0.03em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pf-badges { display: flex; gap: 6px; flex-wrap: wrap; }
-.pf-badge { padding: 4px 8px; border: 1px solid var(--line); font: 700 10.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: #cfd4e2; background: rgba(255, 255, 255, 0.03); }
-.pf-badge.gold { color: #1a1206; background: linear-gradient(180deg, #ffc35c, #ff9f1c); border-color: transparent; }
-.pf-badge[hidden] { display: none; }
-.acct-stats div { position: relative; padding: 12px 12px 10px; background: rgba(255, 255, 255, 0.02); }
-.acct-stats b { font-size: 26px; }
-.ic { width: 16px; height: 16px; color: var(--sodium); display: block; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
-.ic-road { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 1h2l-1 14H3zM9 1h2l2 14h-3zM7.5 3h1v2h-1zm0 4h1v2h-1zm0 4h1v2h-1z'/%3E%3C/svg%3E"); }
-.ic-clock { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 2a5 5 0 1 1 0 10A5 5 0 0 1 8 3zm-.8 1.5v4.2l3.2 1.9.8-1.3-2.4-1.4V4.5z'/%3E%3C/svg%3E"); }
-.ic-yen { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 1h2.2L8 5.6 10.8 1H13L9.2 7H12v1.5H9V10h3v1.5H9V15H7v-3.5H4V10h3V8.5H4V7h2.8z'/%3E%3C/svg%3E"); }
-.ic-flag { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 1h1.6v14H3zM5.4 2h8l-2 3.5 2 3.5h-8z'/%3E%3C/svg%3E"); }
-.pf-garage { display: grid; gap: 10px; }
-.pf-garage-h { display: flex; justify-content: space-between; align-items: baseline; }
-.pf-garage-h h3 { margin: 0; font: 600 11.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-.pf-garage-h span { color: var(--sodium); font: 700 14px/1 var(--display); letter-spacing: 0.06em; }
-.pf-cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
-.pf-car { position: relative; border: 1px solid var(--line); border-bottom-width: 3px; padding: 7px 8px 6px; font: 700 13px/1.1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(255, 255, 255, 0.02); }
-.pf-car.off { opacity: 0.35; }
-.pf-car.off::after { content: ""; position: absolute; right: 6px; top: 7px; width: 9px; height: 9px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z'/%3E%3C/svg%3E") center / contain no-repeat; }
-.pf-fav { color: var(--dim); font-size: 12.5px; }
-.pf-fav b { color: #e7e9f0; font-weight: 600; }
-.pf-fav[hidden] { display: none; }
 .pf-more > summary { cursor: pointer; list-style: none; font: 600 11.5px/1 var(--body); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 8px; }
 .pf-more > summary::-webkit-details-marker { display: none; }
 .pf-more > summary::before { content: "›"; font-size: 16px; color: var(--sodium); transition: transform .15s ease; }
@@ -512,33 +328,15 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
   <nav id="title-nav">
     <button class="menu-btn primary" id="btn-play" data-i18n="title.play">Jogar</button>
     <button class="menu-btn" id="btn-online" data-i18n="title.online">Online</button>
-    <button class="menu-btn" id="btn-friends" data-i18n="title.friends" hidden>Amigos</button>
     <button class="menu-btn" id="btn-settings" data-i18n="title.settings">Configurações</button>
     <button class="menu-btn" id="btn-account" hidden>Entrar</button>
     <button class="menu-btn" id="btn-credits" data-i18n="title.credits">Créditos</button>
   </nav>
+  <p class="title-note" id="title-note" role="status" aria-live="polite"></p>
   <div class="ver" id="title-ver"></div>
-  <!-- the player's yen, garage and next car, right on the title (signed in); what yen are (visitors) -->
-  <aside id="wallet-card" class="wcard" hidden>
-    <div class="wc-head"><i class="wc-av" id="wc-av"></i><div class="wc-who"><b id="wc-name"></b><span id="wc-garage"></span></div><i class="wc-dot" title="Online"></i></div>
-    <div class="wc-bal"><small data-i18n="wc.yourYen">Seus NCP</small><b id="wc-bal">0</b></div>
-    <div class="wc-next" id="wc-next">
-      <div class="wc-next-top"><span id="wc-next-label"></span><span id="wc-next-need"></span></div>
-      <div class="ybar"><i id="wc-next-bar"></i></div>
-    </div>
-    <div class="wc-actions"><button class="btn small" id="wc-how" data-i18n="wc.how">Como ganhar</button><button class="btn small go" id="wc-see" data-i18n="wc.garage">Garagem</button></div>
-  </aside>
-  <aside id="wallet-guest" class="wcard" hidden>
-    <div class="wc-coin" aria-hidden="true">NCP</div>
-    <b class="wg-title" data-i18n="wg.title">Ganhe NCP dirigindo</b>
-    <p data-i18n="wg.text">NCP são os Night Cruise Points. Com uma conta grátis, cada 10 m rodados valem 1 NCP, e com eles você compra os outros 20 carros. Sem conta, só o Tiara GT '83.</p>
-    <div class="wc-actions"><button class="btn small go" id="wg-join" data-i18n="wg.join">Criar conta</button><button class="btn small" id="wg-how" data-i18n="wc.how">Como ganhar</button></div>
-  </aside>
 </div>
 
 <div id="select" class="screen" hidden>
-  <img id="sel-photo" alt="" hidden>
-  <button id="sel-wallet" class="sel-wallet" aria-label="NCP e garagem" data-i18n-aria="wl.title"><small id="sel-wallet-label"></small><b id="sel-wallet-bal"></b><span class="q">?</span></button>
   <div class="info">
     <div class="eyebrow" id="sel-class">Muscle</div>
     <h2 class="name" id="sel-name">Kaiju GT</h2>
@@ -547,21 +345,9 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
     <div class="stats" id="sel-stats"></div>
     <div class="paints"><span class="plabel" data-i18n="sel.paint">Cor</span><div class="swatches" id="sel-paints" role="radiogroup" aria-label="Cor do carro" data-i18n-aria="sel.paintAria"></div></div>
     <div class="sel-loading" id="sel-loading" hidden data-i18n="shop.loading">Carregando o carro…</div>
-    <div class="lock" id="sel-lock" hidden>
-      <div class="lock-line"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span id="sel-lock-text"></span></div>
-      <div class="ybar lock-bar" id="sel-lock-barbox"><i id="sel-lock-bar"></i></div>
-      <p class="lock-how"><b data-i18n="coins.howUnlockT">Como desbloquear</b> <span data-i18n="coins.howUnlock">Junte os NCP do preço e aperte Comprar: o carro fica seu para sempre.</span></p>
-      <p class="lock-how"><b data-i18n="coins.howEarnT">Como ganhar NCP</b> <span data-i18n="coins.howEarn">Dirija logado: 1 NCP a cada 10 m, com bônus de até ×2 nas viagens longas. Tudo sobre NCP no saldo, no canto de cima.</span></p>
-      <small id="sel-msg" role="status" aria-live="polite"></small>
-    </div>
   </div>
-  <div id="sel-padlock" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span data-i18n="coins.locked">Bloqueado</span></div>
   <div class="strip">
-    <!-- the garage: every car at once, three tiers of seven, weakest (top left) to strongest (bottom right) -->
-    <div class="garage">
-      <div class="tiers" aria-hidden="true"><span data-i18n="tier.1">Rua</span><span data-i18n="tier.2">Esportivos</span><span data-i18n="tier.3">Supercarros</span></div>
-      <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
-    </div>
+    <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
     <div class="row">
       <div class="hint" data-i18n-html="sel.hint"><span><kbd>←</kbd> <kbd>→</kbd> trocar</span><span>arraste para girar</span><span><kbd>Enter</kbd> dirigir</span><span><kbd>Esc</kbd> voltar</span></div>
       <div style="display:flex;gap:8px">
@@ -588,7 +374,6 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
     </div>
   </div>
   <div id="toast"></div>
-  <div id="coins" hidden><div class="coins-row"><span class="coins-gain" id="coins-gain"></span><b id="coins-bal">0</b><i>NCP</i></div><small id="coins-bonus"></small></div>
   <div id="online-badge" hidden><i></i><span id="online-badge-text"></span></div>
   <div id="roster" hidden><header id="roster-head"></header><ol id="roster-list"></ol></div>
 </div>
@@ -625,73 +410,11 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
       </div>
       <div class="on-choices" id="on-choices">
         <button class="on-card" id="on-auto"><b data-i18n="on.auto">Sala pública</b><span data-i18n="on.autoDesc">Entra numa sala com gente rodando agora</span></button>
-        <button class="on-card" id="on-create"><b data-i18n="on.create">Criar sala privada</b><span data-i18n="on.createDesc">Gera um código para chamar os amigos</span></button>
-        <form class="on-card on-code" id="on-code-form" novalidate>
-          <b data-i18n="on.joinCode">Entrar com código</b>
-          <div class="on-code-row"><input id="on-code" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123" aria-label="Código da sala" data-i18n-aria="on.code"><button class="btn small" type="submit" data-i18n="on.enter">Entrar</button></div>
-        </form>
-      </div>
-      <div class="on-private" id="on-private" hidden>
-        <div class="on-pcode-box">
-          <span class="on-plabel" data-i18n="on.pCode">Código da sua sala</span>
-          <div class="on-pcode" id="on-pcode">ABC123</div>
-          <div class="on-prow">
-            <button class="btn small" id="on-copy" data-i18n="on.copy">Copiar código</button>
-            <button class="btn small" id="on-newcode" data-i18n="on.newCode">Gerar outro</button>
-          </div>
-          <span class="on-phint" data-i18n="on.pHint">Passe esse código para os amigos. Eles entram em Online › Entrar com código.</span>
-        </div>
-        <div class="on-setting">
-          <div><b data-i18n="on.maxT">Limite de jogadores</b><span data-i18n="on.maxDesc">Quantas pessoas cabem na sala, contando você</span></div>
-          <div class="on-stepper">
-            <button class="btn small" id="on-max-dec" aria-label="Menos" data-i18n-aria="on.less">−</button>
-            <output id="on-max">8</output>
-            <button class="btn small" id="on-max-inc" aria-label="Mais" data-i18n-aria="on.more">+</button>
-          </div>
-        </div>
-        <div class="on-prow end">
-          <button class="btn small" id="on-pback" data-i18n="sel.back">Voltar</button>
-          <button class="btn go" id="on-pgo" data-i18n="on.pGo">Escolher carro e abrir a sala</button>
-        </div>
-      </div>
-      <p class="on-msg" id="on-msg" role="status" aria-live="polite"></p>
+      </div>      <p class="on-msg" id="on-msg" role="status" aria-live="polite"></p>
     </div>
-    <footer><span class="chipinfo" data-i18n="on.note">Sem colisão entre jogadores; o trânsito é de cada um.</span><button class="btn small" id="on-close" data-i18n="close">Fechar</button></footer>
+    <footer><span class="chipinfo" data-i18n="on.note">Sem colisão entre jogadores.</span><button class="btn small" id="on-close" data-i18n="close">Fechar</button></footer>
   </div>
 </div>
-
-<!-- yen and garage in one place: how to earn, and every car with its price and how far you are -->
-<div id="wallet" class="screen scrim" hidden>
-  <div class="panel" role="dialog" aria-labelledby="wl-title">
-    <header><h2 id="wl-title" data-i18n="wl.title">NCP e garagem</h2><span class="wl-bal" id="wl-bal"></span></header>
-    <div class="wl-body">
-      <div class="wl-how">
-        <div><b data-i18n="wl.h1t">1 NCP a cada 10 m</b><span data-i18n="wl.h1">Dirija logado, sozinho ou online. O servidor confere e paga a cada minuto.</span></div>
-        <div><b data-i18n="wl.h2t">Bônus de viagem</b><span data-i18n="wl.h2">Sem voltar ao menu, o ganho sobe: ×1,25 após 10 min, ×1,5 após 30 min, ×2 após 60 min.</span></div>
-        <div><b data-i18n="wl.h3t">Compre carros</b><span data-i18n="wl.h3">Cada carro é comprado uma vez e fica seu. Nada de dinheiro real.</span></div>
-      </div>
-      <h3 data-i18n="wl.cars">Carros</h3>
-      <div id="wl-cars"></div>
-    </div>
-    <footer><span class="chipinfo" id="wl-foot"></span><button class="btn small" id="wl-close" data-i18n="close">Fechar</button></footer>
-  </div>
-</div>
-
-<div id="friends" class="screen scrim" hidden>
-  <div class="panel" role="dialog" aria-labelledby="fr-title">
-    <header><h2 id="fr-title" data-i18n="fr.title">Amigos</h2><span class="chipinfo" data-i18n="fr.sub">Quem está online e onde está rodando</span></header>
-    <div class="fr-body">
-      <form id="fr-add" class="fr-add" novalidate>
-        <input id="fr-name" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Nome do jogador" data-i18n-ph="fr.namePh" aria-label="Nome do jogador" data-i18n-aria="fr.namePh">
-        <button class="btn small go" type="submit" data-i18n="fr.add">Adicionar</button>
-      </form>
-      <p class="fr-msg" id="fr-msg" role="status" aria-live="polite"></p>
-      <div id="fr-list"></div>
-    </div>
-    <footer><span class="chipinfo" data-i18n="fr.note">Amigos veem se você está online e em qual sala está.</span><button class="btn small" id="fr-close" data-i18n="close">Fechar</button></footer>
-  </div>
-</div>
-
 <div id="account" class="screen scrim" hidden>
   <div class="panel" role="dialog" aria-labelledby="acct-title">
     <header><h2 id="acct-title">Conta</h2><span class="chipinfo" id="acct-sub"></span></header>
@@ -747,20 +470,8 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
           <div class="pf-avatar" id="pf-avatar" aria-hidden="true">?</div>
           <div class="pf-id">
             <div class="pf-name" id="pf-name">—</div>
-            <div class="pf-badges"><span class="pf-badge" id="pf-rank">—</span><span class="pf-badge gold" id="pf-premium" hidden data-i18n="acc.premiumBadge">Pacote Premium</span></div>
-            <div class="acct-meta"><span><span data-i18n="acc.since">Membro desde</span> <b id="pf-since">—</b></span><span><span data-i18n="acc.seen">Último acesso</span> <b id="pf-seen">—</b></span></div>
+            <div class="acct-meta"><span><span data-i18n="acc.since">Membro desde</span> <b id="pf-since">—</b></span></div>
           </div>
-        </div>
-        <div class="acct-stats">
-          <div><i class="ic ic-road"></i><b id="pf-dist">—</b><span data-i18n="acc.statDist">Distância</span></div>
-          <div><i class="ic ic-clock"></i><b id="pf-time">—</b><span data-i18n="acc.statTime">Tempo dirigindo</span></div>
-          <div><i class="ic ic-flag"></i><b id="pf-drives">—</b><span data-i18n="acc.statDrives">Viagens</span></div>
-          <div class="gold"><i class="ic ic-yen"></i><b id="pf-coins">—</b><span data-i18n="acc.statCoins">NCP</span></div>
-        </div>
-        <div class="pf-garage">
-          <div class="pf-garage-h"><h3 data-i18n="acc.garage">Garagem</h3><span id="pf-garage-count">—</span></div>
-          <div class="pf-cars" id="pf-cars"></div>
-          <div class="pf-fav" id="pf-fav" hidden><span data-i18n="acc.favCar">Último carro</span> <b id="pf-fav-name"></b></div>
         </div>
         <details class="acct-sec pf-more">
           <summary data-i18n="acc.settingsSec">Dados da conta e segurança</summary>
@@ -808,12 +519,10 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
     <header><h2 data-i18n="pause.title">Pausa</h2><span class="chipinfo" id="pause-info"></span></header>
     <div class="pbody">
       <nav>
-        <div class="p-wallet" id="p-wallet" hidden><small data-i18n="wc.yourYen">Seus NCP</small><b id="p-wallet-bal"></b><span id="p-wallet-drive"></span></div>
         <button class="menu-btn primary" id="p-resume" data-i18n="pause.resume">Continuar</button>
         <button class="menu-btn" id="p-car" data-i18n="pause.car">Trocar de carro</button>
         <button class="menu-btn" id="p-reset" data-i18n="pause.reset">Voltar para a pista</button>
         <button class="menu-btn" id="p-settings" data-i18n="pause.settings">Configurações</button>
-        <button class="menu-btn" id="p-friends" data-i18n="title.friends" hidden>Amigos</button>
         <button class="menu-btn" id="p-online" data-i18n="pause.leaveOnline" hidden>Sair do online</button>
         <button class="menu-btn" id="p-title" data-i18n="pause.menu">Menu inicial</button>
       </nav>
@@ -849,8 +558,8 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.26.1';
-  var MODULES = ['account', 'audio', 'cars', 'flames', 'friends', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
+  var V = '1.27.0';
+  var MODULES = ['account', 'audio', 'cars', 'flames', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',
