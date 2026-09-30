@@ -86,10 +86,10 @@ ok((await one('select count(*)::int n from public.car_unlocks where user_id = $1
 // ------------------------------------------------------------------ anonymous visitor
 console.log('anonymous');
 await as('anon', {}, async tx => {
-  ok((await tx.query('select * from public.cars')).rows.length === 9, 'anon reads the car catalogue (1 free + 8 for sale)');
-  ok((await tx.query("select price_coins from public.cars where id = 'p_r34'")).rows[0].price_coins === 60000, 'anon reads the car prices (yen)');
+  ok((await tx.query('select * from public.cars')).rows.length === 21, 'anon reads the car catalogue (1 free + 20 for sale)');
+  ok((await tx.query("select price_coins from public.cars where id = 'p_r34'")).rows[0].price_coins === 36000, 'anon reads the car prices (NCP)');
   ok((await tx.query("select 1 from public.cars where price_coins is null")).rows.length === 1, 'only the free car is not for sale');
-  ok((await tx.query("select price_coins p from public.cars where id in ('r32', 'nsx') order by price_coins")).rows.map(r => r.p).join() === '8000,12000', 'the R32 and the NSX are the cheapest cars for sale');
+  ok((await tx.query("select id from public.cars where price_coins is not null order by price_coins")).rows.map(r => r.id).join() === 'p_mustang,p_eclipse,p_s2000,p_s15,r32,nsx,p_rx7,p_evo7,p_supra,p_r34,p_718,p_challenger,p_vette13,p_targa,p_gtr35,p_458,p_r8,p_huracan,p_vette23,p_911', 'one price ladder, weakest to strongest');
   ok((await tx.query("select 1 from public.cars where id = 'p_supra2'")).rows.length === 0, "Slap Jack's Supra is gone");
 });
 await fails(as('anon', {}, tx => tx.query('select * from public.profiles')), /permission denied/, 'anon cannot read profiles');
@@ -185,11 +185,11 @@ await fails(as('anon', {}, tx => tx.query("select public.buy_car('p_s15')")), /p
 await fails(as(...player(c), tx => tx.query("select public.buy_car('p_s15')")), /not_enough_coins/, 'a car costs yen the player must have');
 await db.query('update public.player_stats set coins = 100000 where user_id = $1', [c]);
 const left = (await as(...player(c), tx => tx.query("select public.buy_car('p_s15') v"))).rows[0].v;
-ok(Number(left) === 65000 && await owns(c, 'p_s15') && !(await owns(c, 'p_r34')), 'buying one car takes its price (¥35.000) and unlocks only that car');
+ok(Number(left) === 85000 && await owns(c, 'p_s15') && !(await owns(c, 'p_r34')), 'buying one car takes its price (15.000 NCP) and unlocks only that car');
 await fails(as(...player(c), tx => tx.query("select public.buy_car('p_s15')")), /already_owned/, 'no buying the same car twice');
 await fails(as(...player(c), tx => tx.query("select public.buy_car('tiara83')")), /not_for_sale/, 'the free car is not for sale');
 await fails(as(...player(c), tx => tx.query("select public.buy_car('nope')")), /not_for_sale/, 'unknown cars are not for sale');
-ok(await coinsOf(c) === 65000, 'refused purchases cost nothing');
+ok(await coinsOf(c) === 85000, 'refused purchases cost nothing');
 await db.query("update public.drive_sessions set started_at = now() - interval '1 minute'");
 ok(!!(await as(...player(c), tx => tx.query("select public.start_drive('p_s15') id"))).rows[0].id, 'a bought car can be driven for stats');
 ok(!(await one("select 1 x from pg_proc where proname like 'shop_%'")) && !(await one("select 1 x from pg_tables where tablename in ('orders', 'products')")), 'no real-money shop left in the database');

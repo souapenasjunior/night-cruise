@@ -539,8 +539,9 @@ function updateSelect() {
   const unit = S.gameplay.units === 'mph' ? 'mph' : 'km/h';
   const top = S.gameplay.units === 'mph' ? Math.round(st.top * 0.621) : st.top;
   $('sel-stats').innerHTML =
-    statRow(t('stat.top'), (st.top - 150) / 170, `${top} ${unit}`) +
-    statRow(S.gameplay.units === 'mph' ? '0–60 mph' : '0–100 km/h', (st.accel - 4.5) / 6, `${num(zero100)} s`) +
+    // (bars span the garage: 195 to 330 km/h, 0-100 from ~9 s to ~2.5 s)
+    statRow(t('stat.top'), (st.top - 180) / 160, `${top} ${unit}`) +
+    statRow(S.gameplay.units === 'mph' ? '0–60 mph' : '0–100 km/h', (st.accel - 3.8) / 11, `${num(zero100)} s`) +
     statRow(t('stat.grip'), (st.grip - 0.6) / 0.75, t(st.grip >= 1.05 ? 'grip.high' : st.grip >= 0.88 ? 'grip.mid' : 'grip.low')) +
     statRow(t('stat.rear'), (st.drift - 0.4) / 1.1, t(st.drift >= 1.2 ? 'rear.loose' : st.drift >= 0.85 ? 'rear.neutral' : 'rear.firm')) +
     statRow(t('stat.mass'), st.mass / 4400, `${st.mass} kg`);
@@ -551,24 +552,24 @@ function updateSelect() {
     c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', lk);
     c.classList.toggle('can', lk && signed && p > 0 && bal >= p);
     const pr = c.querySelector('.pr');
-    if (pr) pr.textContent = lk && p ? yenShort(p) : '';
+    if (pr) pr.textContent = lk && p ? ncpShort(p) : '';
   });
   const chip = $('sel-chips').children[selIndex];
   if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   // the balance, always in sight (opens "yen and garage")
   $('sel-wallet').classList.toggle('guest', !signed);
   $('sel-wallet-label').textContent = t(signed ? 'wc.yourYen' : 'wl.guestLabel');
-  $('sel-wallet-bal').textContent = signed ? yen(bal) : t('wl.guestBal');
+  $('sel-wallet-bal').innerHTML = signed ? ncpHtml(bal) : t('wl.guestBal');
   // a car not owned yet: its price and the player's yen in one line with a progress bar, and "Drive"
   // becomes the buy button (the strip at the bottom is never covered by the car details)
   const lk = locked(s);
   $('sel-lock').hidden = !lk;
   const price = priceOf(s.id);
-  if (lk) $('sel-lock-text').textContent = signed ? t('coins.lockLine', { price: yen(price), bal: yen(bal) }) : t('coins.lockGuest', { price: yen(price) });
+  if (lk) $('sel-lock-text').textContent = signed ? t('coins.lockLine', { price: ncp(price), bal: ncp(bal) }) : t('coins.lockGuest', { price: ncp(price) });
   $('sel-lock-barbox').hidden = !(lk && signed && price);
   if (lk && price) { $('sel-lock-bar').style.width = Math.min(100, (bal / price) * 100) + '%'; $('sel-lock-barbox').classList.toggle('full', bal >= price); }
   $('sel-go').textContent = !lk ? t('sel.go') : !signed ? t('coins.signInBtn')
-    : confirmBuy === s.id ? t('coins.confirm', { price: yen(price) }) : bal >= price ? t('coins.buy', { price: yen(price) }) : t('coins.short', { missing: yen(price - bal) });
+    : confirmBuy === s.id ? t('coins.confirm', { price: ncp(price) }) : bal >= price ? t('coins.buy', { price: ncp(price) }) : t('coins.short', { missing: ncp(price - bal) });
   $('sel-go').classList.toggle('buy', lk && (!signed || bal >= price));
   $('sel-go').classList.toggle('short', lk && signed && bal < price);
   if (!lk || selMsgCar !== s.id) $('sel-msg').textContent = '';
@@ -597,17 +598,27 @@ function goSelect() {
 }
 $('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else goTitle(); };
 $('sel-go').onclick = () => startDrive();
-// yen on the HUD while driving (signed in only): balance, what this drive has earned since the last
-// report, and the cruise bonus once it starts
-let coinsHudT = 0;
+// NCP on the HUD while driving (signed in only), quietly in the top right corner: the balance counting up
+// as the car covers ground (the server's figure plus this drive's estimate), a small "+N" when the
+// server pays (once a minute), and the cruise bonus once it starts. Nothing in the middle of the screen.
+let coinsHudT = 0, coinsGainT = 0;
+function coinsGain(n) {
+  const g = $('coins-gain');
+  g.textContent = '+' + ncpNum(n);
+  // shown at once, faded out after a moment (by its colour's alpha)
+  // (the transparent outline makes the browser repaint it: some builds kept showing the old empty spot)
+  g.style.transition = 'none'; g.style.color = 'rgba(159, 240, 191, 1)'; g.style.outline = g.style.outline ? '' : '1px solid transparent';
+  clearTimeout(coinsGainT);
+  coinsGainT = setTimeout(() => { g.style.transition = 'color .8s'; g.style.color = 'rgba(159, 240, 191, 0)'; }, 2600);
+}
 function coinsHud(dt) {
   coinsHudT -= dt;
   if (coinsHudT > 0) return;
   coinsHudT = 0.25;
-  const c = liveCoins(), el = $('coins');
+  const c = fakeAcct ? { balance: fakeAcct.bal, pending: Math.floor(((player && player.odo) || 0) / 10), bonus: 1.25 } : liveCoins(), el = $('coins');
   el.hidden = !c;
   if (!c) return;
-  $('coins-bal').textContent = yen(c.balance + c.pending);
+  $('coins-bal').textContent = ncpNum(c.balance + c.pending);
   $('coins-bonus').textContent = c.bonus > 1 ? t('coins.bonus', { x: String(c.bonus).replace('.', t('acc.locale') === 'pt-BR' ? ',' : '.') }) : '';
 }
 
@@ -766,13 +777,18 @@ $('on-code-form').onsubmit = e => {
 };
 $('p-online').onclick = () => { leaveOnline(); $('p-online').hidden = true; onlineHud(); hud.toast(t('on.left')); resumeGame(); };
 
-// ------------------------------------------------------------------ buying cars with yen
-// No real money anywhere: the yen are earned by driving (report_drive on the server) and each car is
-// bought on its own, right here on the car select. Two presses: the first asks to confirm the price.
+// ------------------------------------------------------------------ buying cars with NCP
+// No real money anywhere: NCP (Night Cruise Points) are earned by driving (report_drive on the server)
+// and each car is bought on its own, right here on the car select. Two presses: the first asks to
+// confirm the price.
 const shopImg = s => `img/shop/${s.id}.webp?v=${VERSION}`; // pictures of the cars, taken in the showroom
-const yen = n => '¥ ' + Math.max(0, Math.round(n || 0)).toLocaleString(t('acc.locale'));
-// short price for the car chips: ¥8k, ¥12,5k
-const yenShort = n => (n >= 1000 ? '¥' + (Math.round(n / 100) / 10).toLocaleString(t('acc.locale')) + 'k' : yen(n));
+// "12.345 NCP" in texts; big figures get their own markup (ncpHtml: the number in the NCP font, the unit
+// small beside it)
+const ncpNum = n => Math.max(0, Math.round(n || 0)).toLocaleString(t('acc.locale'));
+const ncp = n => ncpNum(n) + ' NCP';
+const ncpHtml = n => `<span class="ncp-n">${ncpNum(n)}</span><span class="ncp-u">NCP</span>`;
+// short price for the car chips: 8k, 12,5k
+const ncpShort = n => (n >= 1000 ? (Math.round(n / 100) / 10).toLocaleString(t('acc.locale')) + 'k' : ncpNum(n));
 let confirmBuy = null, confirmTimer = 0; // car waiting for the second press
 let selMsgCar = null;                    // car the message under the price belongs to
 let buyAfterLogin = null;                // car the player went to sign in for
@@ -781,7 +797,7 @@ async function buyCarFlow(spec) {
   if (!isSignedIn()) { buyAfterLogin = spec.id; openAccount('login', t('coins.signIn')); return; }
   const price = priceOf(spec.id), bal = coinBalance();
   if (!price) return;
-  if (bal < price) { selMessage(spec, t('coins.notEnoughHint', { missing: yen(price - bal) })); audio.uiBlip && audio.uiBlip(); return; }
+  if (bal < price) { selMessage(spec, t('coins.notEnoughHint', { missing: ncp(price - bal) })); audio.uiBlip && audio.uiBlip(); return; }
   if (confirmBuy !== spec.id) {
     confirmBuy = spec.id;
     clearTimeout(confirmTimer);
@@ -794,7 +810,7 @@ async function buyCarFlow(spec) {
   clearTimeout(confirmTimer);
   selMessage(spec, t('acc.wait'));
   const err = await buyCar(spec.id);
-  selMessage(spec, err || t('coins.bought', { car: spec.name, bal: yen(coinBalance()) }));
+  selMessage(spec, err || t('coins.bought', { car: spec.name, bal: ncp(coinBalance()) }));
   if (state === 'select') updateSelect();
 }
 // ------------------------------------------------------------------ yen at a glance
@@ -824,12 +840,12 @@ function renderWallet() {
   avatarStyle($('wc-av'), name);
   const have = HERO_SPECS.filter(s => s.free || acct.owns(s.id)).length;
   $('wc-garage').textContent = t('wc.garageN', { n: have, total: HERO_SPECS.length });
-  $('wc-bal').textContent = yen(bal);
+  $('wc-bal').innerHTML = ncpHtml(bal);
   const nx = nextCar();
   if (nx) {
     const p = priceOf(nx.id);
     $('wc-next-label').textContent = t('wc.next', { car: nx.name });
-    $('wc-next-need').textContent = bal >= p ? t('wc.canBuy') : t('wc.missing', { missing: yen(p - bal) });
+    $('wc-next-need').textContent = bal >= p ? t('wc.canBuy') : t('wc.missing', { missing: ncp(p - bal) });
     $('wc-next-bar').style.width = Math.min(100, (bal / p) * 100) + '%';
     $('wc-next-bar').parentElement.classList.toggle('full', bal >= p);
     $('wc-next-bar').parentElement.hidden = false;
@@ -848,7 +864,7 @@ function selectCarId(id) {
 const isWalletOpen = () => !$('wallet').hidden;
 function openWallet() {
   const signed = acct.signed(), bal = acct.bal();
-  $('wl-bal').textContent = signed ? yen(bal) : '';
+  $('wl-bal').innerHTML = signed ? ncpHtml(bal) : '';
   $('wl-foot').textContent = t(signed ? 'wl.foot' : 'wl.footGuest');
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const unit = S.gameplay.units === 'mph' ? 'mph' : 'km/h';
@@ -856,8 +872,8 @@ function openWallet() {
   for (const s of HERO_SPECS) {
     const own = s.free || acct.owns(s.id), p = priceOf(s.id);
     const top = S.gameplay.units === 'mph' ? Math.round(s.stats.top * 0.621) : s.stats.top;
-    const st = s.free ? t('wl.free') : own ? t('wl.owned') : p ? yen(p) : '…';
-    const sub = own ? '' : !signed ? '' : bal >= p ? ` · <span style="color:#7ee2a2">${t('wc.canBuy')}</span>` : ` · ${t('wc.missing', { missing: yen(p - bal) })}`;
+    const st = s.free ? t('wl.free') : own ? t('wl.owned') : p ? ncp(p) : '…';
+    const sub = own ? '' : !signed ? '' : bal >= p ? ` · <span style="color:#7ee2a2">${t('wc.canBuy')}</span>` : ` · ${t('wc.missing', { missing: ncp(p - bal) })}`;
     const bar = !own && signed && p ? `<div class="ybar${bal >= p ? ' full' : ''}"><i style="width:${Math.min(100, (bal / p) * 100)}%"></i></div>` : '';
     html += `<button class="wl-car${own ? ' own' : ''}" data-id="${s.id}"><div class="nm"><b>${esc(s.name)}</b><span>${esc(s.cls)} · ${top} ${unit}${sub}</span></div><div class="st">${st}</div>${bar}</button>`;
   }
@@ -883,9 +899,9 @@ function renderPauseWallet() {
   const c = fakeAcct ? { balance: fakeAcct.bal, pending: 37, bonus: 1.25 } : liveCoins();
   $('p-wallet').hidden = !c;
   if (!c) return;
-  $('p-wallet-bal').textContent = yen(c.balance + c.pending);
+  $('p-wallet-bal').innerHTML = ncpHtml(c.balance + c.pending);
   const bonus = c.bonus > 1 ? ' · ' + t('coins.bonus', { x: String(c.bonus).replace('.', t('acc.locale') === 'pt-BR' ? ',' : '.') }) : '';
-  $('p-wallet-drive').textContent = t('wc.thisDrive', { n: yen(driveEarned + c.pending) }) + bonus;
+  $('p-wallet-drive').textContent = t('wc.thisDrive', { n: ncp(driveEarned + c.pending) }) + bonus;
 }
 
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
@@ -1018,9 +1034,9 @@ function startDrive() {
   showScreen('drive');
   applySettings();
   hud.lastZone = null;
-  // (and what the drive is worth: yen when signed in, nothing without an account)
+  // (what the drive earns shows only in the top right corner: coinsHud)
   driveEarned = 0;
-  hud.toast(t('toast.go', { car: spec.name }) + ' · ' + t(acct.signed() ? 'wc.driveHint' : 'wc.guestHint'), 4);
+  hud.toast(t('toast.go', { car: spec.name }));
   driveStarted(spec.id); // (signed in: the server opens a drive to count distance and time)
   // online: join the room picked on the title screen, or tell the room about the new car
   if (onlineWant && !online.want && !online.connected) { online.join(onlineWant, spec.id, onlineCreate); onlineCreate = null; }
@@ -1626,7 +1642,7 @@ async function boot() {
       if (i >= 0 && state === 'select') { selIndex = i; updateSelect(); }
     },
     // the server paid yen for the last minute of driving
-    earned: n => { driveEarned += n; if (state === 'drive' && hud) hud.toast(t('coins.earned', { n: yen(n) })); },
+    earned: n => { driveEarned += n; if (state === 'drive') coinsGain(n); },
   }).catch(e => console.warn('[account]', e && e.message));
   if (location.hash === '#debug') {
     let fake = performance.now();
@@ -1637,7 +1653,7 @@ async function boot() {
       startDrive: () => startDrive(), goSelect: () => goSelect(), parkAtSlot,
       get show() { return show; },
       selectCar: id => { const i = HERO_SPECS.findIndex(s => s.id === id); if (i >= 0) { selIndex = i; updateSelect(); } return i; },
-      openWallet, pause: () => pauseGame(),
+      openWallet, pause: () => pauseGame(), coinsGain: n => coinsGain(n),
     };
     // (localhost only: a pretend account for looking at the signed-in screens; never sent anywhere)
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {

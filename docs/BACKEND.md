@@ -166,13 +166,15 @@ psql "<URL do banco>" -f backup/data.sql
 - **Nomes de usuário:** o "nome livre?" responde a qualquer visitante. Nomes são públicos por natureza, então isso não expõe nada privado.
 - **Dados pessoais (LGPD):** o jogo passa a guardar e-mails. Antes de abrir o cadastro ao público, publique uma política de privacidade simples (o que é guardado, por quê, e como excluir a conta) e um contato.
 
-## Ienes (moeda do jogo) e compra de carros
+## NCP (Night Cruise Points, a moeda do jogo) e compra de carros
+
+No banco as colunas continuam `coins`, `coins_earned` e `price_coins`; no jogo a moeda se chama NCP.
 
 Não existe nenhuma compra com dinheiro real: o Mercado Pago foi removido (funções, chaves e tabelas).
 
-- **Ganho:** só no servidor, dentro de `report_drive`, a partir da distância que ele já aceitou como plausível: **¥ 1 a cada 10 m**, vezes o **bônus de cruzeiro** da viagem atual (×1,25 depois de 10 min, ×1,5 depois de 30 min, ×2 depois de 60 min, pelo relógio do servidor). O resto de metros que não fecha 10 m fica guardado (`coin_carry_m`).
+- **Ganho:** só no servidor, dentro de `report_drive`, a partir da distância que ele já aceitou como plausível: **1 NCP a cada 10 m**, vezes o **bônus de cruzeiro** da viagem atual (×1,25 depois de 10 min, ×1,5 depois de 30 min, ×2 depois de 60 min, pelo relógio do servidor). O resto de metros que não fecha 10 m fica guardado (`coin_carry_m`).
 - **Saldo:** `player_stats.coins` (e `coins_earned`, total já ganho). O jogador só lê; não há permissão de escrita.
-- **Preços:** `cars.price_coins` (vazio = carro gratuito). Só o Tiara GT '83 é grátis (e só ele vem liberado em conta nova); o resto sobe em escada: R32 ¥ 8.000, NSX ¥ 12.000, Eclipse 25.000, S2000 30.000, S15 35.000, RX-7 40.000, Supra 55.000, R34 60.000. No jogo, `free: true` em `js/jdmspecs.js` marca o carro grátis. Para mudar um preço: `update public.cars set price_coins = 50000 where id = 'p_r34';`
+- **Preços:** `cars.price_coins` (vazio = carro gratuito). Só o Tiara GT '83 é grátis (e só ele vem liberado em conta nova); os outros 20 sobem em escada pelo desempenho (dados reais; os carros de filme como preparados nos filmes), do Shelby GT350 (6.000 NCP) ao 911 Turbo S (120.000 NCP): a lista completa está na migração `car_lineup`, e a mesma ordem em `CAR_ORDER` (`js/jdmspecs.js`). No jogo, `free: true` marca o carro grátis. Para mudar um preço: `update public.cars set price_coins = 50000 where id = 'p_r34';`
 - **Compra:** `buy_car(p_car)` confere se o carro está à venda, se ainda não é do jogador e se o saldo cobre o preço; desconta e libera o carro (`car_unlocks.source = 'purchase'`), tudo numa transação.
 - Testes: `npm run test:db`.
 

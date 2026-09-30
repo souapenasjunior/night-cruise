@@ -88,7 +88,7 @@ async function loadProfile() {
 }
 
 // ------------------------------------------------------------------ yen and cars
-// There is no real money in the game: players earn yen (¥) by driving and buy cars with it. The balance
+// There is no real money in the game: players earn NCP (Night Cruise Points) by driving and buy cars with it. The balance
 // is kept and changed only by the server (report_drive pays for accepted distance, buy_car spends);
 // what the player owns comes from car_unlocks (readable only by its owner, written only by the server).
 let owned = new Set();
@@ -362,7 +362,7 @@ function renderPilotCard() {
   $('pf-garage-count').textContent = `${have}/${cars.length}`;
   const prem = cars.filter(c => !c.free);
   $('pf-premium').hidden = !prem.length || !prem.every(c => owned.has(c.id));
-  $('pf-coins').textContent = stats ? '¥ ' + coinBalance().toLocaleString(t('acc.locale')) : '—';
+  $('pf-coins').textContent = stats ? coinBalance().toLocaleString(t('acc.locale')) + ' NCP' : '—';
   const fav = cars.find(c => c.id === profile.selected_car);
   $('pf-fav').hidden = !fav;
   if (fav) $('pf-fav-name').textContent = fav.name;
