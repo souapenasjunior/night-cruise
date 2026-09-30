@@ -5,7 +5,7 @@ export const VERSION = '1.0.1';
 export const DATE = '2026-09-30';
 // short hash of the commit with this release's changes (a commit cannot contain its own hash,
 // so it is filled in by a small follow-up commit)
-export const COMMIT = '94bc86f';
+export const COMMIT = '55698cf';
 // cache key for models/ (json + webp textures): bump only when a file there changes
 export const MODELS_REV = '13';
 
