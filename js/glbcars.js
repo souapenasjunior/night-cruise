@@ -19,7 +19,9 @@ export async function loadGlbCars(specs, onEach) {
   await Promise.all(specs.filter(s => s.glb).map(async s => {
     // files served from elsewhere (premium cars: signed Storage URLs), by file name
     const urls = s.glb.urls;
-    const l = urls ? new GLTFLoader(new THREE.LoadingManager().setURLModifier(u => urls.get(u.split('?')[0].split('/').pop()) || u)) : loader;
+    // (the signed links carry MODELS_REV too: a rebuilt premium file is not served from an old cache)
+    const signed = u => { const s = urls.get(u.split('?')[0].split('/').pop()); return s ? s + (s.includes('?') ? '&' : '?') + 'v=' + MODELS_REV : u; };
+    const l = urls ? new GLTFLoader(new THREE.LoadingManager().setURLModifier(signed)) : loader;
     if (urls) l.setMeshoptDecoder(MeshoptDecoder);
     const gltf = await l.loadAsync(s.glb.file);
     templates.set(s.id, prepare(gltf.scene, s));
@@ -238,7 +240,9 @@ function prepare(scene, spec) {
         name: src.name, color: src.color.clone(), map: src.map, normalMap: src.normalMap, aoMap: src.aoMap,
         metalnessMap: src.metalnessMap, roughnessMap: src.roughnessMap,
         // (livery cars: a softer coat; under a lamp post the sharp one blew out into a white ball on the roof)
-        metalness: src.metalnessMap ? 0.35 : 0.12, roughness: THREE.MathUtils.clamp(src.roughness, spec.livery ? 0.42 : 0.28, 0.5),
+        // (G.paintMetal / G.paintRough: a metallic paint, e.g. the R34's platinum silver)
+        metalness: G.paintMetal !== undefined ? G.paintMetal : src.metalnessMap ? 0.35 : 0.12,
+        roughness: G.paintRough !== undefined ? G.paintRough : THREE.MathUtils.clamp(src.roughness, spec.livery ? 0.42 : 0.28, 0.5),
         clearcoat: 0.75, clearcoatRoughness: spec.livery ? 0.3 : 0.14, envMapIntensity: 0.85,
       });
       if (src.normalMap) p.normalScale.copy(src.normalScale);

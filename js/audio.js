@@ -173,7 +173,8 @@ export class AudioSys {
     this.turbo.connect(this.turboLP); this.turbo2.connect(this.turboLP);
     this.turboLP.connect(this.turboG).connect(this.engineBus);
     this.turbo.start(); this.turbo2.start();
-    this.whoosh = this._loop(this.noise, 0.9);
+    // (pink noise: white noise here hissed at full boost)
+    this.whoosh = this._loop(this.pink, 0.9);
     this.whooshF = ctx.createBiquadFilter(); this.whooshF.type = 'bandpass'; this.whooshF.frequency.value = 700; this.whooshF.Q.value = 1.6;
     this.whooshG = ctx.createGain(); this.whooshG.gain.value = 0;
     this.whoosh.connect(this.whooshF).connect(this.whooshG).connect(this.engineBus);
@@ -272,8 +273,9 @@ export class AudioSys {
     }
     this.sqF.connect(this.sqG).connect(this.sfxBus);
     this.roll = mk(this.brown, 'lowpass', 160, 0.8, this.sfxBus);
-    this.wind = mk(this.noise, 'lowpass', 700, 0.4, this.ambBus);
-    this.windHi = mk(this.noise, 'bandpass', 2400, 0.8, this.ambBus);
+    // wind: pink noise, low-passed (white noise read as a hiss at high speed, the R34's top end most)
+    this.wind = mk(this.pink, 'lowpass', 700, 0.4, this.ambBus);
+    this.windHi = mk(this.pink, 'bandpass', 1400, 0.7, this.ambBus);
     this.city = mk(this.brown, 'lowpass', 320, 0.5, this.ambBus);
     // traffic around: a distant low rumble (was band-passed white noise: a hiss)
     this.traffic = mk(this.brown, 'lowpass', 200, 0.5, this.ambBus);
@@ -460,9 +462,10 @@ export class AudioSys {
     // wind
     const v = kmh / 100;
     // (a low rush that stays low: above ~250 km/h the old curve opened up into a loud hiss)
-    this.wind.g.gain.setTargetAtTime(clamp(v * v * 0.07, 0, 0.22) * (1 - this.inTunnel * 0.4), t, 0.1);
-    this.wind.fl.frequency.setTargetAtTime(Math.min(1150, 320 + kmh * 3.2), t, 0.1);
-    this.windHi.g.gain.setTargetAtTime(clamp((v - 1) * 0.012, 0, 0.02), t, 0.2);
+    // (pink noise is quieter up top than white: the gains are a little higher for the same body)
+    this.wind.g.gain.setTargetAtTime(clamp(v * v * 0.09, 0, 0.26) * (1 - this.inTunnel * 0.4), t, 0.1);
+    this.wind.fl.frequency.setTargetAtTime(Math.min(900, 300 + kmh * 2.6), t, 0.1);
+    this.windHi.g.gain.setTargetAtTime(clamp((v - 1.2) * 0.01, 0, 0.015), t, 0.2);
     // ambience
     this.city.g.gain.setTargetAtTime(0.14 * (1 - this.inTunnel * 0.7), t, 0.4);
     this.traffic.g.gain.setTargetAtTime(clamp(p.trafficNear * 0.008, 0, 0.03), t, 0.4);

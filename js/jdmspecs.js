@@ -51,7 +51,7 @@ export const JDM_SPECS = [
     ['p_rx7', 'RX-7', "Julius's RX-7", 'MAZDA', '7', 'Esportivo', '#d4262c', '#141414', 4.3, { top: 268, accel: 8.8, grip: 1.08, drift: 1.3, mass: 1280 }, { type: 'rotary', turbo: true, pops: 1.6 }],
     ['p_supra2', 'SUPRA SJ', "Slap Jack's Supra", 'TOYOTA', '94', 'Superesportivo', '#e05a1c', '#f2c21c', 4.51, { top: 278, accel: 9.1, grip: 1.1, drift: 1.1, mass: 1500 }, { type: 'i6jz', turbo: true, pops: 0.6 }],
     ['p_supra', 'SUPRA', 'Supra MK IV', 'TOYOTA', '80', 'Superesportivo', '#f07818', '#141414', 4.51, { top: 290, accel: 9.5, grip: 1.13, drift: 1.15, mass: 1510 }, { type: 'i6jz', turbo: true, pops: 0.8 }],
-    ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 305, accel: 9.9, grip: 1.18, drift: 0.9, mass: 1560 }, { type: 'i6rb', turbo: true, pops: 0.7 }],
+    ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 305, accel: 9.9, grip: 1.18, drift: 0.9, mass: 1560 }, { type: 'v6', turbo: true, pops: 0.6 }], // (the R32's engine sound: same RB26 family; its own i6rb voice hissed)
   ].map(([id, short, name, brand, number, cls, main, accent, length, stats, sound]) => ({
     id, short, name, brand, number, cls, premium: 'premium_pack', livery: true,
     colors: { main, accent }, stats, sound, wheels: {},
@@ -63,6 +63,8 @@ export const JDM_SPECS = [
       lampSplit: true, lampMat: /LightA/,
       // the RX-7's pop-up headlamps stay down: its bumper fog lamps are the lights
       ...(id === 'p_rx7' ? { headMaxY: 0.45 } : {}),
+      // the R34's platinum silver is a metallic paint (read as flat white before)
+      ...(id === 'p_r34' ? { paintMetal: 0.6, paintRough: 0.35 } : {}),
       exhaust: EXHAUST[id],
     },
   })),
