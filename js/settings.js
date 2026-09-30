@@ -24,7 +24,7 @@ export function defaults() {
     graphics: { preset: 'auto', quality: 'high', ...PRESETS.high, fpsCap: 60, vsync: true },
     display: { mode: 'window' },
     audio: { master: 0.8, engine: 0.8, sfx: 0.8, ambient: 0.6 },
-    gameplay: { units: 'kmh', minimap: true, hud: true, camDist: 1, camSmooth: 0.5, vibration: true, mirror: true },
+    gameplay: { units: 'kmh', minimap: true, hud: true, camDist: 1, camSmooth: 0.5, vibration: true },
     bindings: JSON.parse(JSON.stringify(DEFAULT_BINDINGS)),
     pad: JSON.parse(JSON.stringify(DEFAULT_PAD)),
     lang: 'auto', // 'auto' (browser language), 'pt' or 'en'
@@ -105,7 +105,7 @@ function sanitize(s) {
   for (const k of Object.keys(s.audio)) if (!(k in d.audio)) delete s.audio[k]; // volumes that no longer exist (menu music)
   const P = s.gameplay, p = d.gameplay;
   if (!['kmh', 'mph'].includes(P.units)) P.units = p.units;
-  for (const k of ['minimap', 'hud', 'mirror', 'vibration']) bool(P, p, k);
+  for (const k of ['minimap', 'hud', 'vibration']) bool(P, p, k);
   num(P, p, 'camDist', 0.7, 1.5);
   num(P, p, 'camSmooth', 0, 1);
   for (const k of Object.keys(P)) if (!(k in p)) delete P[k]; // options that no longer exist (e.g. rain)

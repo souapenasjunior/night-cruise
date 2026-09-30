@@ -281,7 +281,6 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 #zone .en { font: 700 21px/1 var(--display); letter-spacing: 0.05em; text-transform: uppercase; }
 #toast { position: absolute; left: 50%; bottom: calc(clamp(22px, 5vh, 44px) + 150px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 8px); padding: 8px 14px; background: rgba(8, 10, 20, 0.78); border: 1px solid var(--line); font-size: 13px; opacity: 0; transition: opacity .2s, transform .2s; white-space: nowrap; }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
-#mirror { position: absolute; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: clamp(180px, 24vw, 340px); aspect-ratio: 3.4; border-radius: 10px / 14px; box-shadow: 0 0 0 3px #0b0d14, 0 0 0 4px rgba(255, 255, 255, 0.12), 0 8px 26px rgba(0, 0, 0, 0.5); }
 
 /* ---------- big map (M) */
 #map { z-index: 25; background: radial-gradient(120% 90% at 50% 50%, rgba(10, 13, 28, 0.9) 0%, rgba(5, 6, 14, 0.96) 70%); }
@@ -379,7 +378,6 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 </div>
 
 <div id="hud" hidden>
-  <div id="mirror" hidden></div>
   <div id="zone"><div class="route" id="zone-route">K1</div><div class="txt"><div class="jp" id="zone-jp"></div><div class="en" id="zone-name"></div></div></div>
   <div id="minimap"><canvas id="minimap-c"></canvas></div>
   <div class="speedo">
@@ -567,7 +565,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.30.1';
+  var V = '1.0.0';
   var MODULES = ['account', 'audio', 'cars', 'flames', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'vehicleaudio', 'version', 'world'];
   var imports = {

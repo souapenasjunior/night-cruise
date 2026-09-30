@@ -162,43 +162,6 @@ function updateDrone(dt) {
 }
 
 
-// ------------------------------------------------------------------ rear-view mirror
-const mirror = {
-  rt: new THREE.WebGLRenderTarget(512, 150, { type: THREE.HalfFloatType }),
-  cam: new THREE.PerspectiveCamera(50, 3.4, 0.5, 320),
-  scene: new THREE.Scene(),
-  ortho: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
-  el: $('mirror'),
-};
-{
-  const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: mirror.rt.texture, side: THREE.DoubleSide, depthTest: false, depthWrite: false }));
-  q.scale.x = -1;
-  mirror.scene.add(q);
-}
-function renderMirror() {
-  const p = player;
-  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  mirror.cam.position.set(p.pos.x + fx * 0.2, p.pos.y + p.model.H + 0.35, p.pos.z + fz * 0.2);
-  mirror.cam.lookAt(p.pos.x - fx * 40, p.pos.y + 0.6, p.pos.z - fz * 40);
-  p.model.group.visible = false;
-  const fog = scene.fog;
-  renderer.setRenderTarget(mirror.rt);
-  renderer.render(scene, mirror.cam);
-  renderer.setRenderTarget(null);
-  p.model.group.visible = true;
-  scene.fog = fog;
-  const r = mirror.el.getBoundingClientRect();
-  const H = canvas.clientHeight;
-  renderer.autoClear = false;
-  renderer.setScissorTest(true);
-  renderer.setScissor(r.left, H - r.bottom, r.width, r.height);
-  renderer.setViewport(r.left, H - r.bottom, r.width, r.height);
-  renderer.render(mirror.scene, mirror.ortho);
-  renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
-  renderer.autoClear = true;
-}
-
 // ------------------------------------------------------------------ lamp lights (nearest street lamps get a real light)
 // n lamps lit at once, plus two spare lights so a lamp can fade in while another fades out
 function setLampCount(n) {
@@ -295,7 +258,6 @@ function applySettings() {
   if (player && G.shadows !== lastShadows) { player.setShadows(G.shadows); lastShadows = G.shadows; }
   if (idleSpot.castShadow !== (G.shadows !== 'off')) { idleSpot.castShadow = G.shadows !== 'off'; idleSpot.shadow.needsUpdate = true; }
   if (hud) hud.setOptions({ units: P.units, minimap: P.minimap, hud: P.hud });
-  mirror.el.hidden = !P.mirror || state !== 'drive';
   audio.setVolumes(S.audio);
   resize();
 }
@@ -305,7 +267,6 @@ const screens = ['loading', 'title', 'mapsel', 'select', 'pause', 'map'];
 function showScreen(name) {
   for (const s of screens) $(s).hidden = s !== name;
   $('hud').hidden = !(name === 'drive' || name === 'pause');
-  mirror.el.hidden = !(S.gameplay.mirror && name === 'drive');
   const f = focusables()[0];
   if (f && name !== 'drive') setTimeout(() => f.focus({ preventScroll: true }), 30);
 }
@@ -728,7 +689,6 @@ const SCHEMA = {
     { path: 'gameplay.units', label: 'opt.units', type: 'seg', opts: [['kmh', 'km/h'], ['mph', 'mph']] },
     { path: 'gameplay.minimap', label: 'opt.minimap', type: 'tog' },
     { path: 'gameplay.hud', label: 'opt.hud', type: 'tog' },
-    { path: 'gameplay.mirror', label: 'opt.mirror', type: 'tog' },
     { path: 'gameplay.camDist', label: 'opt.camDist', type: 'range', min: 0.7, max: 1.5, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
     { path: 'gameplay.camSmooth', label: 'opt.camSmooth', type: 'range', min: 0, max: 1, step: 0.05, fmt: pct, note: () => t('opt.camSmoothNote') },
     { path: 'gameplay.vibration', label: 'opt.vibration', type: 'tog', note: () => t(navigator.getGamepads ? 'vib.ok' : 'vib.no') },
@@ -1216,7 +1176,6 @@ function tick(now) {
     if (state !== 'pause' && state !== 'map' && !(state === 'select' && player)) world.update(dt, camera);
     renderPass.scene = scene; renderPass.camera = camera;
     if (bloom.enabled) composer.render(); else renderer.render(scene, camera);
-    if (state === 'drive' && S.gameplay.mirror && player) renderMirror();
     if (state === 'map') bigMap.draw(player, traffic, onlineWant && online ? online.others() : []);
   }
   input.endFrame();
