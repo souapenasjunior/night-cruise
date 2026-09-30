@@ -18,7 +18,8 @@ import { Input, ACTION_LABELS, padNameAs, padFixedAs, keyName } from './input.js
 import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap } from './util.js';
-import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
+import { t, setLang, resolveLang, onLangChange, num, setMapTexts } from './i18n.js';
+import { mapOf } from './maps.js';
 import { initAccount, isAccountOpen, openAccount, closeAccount, isSignedIn, accessToken, myName } from './account.js';
 import { Online, roomLabel, ONLINE_ORIGIN } from './online.js';
 import { ExhaustFlames } from './flames.js';
@@ -27,6 +28,9 @@ const tx = t; // (where a local `t` or `tr` names an element)
 const $ = id => document.getElementById(id);
 const S = SET.load();
 setLang(resolveLang(S.lang));
+// the map this session plays (maps.js): chosen on the map select; changing it reloads the game with it
+const MAP = mapOf(S.map);
+setMapTexts(MAP.id);
 const nextFrame = () => new Promise(r => { let done = false; requestAnimationFrame(() => { if (!done) { done = true; r(); } }); setTimeout(() => { if (!done) { done = true; r(); } }, 60); });
 
 // ------------------------------------------------------------------ renderer
@@ -425,6 +429,8 @@ let onlineBadge = '';
 function makeOnline() {
   online = new Online(scene, {
     token: accessToken,
+    // (each map has its own rooms)
+    rooms: () => MAP.rooms,
     spec: id => HERO_SPECS.find(s => s.id === id),
     load: spec => (glbReady(spec.id) ? Promise.resolve(true) : loadCar(spec)),
     model: spec => { const m = new CarModel(spec, { hq: false, paint: paintOf(spec) }); m.flames = new ExhaustFlames(m, spec); return m; },
@@ -517,13 +523,24 @@ function openMaps(online) {
   showScreen('mapsel');
   $('maps-online').hidden = !online;
   $('maps-count').textContent = t('maps.count', { n: $('map-cards').children.length });
-  setTimeout(() => { const c = $('map-cards').children[0]; if (c) c.focus({ preventScroll: true }); }, 40);
+  // (the current map first in focus)
+  setTimeout(() => { const c = $('map-cards').querySelector(`[data-map="${MAP.id}"]`) || $('map-cards').children[0]; if (c) c.focus({ preventScroll: true }); }, 40);
 }
-function chooseMap() {
-  // (only one map: the K1 loop is always the one loaded)
+function chooseMap(id) {
+  // another map: the game is built for one map at a time, so it reloads with the new one and carries on
+  // (Play: to the garage; Online: to "connecting")
+  if (id && id !== MAP.id) {
+    S.map = id;
+    SET.save(S);
+    try { sessionStorage.setItem('nc.after', mapsOnline ? 'online' : 'play'); } catch (e) { /* no storage: back at the title */ }
+    $('conn-text').textContent = t('maps.reload');
+    $('connecting').hidden = false;
+    setTimeout(() => location.reload(), 60);
+    return;
+  }
   if (mapsOnline) startOnline(); else { onlineWant = false; goSelect(); }
 }
-for (const b of document.querySelectorAll('#map-cards .mcard')) b.onclick = chooseMap;
+for (const b of document.querySelectorAll('#map-cards .mcard')) b.onclick = () => chooseMap(b.dataset.map);
 $('maps-back').onclick = () => goTitle();
 $('btn-online').onclick = startOnline;
 $('p-online').onclick = () => { leaveOnline(); $('p-online').hidden = true; onlineHud(); hud.toast(t('on.left')); resumeGame(); };
@@ -1193,7 +1210,7 @@ async function boot() {
   $('set-gpu').textContent = det.gpu ? String(det.gpu).replace(/ANGLE \(|\)$/g, '').slice(0, 60) : '';
   resize();
   await step(12, t('load.road'));
-  net = buildNetwork();
+  net = buildNetwork(MAP);
   await step(30, t('load.city'));
   world = new World(scene, net, S.graphics);
   await step(50, t('load.cars'));
@@ -1237,6 +1254,17 @@ async function boot() {
   state = 'title';
   showScreen('title');
   lastTime = performance.now();
+  // back from switching maps: carry on where the player was going
+  let after = null;
+  try { after = sessionStorage.getItem('nc.after'); sessionStorage.removeItem('nc.after'); } catch (e) { /* none */ }
+  if (after === 'play') { audio.init(); openMaps(false); chooseMap(MAP.id); }
+  else if (after === 'online') {
+    openMaps(true);
+    // (the account signs itself back in a moment after boot)
+    let tries = 0;
+    const go = () => { if (isSignedIn()) chooseMap(MAP.id); else if (++tries < 30) setTimeout(go, 150); };
+    go();
+  }
   // accounts load after the game is up and never hold it back (nothing happens without a configured backend)
   initAccount(S, {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },

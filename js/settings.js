@@ -28,6 +28,7 @@ export function defaults() {
     bindings: JSON.parse(JSON.stringify(DEFAULT_BINDINGS)),
     pad: JSON.parse(JSON.stringify(DEFAULT_PAD)),
     lang: 'auto', // 'auto' (browser language), 'pt' or 'en'
+    map: 'k1', // the map played (maps.js)
     lastCar: 'kaiju',
     paintIdx: {}, // chosen colour (index into PAINTS) per car id
     savedAt: 0, // when these settings were last saved (ms), to tell which copy is newer when an account syncs them
@@ -118,6 +119,7 @@ function sanitize(s) {
   }
   if (!['auto', 'pt', 'en'].includes(s.lang)) s.lang = d.lang;
   if (typeof s.lastCar !== 'string') s.lastCar = d.lastCar;
+  if (!['k1', 'miami'].includes(s.map)) s.map = d.map;
   if (!s.paintIdx || typeof s.paintIdx !== 'object' || Array.isArray(s.paintIdx)) s.paintIdx = {};
   for (const [id, i] of Object.entries(s.paintIdx)) if (!Number.isInteger(i) || i < 0 || i >= PAINT_COUNT) delete s.paintIdx[id];
   if (!Number.isFinite(s.savedAt) || s.savedAt < 0) s.savedAt = 0;

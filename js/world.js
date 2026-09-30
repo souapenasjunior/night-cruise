@@ -449,17 +449,25 @@ export class World {
 
   _build() {
     const net = this.net;
+    const W = net.map.world;
     this._sky();
-    this._groundWater();
+    if (W.kind === 'miami') this._miamiGround(); else this._groundWater();
     for (const r of net.ribbons) this._ribbon(r);
     this._pillars();
     this._lampsBuild();
     this._signs();
-    this._bridge();
-    this._landmarks();
+    for (const br of this._bridgeRanges()) this._bridge(br);
+    if (W.kind === 'miami') this._miamiLandmarks(); else this._landmarks();
     this._city();
   }
 
+  // is (x, z) over water? (piers stand in it, bridges span it)
+  isWater(x, z) {
+    const W = this.net.map.world;
+    if (W.kind !== 'miami') return z > 1150;
+    return !W.land.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1) && !this._onBeach(x, z);
+  }
+  _onBeach(x, z) { const b = this.net.map.world.beach; return !!b && x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3]; }
   // ---------------------------------------------------------------- sky & ground
   _sky() {
     const g = new THREE.SphereGeometry(2500, 32, 16);
@@ -467,8 +475,8 @@ export class World {
       uniforms: {
         uSkyline: { value: TX.skylineTexture() },
         uZen: { value: new THREE.Color('#03050d') },
-        uHor: { value: new THREE.Color('#1b1730') },
-        uGlow: { value: new THREE.Color('#3a2238') },
+        uHor: { value: new THREE.Color(this.net.map.world.kind === 'miami' ? '#241536' : '#1b1730') },
+        uGlow: { value: new THREE.Color(this.net.map.world.kind === 'miami' ? '#55244e' : '#3a2238') },
       },
       vertexShader: skyVert, fragmentShader: skyFrag, side: THREE.BackSide, depthWrite: false, fog: false,
     });
@@ -503,6 +511,64 @@ export class World {
     const qg = new THREE.BoxGeometry(14000, 2.4, 6);
     qg.translate(0, -0.2, shore);
     this.root.add(new THREE.Mesh(qg, this.mats.deck));
+  }
+
+  // Miami: the land blocks (mainland, beach island) carry the city floor; the beach is sand with a line
+  // of surf along the water; everything else is water (the bay, the Atlantic)
+  _miamiGround() {
+    const W = this.net.map.world;
+    this.groundMat = new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 } }]),
+      vertexShader: groundVert, fragmentShader: groundFrag, fog: true,
+    });
+    for (const [x0, z0, x1, z1] of W.land) {
+      const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0, 1, 1);
+      g.rotateX(-Math.PI / 2);
+      g.translate((x0 + x1) / 2, 0, (z0 + z1) / 2);
+      const m = new THREE.Mesh(g, this.groundMat);
+      m.renderOrder = -5;
+      this.root.add(m);
+      // the quay / sea wall along each land block's water edges
+      for (const [cx, cz, w, d] of [[x0, (z0 + z1) / 2, 4, z1 - z0], [x1, (z0 + z1) / 2, 4, z1 - z0]]) {
+        if (Math.abs(cx) > 5000) continue;
+        const q = new THREE.BoxGeometry(w, 2.4, d); q.translate(cx, -0.2, cz);
+        this.root.add(new THREE.Mesh(q, this.mats.deck));
+      }
+    }
+    // the beach: pale sand sloping into the water, the wet band darker, the surf a glowing white line
+    const [bx0, bz0, bx1, bz1] = W.beach;
+    // (pale sand, faintly lit by the promenade: it must read as a beach at night)
+    const sand = new THREE.MeshStandardMaterial({ color: 0xb8a684, roughness: 0.95, emissive: 0x3a3022 });
+    const bg = new THREE.PlaneGeometry(bx1 - bx0, bz1 - bz0, 8, 1);
+    bg.rotateX(-Math.PI / 2);
+    const bp = bg.attributes.position;
+    for (let i = 0; i < bp.count; i++) { const u = (bp.getX(i) + (bx1 - bx0) / 2) / (bx1 - bx0); bp.setY(i, lerp(0.15, -1.6, Math.pow(u, 1.6))); }
+    bg.computeVertexNormals();
+    bg.translate((bx0 + bx1) / 2, 0, (bz0 + bz1) / 2);
+    this.root.add(new THREE.Mesh(bg, sand));
+    // the surf: three lines of foam where the waves break, brightest at the shore
+    const surf = [], surfCol = [];
+    for (let z = bz0; z <= bz1; z += 3) for (const [dx, a] of [[-4, 1], [10, 0.6], [26, 0.35]]) { surf.push(bx1 - 22 + dx + Math.sin(z * 0.05 + dx) * 3, -1.05, z); surfCol.push(0.8 * a, 0.9 * a, 1.0 * a); }
+    this.surf = this._addPoints(surf, surfCol, 4.5);
+    // the promenade's lamps along the top of the beach (warm), and the glow they throw on the sand
+    const prom = [], promCol = [], sandGlow = [], sandCol = [];
+    for (let z = bz0 + 30; z <= bz1 - 30; z += 22) { prom.push(bx0 + 6, 5.5, z); promCol.push(1, 0.78, 0.5); sandGlow.push(bx0 + 20, 0.5, z); sandCol.push(0.5, 0.36, 0.22); }
+    this._addPoints(prom, promCol, 5);
+    this._addPoints(sandGlow, sandCol, 34);
+    // the moon's path on the ocean: a broken, shimmering band of light out to the horizon
+    const moon = [], moonCol = [];
+    const R2 = rng(99);
+    for (let k = 0; k < 900; k++) { const d = Math.pow(R2(), 0.7); const x = bx1 + 40 + d * 3200, z = -200 + (R2() - 0.5) * (60 + d * 700); moon.push(x, -1.1, z); const a = 0.25 + 0.5 * (1 - d); moonCol.push(0.7 * a, 0.78 * a, 0.9 * a); }
+    this._addPoints(moon, moonCol, 9);
+    // water: the bay and the ocean, one sheet under everything
+    const wn = TX.waterNormalTexture();
+    wn.repeat.set(260, 260);
+    this.waterNormal = wn;
+    const wg = new THREE.PlaneGeometry(14000, 14000, 1, 1);
+    wg.rotateX(-Math.PI / 2);
+    wg.translate(0, -1.2, 0);
+    this.waterMat = new THREE.MeshStandardMaterial({ color: 0x06121a, roughness: 0.08, metalness: 0.9, normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.6 });
+    this.root.add(new THREE.Mesh(wg, this.waterMat));
   }
 
   // ---------------------------------------------------------------- roads
@@ -854,7 +920,7 @@ export class World {
       m4.compose(p, q, s);
       mats.push(m4.clone());
     };
-    const bridge = this._bridgeRange();
+    const bridges = this._bridgeRanges();
     // footprints of the supports placed so far: nothing may stand inside another
     const placed = [];
     const overlap = (A, B) => {
@@ -870,12 +936,12 @@ export class World {
         // only under a fully elevated deck (1.8 m deep from y = 7; lower decks come down to the ground)
         if (Math.min(y, r.py[Math.max(0, i - 1)], r.py[Math.min(r.n - 1, i + 1)]) < 7) continue;
         const sOn = i * r.ds;
-        if (r.kind === 'ring' && bridge && sOn > bridge.t0 && sOn < bridge.t1) continue;
+        if (r.kind === 'ring' && bridges.some(b => sOn > b.t0 && sOn < b.t1)) continue;
         const yaw = Math.atan2(r.tx[i], r.tz[i]);
         const cols = r.kind === 'ring' ? [-r.hw / 2, r.hw / 2] : [0];
         let ok = true;
         const top = y - 1.8;
-        const inWater = r.pz[i] > 1150;
+        const inWater = this.isWater(r.px[i], r.pz[i]);
         const b = inWater ? -1.2 : 0;
         const C = this._pt(r, i, 0);
         const capHx = r.hw - 0.75;
@@ -931,13 +997,17 @@ export class World {
     }
   }
 
-  _bridgeRange() {
-    if (this._br !== undefined) return this._br;
-    const r = this.net.ring;
+  // the loop's bridges: each stretch high over water (a map can have several)
+  _bridgeRanges() {
+    if (this._brs) return this._brs;
+    const r = this.net.ring, out = [];
     let t0 = -1, t1 = -1;
-    for (let i = 0; i < r.n; i++) if (r.py[i] > 24 && r.pz[i] > 1150) { if (t0 < 0) t0 = i * r.ds; t1 = i * r.ds; }
-    this._br = t0 < 0 ? null : { t0, t1, mid: (t0 + t1) / 2 };
-    return this._br;
+    for (let i = 0; i <= r.n; i++) {
+      const on = i < r.n && r.py[i] > 24 && this.isWater(r.px[i], r.pz[i]);
+      if (on) { if (t0 < 0) t0 = i * r.ds; t1 = i * r.ds; } else if (t0 >= 0) { out.push({ t0, t1, mid: (t0 + t1) / 2 }); t0 = -1; }
+    }
+    this._brs = out;
+    return out;
   }
 
   // ---------------------------------------------------------------- lamps
@@ -955,7 +1025,7 @@ export class World {
         const s = i * r.ds;
         if (![0, -CHAMFER - 1, CHAMFER + 1].every(d => r.wallAt(sg, r.wrapS(s + d)))) continue;
         const x0 = r.px[i], z0 = r.pz[i];
-        const white = r.kind !== 'ring' || x0 > -300 || r.py[i] > 20;
+        const white = this.net.map.world.kind === 'miami' || r.kind !== 'ring' || x0 > -300 || r.py[i] > 20;
         const col = white ? LED : SODIUM;
         const base = this._pt(r, i, sg * (r.hw - 0.2));
         const head = this._pt(r, i, sg * (r.hw - 3.0));
@@ -1046,8 +1116,7 @@ export class World {
   rebuildSigns() { buildSignage(this); }
 
   // ---------------------------------------------------------------- bridge
-  _bridge() {
-    const br = this._bridgeRange();
+  _bridge(br) {
     if (!br) return;
     const r = this.net.ring;
     const mid = br.mid, half = 250, anchor = 520;
@@ -1223,12 +1292,104 @@ export class World {
     void net;
   }
 
+  // ---------------------------------------------------------------- Miami
+  _miamiLandmarks() {
+    const net = this.net, W = net.map.world, R = rng(771);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3();
+    const palms = [];
+    const addPalm = (x, z, h) => { if (!net.clearance(x, z, 5)) return; palms.push([x, z, h, R() * 6.28, (R() - 0.5) * 0.25]); };
+    // along the beach (the promenade between the ocean road and the sand), two staggered rows
+    const [bx0, bz0, , bz1] = W.beach;
+    for (let z = bz0 + 40; z < bz1 - 40; z += 14 + R() * 10) { addPalm(bx0 - 14 + R() * 6, z, 9 + R() * 6); if (R() < 0.6) addPalm(bx0 + 10 + R() * 25, z + 6, 8 + R() * 6); }
+    // beside the loop on land, everywhere: palms line the highways
+    const ring = net.ring;
+    for (let s = 0; s < ring.len; s += 32) {
+      for (const sg of [-1, 1]) {
+        const P = ring.pointAt(s, sg * (ring.hw + 9 + R() * 8));
+        if (this.isWater(P.x, P.z) || this._onBeach(P.x, P.z)) continue;
+        if (R() < 0.75) addPalm(P.x, P.z, 9 + R() * 7);
+      }
+    }
+    // around the parking area and scattered through the island
+    for (let k = 0; k < 500; k++) {
+      const x = 880 + R() * 360, z = -2500 + R() * 5000;
+      if (R() < 0.5) addPalm(x, z, 8 + R() * 8);
+    }
+    // trunk: a slightly curved, tapering column; crown: eight drooping fronds
+    const trunk = new THREE.CylinderGeometry(0.16, 0.28, 1, 6, 4);
+    trunk.translate(0, 0.5, 0);
+    { const p = trunk.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) + y * y * 1.2); } }
+    const fronds = [];
+    for (let k = 0; k < 8; k++) {
+      const g = new THREE.PlaneGeometry(1.5, 5.2, 2, 5);
+      g.translate(0, 2.6, 0);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setZ(i, -y * y * 0.075); p.setX(i, p.getX(i) * (1 - y / 6.2)); }
+      g.rotateX(-Math.PI / 2 + 0.35);
+      g.rotateY((k / 8) * Math.PI * 2);
+      fronds.push(g.toNonIndexed());
+    }
+    const crown = mergeGeometries(fronds);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6a5642, roughness: 1, emissive: 0x140e08 });
+    // (lit from below by the street and the city: a green that still reads at night)
+    const frondMat = new THREE.MeshStandardMaterial({ color: 0x2f6f3c, roughness: 0.85, side: THREE.DoubleSide, emissive: 0x0b2a16 });
+    const tm = new THREE.InstancedMesh(trunk, trunkMat, palms.length), cm = new THREE.InstancedMesh(crown, frondMat, palms.length);
+    palms.forEach(([x, z, h, yaw, lean], k) => {
+      e.set(lean, yaw, 0); q.setFromEuler(e);
+      m4.compose(v.set(x, 0, z), q, one.set(1, h, 1)); tm.setMatrixAt(k, m4);
+      // (the trunk bows: the crown sits at its top, a little off to the side)
+      const bow = 1.2;
+      m4.compose(v.set(x + Math.cos(yaw) * bow, h, z - Math.sin(yaw) * bow), q, one.setScalar(0.85 + h / 22)); cm.setMatrixAt(k, m4);
+    });
+    this.root.add(tm, cm);
+    this.palms = palms.length;
+    // up-lit palms: a warm glow at the foot of the ones by the beach (points, cheap)
+    const glow = [], gcol = [];
+    for (const [x, z, h] of palms) if (x > 880 && R() < 0.35) { glow.push(x, h * 0.5, z); gcol.push(1, 0.55, 0.75); }
+    this._addPoints(glow, gcol, 7);
+    // lifeguard towers on the sand, in pastel, lit
+    const towers = [];
+    const cols = [0xff8fb0, 0x7fe0c8, 0x8fc4ff, 0xffd27a];
+    for (let z = bz0 + 200, k = 0; z < bz1 - 200; z += 380, k++) {
+      const x = bx0 + 55;
+      const mat = new THREE.MeshStandardMaterial({ color: cols[k % 4], roughness: 0.6, emissive: new THREE.Color(cols[k % 4]).multiplyScalar(0.25) });
+      const hut = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), mat);
+      hut.position.set(x, 3.2, z);
+      const legs = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.2, 3.4), this.mats.steel);
+      legs.position.set(x, 1, z);
+      this.root.add(hut, legs);
+      towers.push(x, 5.2, z);
+    }
+    const tc = []; for (let k = 0; k < towers.length / 3; k++) tc.push(1, 0.9, 0.7);
+    this._addPoints(towers, tc, 5);
+    // a lit fishing pier out into the ocean
+    const pz = 350, px0 = W.beach[2] - 30, px1 = px0 + 320;
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(px1 - px0, 0.6, 5), this.mats.deck);
+    deck.position.set((px0 + px1) / 2, 2.2, pz);
+    this.root.add(deck);
+    const pierLights = [], plc = [];
+    for (let x = px0; x <= px1; x += 16) { pierLights.push(x, 5, pz - 2.4, x, 5, pz + 2.4); plc.push(1, 0.8, 0.55, 1, 0.8, 0.55); }
+    this._addPoints(pierLights, plc, 4);
+    this._addBlinkers([px1, 6, pz]);
+    // ships' lights far out on the ocean
+    const ships = [], sc = [];
+    for (let k = 0; k < 14; k++) { const x = 2200 + R() * 2500, z = -2500 + R() * 5000; ships.push(x, 3, z, x + 8, 5, z); sc.push(1, 1, 0.9, 1, 0.3, 0.2); }
+    this._addPoints(ships, sc, 6);
+  }
+
   // ---------------------------------------------------------------- city
   _city() {
     const net = this.net;
     const R = rng(1234);
     const inst = [];
-    const districts = [
+    const miami = net.map.world.kind === 'miami';
+    // Miami: the downtown skyline by the bay (south-west), a mid-rise Brickell-like strip, low beach
+    // hotels in pastel on the island; K1: three Tokyo districts
+    const districts = miami ? [
+      { x: -700, z: 1050, r: 650, hMin: 60, hMax: 260 },
+      { x: -700, z: 450, r: 500, hMin: 25, hMax: 120 },
+      { x: 1050, z: 200, r: 1300, hMin: 12, hMax: 55 },
+    ] : [
       { x: 350, z: -150, r: 1100, hMin: 45, hMax: 230 },
       { x: 1500, z: 250, r: 700, hMin: 30, hMax: 150 },
       { x: -1100, z: 450, r: 700, hMin: 20, hMax: 90 },
@@ -1246,14 +1407,20 @@ export class World {
     };
     const step = 52;
     for (let gx = -3600; gx <= 3600; gx += step) {
-      for (let gz = -3200; gz <= 1100; gz += step) {
+      for (let gz = -3200; gz <= (miami ? 3200 : 1100); gz += step) {
         const x = gx + (R() - 0.5) * 16, z = gz + (R() - 0.5) * 16;
-        if (z > 1080) continue;
-        // park around the tunnel & tower plaza
-        if (z < -1000 && z > -1500 && x > -800 && x < 900) continue;
-        if (Math.hypot(x + 700, z + 620) < 70) continue;
-        if (Math.hypot(x - 1000, z - 900) < 90) continue;
-        const industrial = x < -1450 && z > 500;
+        if (miami) {
+          // on land only, never on the beach, and a clear strip along the island's ocean road
+          const W = net.map.world;
+          if (!W.land.some(([x0, z0, x1, z1]) => x > x0 + 20 && x < x1 - 20 && z > z0 + 20 && z < z1 - 20)) continue;
+        } else {
+          if (z > 1080) continue;
+          // park around the tunnel & tower plaza
+          if (z < -1000 && z > -1500 && x > -800 && x < 900) continue;
+          if (Math.hypot(x + 700, z + 620) < 70) continue;
+          if (Math.hypot(x - 1000, z - 900) < 90) continue;
+        }
+        const industrial = !miami && x < -1450 && z > 500;
         const w = industrial ? 30 + R() * 40 : 16 + R() * 26, d = industrial ? 24 + R() * 30 : 16 + R() * 26;
         // draw everything first (a fixed count per cell), decide afterwards
         const gapCell = R() < 0.12;
@@ -1261,7 +1428,9 @@ export class World {
         const seed = R(), tintR = R(), towerR = R(), towerH = R(), towerSeed = R();
         if (!net.clearance(x, z, Math.max(w, d) * 0.72 + 9) || gapCell) continue;
         const h = hRand;
-        const tint = industrial ? [0.35, 0.3, 0.25] : [[0.5, 0.55, 0.7], [0.6, 0.5, 0.45], [0.45, 0.6, 0.65], [0.7, 0.65, 0.6], [0.4, 0.45, 0.55]][Math.floor(tintR * 5)];
+        // (Miami Beach: art deco pastels - pink, mint, sky blue, cream, lilac)
+        const beachSide = miami && x > 800;
+        const tint = industrial ? [0.35, 0.3, 0.25] : beachSide ? [[0.95, 0.62, 0.72], [0.55, 0.88, 0.78], [0.6, 0.8, 0.95], [0.95, 0.9, 0.75], [0.78, 0.66, 0.92]][Math.floor(tintR * 5)] : [[0.5, 0.55, 0.7], [0.6, 0.5, 0.45], [0.45, 0.6, 0.65], [0.7, 0.65, 0.6], [0.4, 0.45, 0.55]][Math.floor(tintR * 5)];
         inst.push({ x, z, w, d, h, seed, tint });
         if (h > 60 && towerR < 0.35) inst.push({ x, z, w: w * 0.6, d: d * 0.6, h: h + 10 + towerH * 25, seed: towerSeed, tint });
       }
@@ -1295,7 +1464,8 @@ export class World {
     this._blinkersBuild();
 
     // neon billboards near the highway
-    const words = [['MECHARA', null], ['CarbeneX', null], ['AEROVEX', null], ['NEONDRIVE', null], ['RAMEN', '24H'], ['KARAOKE', null], ['COFFEE', null], ['XCELLENT', null], ['NIGHT VIEW', null], ['PARKING', 'P']];
+    const words = miami ? [['OCEAN', 'HOTEL'], ['CAFE', 'CUBANO'], ['NEON', 'BAR'], ['SOUTH', 'BEACH'], ['PALMS', 'MOTEL'], ['TACOS', '24H'], ['DECO', 'CLUB'], ['SUNSET', null], ['MIAMI', null], ['PARKING', 'P']]
+      : [['MECHARA', null], ['CarbeneX', null], ['AEROVEX', null], ['NEONDRIVE', null], ['RAMEN', '24H'], ['KARAOKE', null], ['COFFEE', null], ['XCELLENT', null], ['NIGHT VIEW', null], ['PARKING', 'P']];
     const texs = words.map((w, k) => TX.neonTexture(w[0], w[1], [330, 190, 45, 280, 15, 160, 30, 95, 210, 250][k], R));
     const res = [];
     let placed = 0;
@@ -1325,9 +1495,9 @@ export class World {
       placed++;
       void res;
     }
-    // park trees
+    // park trees (K1 only: Miami has its palms, _miamiLandmarks)
     const trees = [];
-    for (let k = 0; k < 900; k++) {
+    for (let k = 0; k < (miami ? 0 : 900); k++) {
       const x = -800 + R() * 1700, z = -1500 + R() * 500;
       if (!net.clearance(x, z, 6)) continue;
       trees.push([x, z, 5 + R() * 7]);

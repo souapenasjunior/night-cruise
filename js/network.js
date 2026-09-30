@@ -442,17 +442,11 @@ export class Network {
 }
 
 // ------------------------------------------------------------------ layout
-const RING_PTS = [
-  [-1600, 950, 12], [-1150, 1130, 13], [-650, 1200, 18], [-200, 1275, 29], [300, 1305, 33],
-  [800, 1275, 29], [1200, 1150, 18], [1550, 950, 13], [1800, 650, 13], [1740, 390, 14], [1890, 130, 14],
-  [1830, -300, 14], [1660, -700, 16], [1350, -985, 12], [900, -1150, 7], [400, -1235, 2.2],
-  [-150, -1255, 2.2], [-650, -1205, 2.6], [-1100, -1080, 9], [-1500, -850, 12], [-1800, -500, 12],
-  [-1925, -50, 12], [-1885, 450, 12],
-];
-
-export function buildNetwork() {
+// map: maps.js (the loop, where the parking area sits, the gaps and the districts)
+export function buildNetwork(map) {
   const net = new Network();
-  let pts = RING_PTS.map(p => new THREE.Vector3(p[0], p[2], p[1]));
+  net.map = map;
+  let pts = map.ring.map(p => new THREE.Vector3(p[0], p[2], p[1]));
   // ensure the loop interior lies on the -right side of the travel direction
   const test = new Ribbon({ name: 't', closed: true, hw: RING_HW, points: pts, step: 20 });
   let cx = 0, cz = 0;
@@ -462,7 +456,7 @@ export function buildNetwork() {
   if (rx * (cx - test.px[0]) + rz * (cz - test.pz[0]) > 0) pts = pts.reverse();
 
   const ring = new Ribbon({
-    name: 'ring', label: 'K1', closed: true, hw: RING_HW, kind: 'ring', median: true, points: pts, edge: RING_X.edge,
+    name: 'ring', label: map.label, closed: true, hw: RING_HW, kind: 'ring', median: true, points: pts, edge: RING_X.edge,
     lanes: { 1: RING_X.lanes.map(o => -o), [-1]: RING_X.lanes.slice() },
   });
   net.add(ring);
@@ -508,7 +502,12 @@ export function buildNetwork() {
   //    its near end the same way and joins dir- ahead of the PA. No hairpins, no U-turns: the access
   //    road is two-way (only the player uses the PA; traffic stays on the loop).
   // Everything is symmetric about d = PA_C (d: distance along the loop from sP).
-  const sP = S(nearestS(-1925, 0) + 150);
+  // (a span: the PA goes into the long flat stretch from whichever end the loop's direction reaches first)
+  let sP;
+  if (map.pa.span) {
+    const [A, B] = map.pa.span.map(([x, z]) => nearestS(x, z));
+    sP = S(B - A) < L / 2 ? S(A + 600) : S(B + 600);
+  } else sP = S(nearestS(map.pa.at[0], map.pa.at[1]) + map.pa.ahead);
   // bay cross-section from the back: parapet 0.4, walkway 3.2 (keeps the chase camera inside), stall 5.2,
   // 0.8 to the aisle, 1.0 overlapping the access road
   const PA_D = 56, LOT_HW = 5.3, LOT_LEN = 52, WALK = 3.2;
@@ -613,8 +612,7 @@ export function buildNetwork() {
   ];
 
   // median U-turn gaps
-  const g1 = nearestS(1350, -985), g2 = nearestS(-1150, 1130);
-  ring.medianGaps = [[g1 - 25, g1 + 25], [g2 - 25, g2 + 25]];
+  ring.medianGaps = map.gaps.map(([x, z]) => { const g = nearestS(x, z); return [g - 25, g + 25]; });
 
   // no AI on connecting roads (traffic stays on the loop)
   net.links = { diverge: [], merge: [] };
@@ -622,16 +620,9 @@ export function buildNetwork() {
   // named zones along ribbons
   const zone = (x, z) => nearestS(x, z);
   net.zones = [
-    { r: ring, s: zone(-1600, 950), name: 'Minato Bayside', jp: '港湾線' },
-    { r: ring, s: zone(-450, 1240), name: 'Kaigan Bridge', jp: '海岸大橋' },
-    { r: ring, s: zone(1400, 1060), name: 'Shiodome Curve', jp: '汐留カーブ' },
-    { r: ring, s: zone(1850, 300), name: 'Higashi Downtown', jp: '東都心' },
-    { r: ring, s: zone(1500, -850), name: 'Kita Junction', jp: '北ジャンクション' },
-    { r: ring, s: zone(700, -1190), name: 'Kita Tunnel', jp: '北トンネル' },
-    { r: ring, s: zone(-1300, -980), name: 'Nishi Industrial', jp: '西工業地帯' },
-    { r: ring, s: zone(-1900, 200), name: 'Nishi Straight', jp: '西ストレート' },
-    { r: paRoad, s: paRoad.len / 2, name: 'Nishi PA', jp: '西パーキング' },
-    ...lots.map(lot => ({ r: lot, s: lot.len / 2, name: 'Nishi PA', jp: '西パーキング' })),
+    ...map.zones.map(([x, z, name]) => ({ r: ring, s: zone(x, z), name, jp: '' })),
+    { r: paRoad, s: paRoad.len / 2, name: map.paName, jp: '' },
+    ...lots.map(lot => ({ r: lot, s: lot.len / 2, name: map.paName, jp: '' })),
   ];
 
   net.buildGrid();

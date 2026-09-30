@@ -55,7 +55,24 @@ const ZONES_PT = {
   'Higashi Downtown': 'Centro Higashi', 'Kita Junction': 'Entroncamento Kita', 'Kita Tunnel': 'Túnel Kita',
   'Nishi Industrial': 'Polo Industrial Nishi', 'Nishi Straight': 'Reta Nishi', 'Nishi PA': 'Estacionamento Nishi',
 };
+Object.assign(ZONES_PT, {
+  'I-95 North': 'I-95 Norte', 'Julia Tuttle Causeway': 'Ponte Julia Tuttle', 'Biscayne Bay': 'Baía de Biscayne',
+  'MacArthur Causeway': 'Ponte MacArthur', 'Downtown Miami': 'Centro de Miami', 'Miami PA': 'Estacionamento Miami',
+});
 export const zoneName = name => (lang === 'pt' && ZONES_PT[name]) || name;
+// texts that depend on the map being played (maps.js ids): set once at boot
+const MAP_TEXT = {
+  miami: {
+    pt: { 'sign.inner': 'Sentido horário', 'sign.outer': 'Sentido anti-horário', 'sign.pa': 'Estacionamento Miami', 'map.sub': 'Circuito de Miami · Estacionamento Miami', 'map.ring': 'Circuito I-95', 'meta.desc': 'Passeio noturno em 3D pelas vias expressas de Miami.' },
+    en: { 'sign.inner': 'Clockwise', 'sign.outer': 'Counterclockwise', 'sign.pa': 'Miami Parking Area', 'map.sub': 'Miami loop · Miami PA', 'map.ring': 'I-95 loop', 'meta.desc': 'A 3D night drive on the expressways of Miami.' },
+  },
+};
+export function setMapTexts(id) {
+  const m = MAP_TEXT[id];
+  if (!m) return;
+  for (const l of Object.keys(m)) Object.assign(DICT[l], m[l]);
+  applyDom();
+}
 
 const DICT = {
   pt: {
@@ -72,7 +89,8 @@ const DICT = {
     'title.play': 'Jogar', 'title.noCars': 'Ainda não há carros no jogo. Novos carros chegam em breve.', 'title.settings': 'Configurações', 'title.credits': 'Créditos',
     'sel.paint': 'Cor', 'sel.paintAria': 'Cor do carro', 'sel.cars': 'Veículos',
     'sel.hint': '<span><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> escolher</span><span><kbd>Enter</kbd> dirigir</span><span><kbd>Esc</kbd> voltar</span>',
-    'maps.title': 'Escolha o mapa', 'maps.count': '{n} mapa', 'maps.japan': 'Japão', 'maps.k1': 'Anel K1', 'maps.k1desc': 'Via expressa elevada à meia-noite: ponte sobre a baía, túnel, curvas no centro e um estacionamento.',
+    'maps.title': 'Escolha o mapa', 'maps.count': '{n} mapas', 'maps.japan': 'Japão', 'maps.k1': 'Anel K1', 'maps.k1desc': 'Via expressa elevada à meia-noite: ponte sobre a baía, túnel, curvas no centro e um estacionamento.',
+    'maps.usa': 'EUA', 'maps.miami': 'Miami', 'maps.miamidesc': 'Circuito à beira-mar: palmeiras, a praia e o oceano ao lado da pista, duas pontes sobre a baía e o skyline do centro.', 'maps.reload': 'Carregando o mapa…',
     'maps.hint': '<span><kbd>Enter</kbd> escolher</span><span><kbd>Esc</kbd> voltar</span>',
     'sel.title': 'Garagem', 'sel.count': '{n} carros', 'sel.online': 'Online · sala pública',
     'on.connecting': 'Conectando…',
@@ -213,7 +231,8 @@ const DICT = {
     'title.play': 'Play', 'title.noCars': 'There are no cars in the game yet. New cars are coming soon.', 'title.settings': 'Settings', 'title.credits': 'Credits',
     'sel.paint': 'Colour', 'sel.paintAria': 'Car colour', 'sel.cars': 'Cars',
     'sel.hint': '<span><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> choose</span><span><kbd>Enter</kbd> drive</span><span><kbd>Esc</kbd> back</span>',
-    'maps.title': 'Choose the map', 'maps.count': '{n} map', 'maps.japan': 'Japan', 'maps.k1': 'K1 Loop', 'maps.k1desc': 'An elevated expressway at midnight: a bridge over the bay, a tunnel, downtown curves and a parking area.',
+    'maps.title': 'Choose the map', 'maps.count': '{n} maps', 'maps.japan': 'Japan', 'maps.k1': 'K1 Loop', 'maps.k1desc': 'An elevated expressway at midnight: a bridge over the bay, a tunnel, downtown curves and a parking area.',
+    'maps.usa': 'USA', 'maps.miami': 'Miami', 'maps.miamidesc': 'A seaside loop: palms, the beach and the ocean right by the road, two bridges over the bay and the downtown skyline.', 'maps.reload': 'Loading the map…',
     'maps.hint': '<span><kbd>Enter</kbd> choose</span><span><kbd>Esc</kbd> back</span>',
     'sel.title': 'Garage', 'sel.count': '{n} cars', 'sel.online': 'Online · public room',
     'on.connecting': 'Connecting…',

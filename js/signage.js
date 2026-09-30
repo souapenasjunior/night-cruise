@@ -16,7 +16,9 @@ const GREEN = '#13704a', BLUE = '#1d4b98', WHITE = '#f2f5f1';
 const JP = '"Yu Gothic UI", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif';
 const EN = '"IBM Plex Sans", "Segoe UI", Arial, sans-serif';
 // destinations: the Japanese line stays, the line under it (`en`) follows the language
-const K1 = d => (d > 0 ? { shield: 'K1', jp: '内回り', en: t('sign.inner') } : { shield: 'K1', jp: '外回り', en: t('sign.outer') });
+// the loop's two directions, under its own shield (K1, I-95...: the map's label)
+let LOOP_LABEL = 'K1';
+const K1 = d => (d > 0 ? { shield: LOOP_LABEL, jp: '', en: t('sign.inner') } : { shield: LOOP_LABEL, jp: '', en: t('sign.outer') });
 const PA_DEST = () => ({ shield: 'P', jp: '西PA', en: t('sign.pa'), blue: true });
 
 // ------------------------------------------------------------------ topology
@@ -241,6 +243,7 @@ class Atlas {
 
 // ------------------------------------------------------------------ build
 export function buildSignage(world) {
+  LOOP_LABEL = world.net.ring.label || 'K1';
   const net = world.net, ring = net.ring, L = ring.len;
   const topo = roadTopology(net);
   const res = [];

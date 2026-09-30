@@ -35,10 +35,12 @@ export default {
     if (url.pathname === '/api/online/join') {
       if (req.method === 'OPTIONS') return new Response(null, { headers: cors(origin) });
       const lobby = env.LOBBY.get(env.LOBBY.idFromName('lobby'));
-      const r = await lobby.fetch('https://lobby/pick');
+      // (each map has its own rooms: k1-01.., mi-01..)
+      const map = /^(k1|mi)$/.test(url.searchParams.get('map') || '') ? url.searchParams.get('map') : 'k1';
+      const r = await lobby.fetch('https://lobby/pick?map=' + map);
       return json(await r.json(), 200, cors(origin));
     }
-    const m = /^\/api\/online\/room\/(k1-\d{2})$/.exec(url.pathname);
+    const m = /^\/api\/online\/room\/((?:k1|mi)-\d{2})$/.exec(url.pathname);
     if (m) {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('websocket expected', { status: 426 });
       if (!ORIGINS.has(origin)) return new Response('origin not allowed', { status: 403 });
@@ -102,13 +104,14 @@ export class Lobby extends DurableObject {
     const url = new URL(req.url);
     if (url.pathname === '/count') {
       const { room, n } = await req.json();
-      if (/^k1-\d{2}$/.test(room)) this.counts.set(room, { n: Math.max(0, n | 0), at: Date.now() });
+      if (/^(k1|mi)-\d{2}$/.test(room)) this.counts.set(room, { n: Math.max(0, n | 0), at: Date.now() });
       return new Response('ok');
     }
     // pick: the fullest public room that still has space (players meet each other), else the first
+    const map = url.searchParams.get('map') === 'mi' ? 'mi' : 'k1';
     const fresh = [];
     for (let i = 1; i <= PUBLIC_ROOMS; i++) {
-      const room = 'k1-' + String(i).padStart(2, '0');
+      const room = map + '-' + String(i).padStart(2, '0');
       const c = this.counts.get(room);
       const n = c && Date.now() - c.at < 3 * 60 * 1000 ? c.n : 0;
       fresh.push({ room, n });

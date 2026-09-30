@@ -10,7 +10,7 @@ export const ONLINE_ORIGIN = 'https://night-cruise.contatoadoniasjunior.workers.
 const SEND_EVERY = 1 / 6;     // s
 const DELAY = 0.25;           // s behind the latest update (interpolation window)
 
-// room names as the players read them: "K1-03"
+// room names as the players read them: "K1-03", "MI-07"
 export const roomLabel = room => (room || '').toUpperCase();
 
 // ------------------------------------------------------------------ name tag above a car
@@ -57,7 +57,8 @@ export class Online {
   async join(carId) {
     this.leave();
     this.car = carId;
-    const r = await fetch(`${ONLINE_ORIGIN}/api/online/join`).then(x => x.json()).catch(() => null);
+    const prefix = this.hooks.rooms ? this.hooks.rooms() : 'k1';
+    const r = await fetch(`${ONLINE_ORIGIN}/api/online/join?map=${prefix}`).then(x => x.json()).catch(() => null);
     if (!r || !r.room) { this.hooks.status('error', 'net'); return false; }
     const id = r.room;
     this.want = id;
