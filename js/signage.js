@@ -166,7 +166,7 @@ function plate(g, x, y, w, h, bg) {
   rrect(g, x + i, y + i, w - 2 * i, h - 2 * i, Math.min(w, h) * 0.05);
   g.stroke();
 }
-// one destination line: [arrow] shield  名前 / English  ....  distance [arrow]
+// one destination line: [arrow] shield  name  ....  distance [arrow]
 function destRow(g, x, y, w, h, { dest, dist, arrowDeg = null, arrowSide = -1, bg }) {
   const pad = h * 0.14;
   let x0 = x + pad, x1 = x + w - pad;
@@ -187,10 +187,11 @@ function destRow(g, x, y, w, h, { dest, dist, arrowDeg = null, arrowSide = -1, b
     x1 -= dw + pad;
   }
   g.textAlign = 'left';
-  fit(g, dest.jp, 700, h * 0.42, JP, x1 - x0);
-  g.fillText(dest.jp, x0, y + h * 0.36);
-  fit(g, dest.en, 600, h * 0.2, EN, xEnd - x0);
-  g.fillText(dest.en, x0, y + h * 0.76);
+  // (a long name goes on two lines rather than shrinking)
+  const lines = fitWrap(g, dest.en, 700, h * 0.36, EN, x1 - x0);
+  if (lines.length === 1) g.fillText(lines[0], x0, y + h * 0.42);
+  else { g.fillText(lines[0], x0, y + h * 0.3); g.fillText(lines[1], x0, y + h * 0.66); }
+  void xEnd;
 }
 // ------------------------------------------------------------------ atlas
 class Atlas {
@@ -422,18 +423,17 @@ export function buildSignage(world) {
         const pad = h * 0.08, a = h * 0.44, ax = side < 0 ? x + pad * 1.5 + a / 2 : x + w - pad * 1.5 - a / 2;
         arrow(g, ax, y + h * 0.64, a, 180);
         const tx0 = side < 0 ? x + pad * 2.5 + a : x + pad * 1.5, tx1 = side < 0 ? x + w - pad * 1.5 : x + w - pad * 2.5 - a;
-        // 出口 EXIT tab
+        // EXIT tab
         g.fillStyle = WHITE; rrect(g, x + pad * 1.5, y + pad * 1.2, w - pad * 3, h * 0.24, h * 0.04); g.fill();
         g.fillStyle = bg; g.textAlign = 'center'; g.textBaseline = 'middle';
-        const exitTxt = '出口  ' + t('sign.exit');
-        fit(g, exitTxt, 800, h * 0.19, `${JP}`, w - pad * 5);
+        const exitTxt = t('sign.exit');
+        fit(g, exitTxt, 800, h * 0.19, EN, w - pad * 5);
         g.fillText(exitTxt, x + w / 2, y + pad * 1.2 + h * 0.125);
         const sw = shield(g, tx0, y + h * 0.54, h * 0.24, dest, bg);
         g.fillStyle = WHITE; g.textAlign = 'left';
-        fit(g, dest.jp, 700, h * 0.27, JP, tx1 - tx0 - sw - pad * 0.6);
-        g.fillText(dest.jp, tx0 + sw + pad * 0.6, y + h * 0.55);
-        fit(g, dest.en, 600, h * 0.14, EN, tx1 - tx0);
-        g.fillText(dest.en, tx0, y + h * 0.8);
+        const lines = fitWrap(g, dest.en, 700, h * 0.24, EN, tx1 - tx0 - sw - pad * 0.6);
+        if (lines.length === 1) g.fillText(lines[0], tx0 + sw + pad * 0.6, y + h * 0.6);
+        else { g.fillText(lines[0], tx0 + sw + pad * 0.6, y + h * 0.5); g.fillText(lines[1], tx0 + sw + pad * 0.6, y + h * 0.74); }
       });
       // the lanes that carry on
       const tu0 = side < 0 ? eu1 + 0.4 : u0, tu1 = side < 0 ? u1 : eu0 - 0.4;
@@ -456,8 +456,8 @@ export function buildSignage(world) {
         plate(g, x, y, W, H, GREEN);
         g.fillStyle = WHITE; rrect(g, x + H * 0.08, y + H * 0.08, W - H * 0.16, H * 0.26, H * 0.04); g.fill();
         g.fillStyle = GREEN; g.textAlign = 'center'; g.textBaseline = 'middle';
-        const exitTxt = '出口  ' + t('sign.exit');
-        fit(g, exitTxt, 800, H * 0.19, JP, W - H * 0.4);
+        const exitTxt = t('sign.exit');
+        fit(g, exitTxt, 800, H * 0.19, EN, W - H * 0.4);
         g.fillText(exitTxt, x + W / 2, y + H * 0.215);
         destRow(g, x, y + H * 0.38, W, H * 0.58, { dest: it.dest, arrowDeg: it.arrowDeg, arrowSide: 1, bg: GREEN });
       });
@@ -512,7 +512,7 @@ export function buildSignage(world) {
       const postH = it.kind === 'noentry' ? 4.9 : 3.6;
       box(P.x, P.y + postH / 2, P.z, 0.16, postH, 0.16, yaw);
       if (it.kind === 'noentry') {
-        // red disc with a white bar over a white plate: 進入禁止 + NO ENTRY, 出口ではありません + NOT AN EXIT
+        // red disc with a white bar over a white plate: NO ENTRY, NOT AN EXIT
         const w = 2.2, h = 3.4, uc = -(r.hw - 0.2 + w / 2);
         addPanel(r, d, s, uc - w / 2, uc + w / 2, 1.5, h, SMALL, (g, x, y, W, H) => {
           g.fillStyle = '#22262d'; rrect(g, x, y, W, H, W * 0.05); g.fill();
@@ -524,11 +524,9 @@ export function buildSignage(world) {
           g.fillStyle = WHITE; rrect(g, x + m, py, pw, ph, W * 0.04); g.fill();
           g.fillStyle = '#c8202a'; g.textAlign = 'center'; g.textBaseline = 'middle';
           const noEntry = t('sign.noEntry'), notExit = t('sign.notExit');
-          fit(g, '進入禁止', 800, ph * 0.26, JP, tw); g.fillText('進入禁止', cx, py + ph * 0.19);
-          fit(g, noEntry, 800, ph * 0.2, EN, tw); g.fillText(noEntry, cx, py + ph * 0.43);
+          fit(g, noEntry, 800, ph * 0.26, EN, tw); g.fillText(noEntry, cx, py + ph * 0.3);
           g.fillStyle = '#22262d';
-          fit(g, '出口ではありません', 700, ph * 0.13, JP, tw); g.fillText('出口ではありません', cx, py + ph * 0.65);
-          fit(g, notExit, 700, ph * 0.15, EN, tw); g.fillText(notExit, cx, py + ph * 0.84);
+          fit(g, notExit, 700, ph * 0.18, EN, tw); g.fillText(notExit, cx, py + ph * 0.72);
         }, 0.9, 0.12);
         continue;
       }
@@ -540,9 +538,8 @@ export function buildSignage(world) {
         plate(g, x, y, W, H, GREEN);
         g.fillStyle = WHITE; g.textBaseline = 'middle';
         g.textAlign = 'center';
-        fit(g, z.jp, 700, H * 0.44, JP, W * 0.9); g.fillText(z.jp, x + W / 2, y + H * 0.38);
         const zn = zoneName(z.name).toUpperCase();
-        fit(g, zn, 600, H * 0.2, EN, W * 0.9); g.fillText(zn, x + W / 2, y + H * 0.76);
+        fit(g, zn, 700, H * 0.36, EN, W * 0.9); g.fillText(zn, x + W / 2, y + H * 0.52);
       }, 0.85, 0.12);
     } else if (it.kind === 'gore') {
       const e = it.e, host = e.host;
@@ -590,10 +587,9 @@ export function buildSignage(world) {
           arrow(g, xx + (k ? hwid - Hh * 0.26 : Hh * 0.26), y + Hh * 0.25, Hh * 0.36, k ? 45 : -45);
           shield(g, xx + Hh * 0.1 + (k ? 0 : Hh * 0.4), y + Hh * 0.25, Hh * 0.22, dest, bgOf(dest));
           g.fillStyle = WHITE; g.textAlign = 'center'; g.textBaseline = 'middle';
-          fit(g, dest.jp, 700, Hh * 0.2, JP, hwid - Hh * 0.2); g.fillText(dest.jp, xx + hwid / 2, y + Hh * 0.53);
-          const lines = fitWrap(g, dest.en, 600, Hh * 0.14, EN, hwid - Hh * 0.2);
-          if (lines.length === 1) g.fillText(lines[0], xx + hwid / 2, y + Hh * 0.78);
-          else { g.fillText(lines[0], xx + hwid / 2, y + Hh * 0.73); g.fillText(lines[1], xx + hwid / 2, y + Hh * 0.87); }
+          const lines = fitWrap(g, dest.en, 700, Hh * 0.17, EN, hwid - Hh * 0.2);
+          if (lines.length === 1) g.fillText(lines[0], xx + hwid / 2, y + Hh * 0.66);
+          else { g.fillText(lines[0], xx + hwid / 2, y + Hh * 0.58); g.fillText(lines[1], xx + hwid / 2, y + Hh * 0.78); }
         }
       }, 0.85, 0.1);
     }

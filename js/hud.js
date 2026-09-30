@@ -85,7 +85,7 @@ export class Hud {
       this.lastZone = z;
       this.zoneRoute.textContent = z.r.label;
       this.zoneName.textContent = zoneName(z.name);
-      this.zoneJp.textContent = z.jp;
+      this.zoneJp.textContent = '';
       this.zoneEl.classList.add('on');
       this.zoneT = 4.5;
     }

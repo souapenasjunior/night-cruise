@@ -1295,7 +1295,7 @@ export class World {
     this._blinkersBuild();
 
     // neon billboards near the highway
-    const words = [['MECHARA', 'メカラ'], ['CarbeneX', 'カーボネックス'], ['AEROVEX', null], ['NEONDRIVE', 'ネオンドライブ'], ['ラーメン', '24H'], ['カラオケ', 'KARAOKE'], ['珈琲', 'COFFEE'], ['XCELLENT', null], ['夜景', 'NIGHT VIEW'], ['駐車場', 'PARKING P']];
+    const words = [['MECHARA', null], ['CarbeneX', null], ['AEROVEX', null], ['NEONDRIVE', null], ['RAMEN', '24H'], ['KARAOKE', null], ['COFFEE', null], ['XCELLENT', null], ['NIGHT VIEW', null], ['PARKING', 'P']];
     const texs = words.map((w, k) => TX.neonTexture(w[0], w[1], [330, 190, 45, 280, 15, 160, 30, 95, 210, 250][k], R));
     const res = [];
     let placed = 0;

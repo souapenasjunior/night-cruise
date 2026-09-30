@@ -423,7 +423,7 @@ export class AudioSys {
       this.turbo.frequency.setTargetAtTime(f, t, 0.12);
       this.turbo2.frequency.setTargetAtTime(f * 1.5, t, 0.12);
       this.turboG.gain.setTargetAtTime(b * b * 0.0035, t, 0.1);
-      if (this.lastThrottle > 0.7 && p.throttle < 0.15 && this.boost > 0.4) this._blowOff(car.type === 'diesel6');
+      // (no blow-off hiss: it read as an exhaust crack)
     } else if (car.blower) {
       this.turbo.frequency.setTargetAtTime(this.rpm * 0.3, t, 0.05);
       this.turbo2.frequency.setTargetAtTime(this.rpm * 0.45, t, 0.05);
@@ -462,8 +462,8 @@ export class AudioSys {
       if (this.jointD > 40) {
         this.jointD = 0;
         const g = clamp(kmh / 140, 0.25, 1) * 0.07;
-        this._burst(0.07, 'lowpass', 150, 0.9, g);
-        setTimeout(() => { if (this.ready) this._burst(0.07, 'lowpass', 140, 0.9, g * 0.8); }, clamp(2700 / (kmh / 3.6), 15, 200));
+        // (no thump: it sounded like a crack from the exhaust)
+        void g;
       }
     }
     // wind

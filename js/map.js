@@ -193,16 +193,10 @@ export class BigMap {
       c.font = '700 15px "Big Shoulders Display", "Arial Narrow", sans-serif';
       const name = zoneName(z.name).toUpperCase();
       const nw = c.measureText(name).width;
-      c.font = '600 10.5px "IBM Plex Sans", sans-serif';
-      const jw = c.measureText(z.jp).width;
-      const bw = Math.max(nw, jw) + 14;
       c.fillStyle = 'rgba(8,10,20,0.78)';
-      c.fillRect(lx - 4, sy - 17, bw, 32);
-      c.fillStyle = '#9fd6b7';
-      c.fillText(z.jp, lx + 3, sy - 7);
-      c.font = '700 15px "Big Shoulders Display", "Arial Narrow", sans-serif';
+      c.fillRect(lx - 4, sy - 11, nw + 14, 22);
       c.fillStyle = '#eceff7';
-      c.fillText(name, lx + 3, sy + 7);
+      c.fillText(name, lx + 3, sy + 1);
     }
     // other players online: green arrows with their names
     for (const o of others) {
