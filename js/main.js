@@ -449,7 +449,7 @@ $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
 // credits and the account panel sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('online').hidden ? $('online') : !$('friends').hidden ? $('friends') : null; }
+function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('online').hidden ? $('online') : !$('friends').hidden ? $('friends') : !$('wallet').hidden ? $('wallet') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -465,9 +465,18 @@ $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
 const paintIdx = spec => Math.min((S.paintIdx && S.paintIdx[spec.id]) || 0, PAINTS.length - 1);
 // (a car with a livery keeps its original paint: null)
 const paintOf = spec => (spec.livery ? null : PAINTS[paintIdx(spec)].hex);
-// a premium car the account does not own yet: shown on the car select, not drivable
+// a car the account does not own yet (all but the free one): shown on the car select, not drivable
 let devOwnAll = false; // local testing only (window.__nc.devUnlock on localhost#debug); the server still decides stats
-const locked = spec => !!spec.premium && !ownsCar(spec.id) && !devOwnAll;
+// the account as the screens show it (#debug on localhost can stand in a pretend one: __nc.fakeAccount,
+// to look at the signed-in screens without signing in; the server never sees it)
+let fakeAcct = null;
+const acct = {
+  signed: () => !!fakeAcct || isSignedIn(),
+  bal: () => (fakeAcct ? fakeAcct.bal : coinBalance()),
+  owns: id => (fakeAcct ? fakeAcct.owned.includes(id) : ownsCar(id)),
+  name: () => (fakeAcct ? fakeAcct.name : myName()),
+};
+const locked = spec => !spec.free && !acct.owns(spec.id) && !devOwnAll;
 function choosePaint(i) {
   const s = HERO_SPECS[selIndex];
   if (s.livery || i < 0 || i >= PAINTS.length) return;
@@ -509,7 +518,7 @@ function buildChips() {
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', `${s.name} (${s.cls})`);
     // name in plain white; the stripe shows the paint chosen for that car (set in renderPaints)
-    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span>${s.premium ? '<svg class="pl" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg>' : ''}`;
+    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span><span class="pr"></span>${!s.free ? '<svg class="pl" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg>' : ''}`;
     b.onclick = () => { const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
     b.ondblclick = () => startDrive();
     wrapEl.appendChild(b);
@@ -534,15 +543,29 @@ function updateSelect() {
     statRow(t('stat.grip'), (st.grip - 0.6) / 0.75, t(st.grip >= 1.05 ? 'grip.high' : st.grip >= 0.88 ? 'grip.mid' : 'grip.low')) +
     statRow(t('stat.rear'), (st.drift - 0.4) / 1.1, t(st.drift >= 1.2 ? 'rear.loose' : st.drift >= 0.85 ? 'rear.neutral' : 'rear.firm')) +
     statRow(t('stat.mass'), st.mass / 4400, `${st.mass} kg`);
-  [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', locked(HERO_SPECS[i])); });
+  const bal = acct.bal(), signed = acct.signed();
+  // every locked chip wears its price (green once affordable)
+  [...$('sel-chips').children].forEach((c, i) => {
+    const hs = HERO_SPECS[i], lk = locked(hs), p = priceOf(hs.id);
+    c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', lk);
+    c.classList.toggle('can', lk && signed && p > 0 && bal >= p);
+    const pr = c.querySelector('.pr');
+    if (pr) pr.textContent = lk && p ? yenShort(p) : '';
+  });
   const chip = $('sel-chips').children[selIndex];
   if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  // a car not owned yet: its price and the player's yen in one line, and "Drive" becomes the buy button
-  // (the strip at the bottom is never covered by the car details)
+  // the balance, always in sight (opens "yen and garage")
+  $('sel-wallet').classList.toggle('guest', !signed);
+  $('sel-wallet-label').textContent = t(signed ? 'wc.yourYen' : 'wl.guestLabel');
+  $('sel-wallet-bal').textContent = signed ? yen(bal) : t('wl.guestBal');
+  // a car not owned yet: its price and the player's yen in one line with a progress bar, and "Drive"
+  // becomes the buy button (the strip at the bottom is never covered by the car details)
   const lk = locked(s);
   $('sel-lock').hidden = !lk;
-  const price = priceOf(s.id), bal = coinBalance(), signed = isSignedIn();
+  const price = priceOf(s.id);
   if (lk) $('sel-lock-text').textContent = signed ? t('coins.lockLine', { price: yen(price), bal: yen(bal) }) : t('coins.lockGuest', { price: yen(price) });
+  $('sel-lock-barbox').hidden = !(lk && signed && price);
+  if (lk && price) { $('sel-lock-bar').style.width = Math.min(100, (bal / price) * 100) + '%'; $('sel-lock-barbox').classList.toggle('full', bal >= price); }
   $('sel-go').textContent = !lk ? t('sel.go') : !signed ? t('coins.signInBtn')
     : confirmBuy === s.id ? t('coins.confirm', { price: yen(price) }) : bal >= price ? t('coins.buy', { price: yen(price) }) : t('coins.short', { missing: yen(price - bal) });
   $('sel-go').classList.toggle('buy', lk && (!signed || bal >= price));
@@ -747,6 +770,8 @@ $('p-online').onclick = () => { leaveOnline(); $('p-online').hidden = true; onli
 // bought on its own, right here on the car select. Two presses: the first asks to confirm the price.
 const shopImg = s => `img/shop/${s.id}.webp?v=${VERSION}`; // pictures of the cars, taken in the showroom
 const yen = n => '¥ ' + Math.max(0, Math.round(n || 0)).toLocaleString(t('acc.locale'));
+// short price for the car chips: ¥8k, ¥12,5k
+const yenShort = n => (n >= 1000 ? '¥' + (Math.round(n / 100) / 10).toLocaleString(t('acc.locale')) + 'k' : yen(n));
 let confirmBuy = null, confirmTimer = 0; // car waiting for the second press
 let selMsgCar = null;                    // car the message under the price belongs to
 let buyAfterLogin = null;                // car the player went to sign in for
@@ -771,6 +796,92 @@ async function buyCarFlow(spec) {
   selMessage(spec, err || t('coins.bought', { car: spec.name, bal: yen(coinBalance()) }));
   if (state === 'select') updateSelect();
 }
+// ------------------------------------------------------------------ yen at a glance
+// The title shows the balance, the garage and the next car to aim for (visitors: what yen are and how to
+// get them); "yen and garage" gathers how to earn and every car with its price in one panel; the car
+// select keeps the balance in sight; the pause shows what this drive has made.
+let driveEarned = 0; // yen the server paid during this drive (reports), for the pause
+const forSale = () => HERO_SPECS.filter(s => !s.free);
+// the next car to aim for: the cheapest one not owned yet
+function nextCar() {
+  return forSale().filter(s => !acct.owns(s.id) && priceOf(s.id) > 0).sort((a, b) => priceOf(a.id) - priceOf(b.id))[0] || null;
+}
+function avatarStyle(el, name) {
+  let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  el.style.setProperty('--a1', `hsl(${h % 360} 85% 55%)`);
+  el.style.setProperty('--a2', `hsl(${(h >> 8) % 360} 75% 40%)`);
+  el.textContent = name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2) || '?';
+}
+function renderWallet() {
+  const signed = acct.signed();
+  // (visitors on a game without accounts see neither)
+  $('wallet-card').hidden = !signed;
+  $('wallet-guest').hidden = signed || $('btn-account').hidden;
+  if (!signed) return;
+  const bal = acct.bal(), name = acct.name() || '…';
+  $('wc-name').textContent = name;
+  avatarStyle($('wc-av'), name);
+  const have = HERO_SPECS.filter(s => s.free || acct.owns(s.id)).length;
+  $('wc-garage').textContent = t('wc.garageN', { n: have, total: HERO_SPECS.length });
+  $('wc-bal').textContent = yen(bal);
+  const nx = nextCar();
+  if (nx) {
+    const p = priceOf(nx.id);
+    $('wc-next-label').textContent = t('wc.next', { car: nx.name });
+    $('wc-next-need').textContent = bal >= p ? t('wc.canBuy') : t('wc.missing', { missing: yen(p - bal) });
+    $('wc-next-bar').style.width = Math.min(100, (bal / p) * 100) + '%';
+    $('wc-next-bar').parentElement.classList.toggle('full', bal >= p);
+    $('wc-next-bar').parentElement.hidden = false;
+  } else {
+    $('wc-next-label').textContent = t('wc.allOwned');
+    $('wc-next-need').textContent = '';
+    $('wc-next-bar').parentElement.hidden = true;
+  }
+}
+// the car select, on a given car
+function selectCarId(id) {
+  if (state !== 'select') { audio.init(); audio.setVolumes(S.audio); goSelect(); }
+  const i = HERO_SPECS.findIndex(s => s.id === id);
+  if (i >= 0) { selIndex = i; updateSelect(); const c = $('sel-chips').children[i]; if (c) c.focus({ preventScroll: true }); }
+}
+const isWalletOpen = () => !$('wallet').hidden;
+function openWallet() {
+  const signed = acct.signed(), bal = acct.bal();
+  $('wl-bal').textContent = signed ? yen(bal) : '';
+  $('wl-foot').textContent = t(signed ? 'wl.foot' : 'wl.footGuest');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const unit = S.gameplay.units === 'mph' ? 'mph' : 'km/h';
+  let html = '';
+  for (const s of HERO_SPECS) {
+    const own = s.free || acct.owns(s.id), p = priceOf(s.id);
+    const top = S.gameplay.units === 'mph' ? Math.round(s.stats.top * 0.621) : s.stats.top;
+    const st = s.free ? t('wl.free') : own ? t('wl.owned') : p ? yen(p) : '…';
+    const sub = own ? '' : !signed ? '' : bal >= p ? ` · <span style="color:#7ee2a2">${t('wc.canBuy')}</span>` : ` · ${t('wc.missing', { missing: yen(p - bal) })}`;
+    const bar = !own && signed && p ? `<div class="ybar${bal >= p ? ' full' : ''}"><i style="width:${Math.min(100, (bal / p) * 100)}%"></i></div>` : '';
+    html += `<button class="wl-car${own ? ' own' : ''}" data-id="${s.id}"><div class="nm"><b>${esc(s.name)}</b><span>${esc(s.cls)} · ${top} ${unit}${sub}</span></div><div class="st">${st}</div>${bar}</button>`;
+  }
+  $('wl-cars').innerHTML = html;
+  $('wallet').hidden = false;
+  setTimeout(() => { const b = $('wl-cars').querySelector('.wl-car:not(.own)') || $('wl-close'); b.focus(); }, 30);
+}
+function closeWallet() { $('wallet').hidden = true; const f = focusables()[0]; if (f) f.focus(); }
+$('wl-close').onclick = closeWallet;
+$('wl-cars').onclick = e => { const b = e.target.closest('.wl-car'); if (b) { closeWallet(); selectCarId(b.dataset.id); } };
+$('wc-how').onclick = openWallet;
+$('wg-how').onclick = openWallet;
+$('sel-wallet').onclick = () => (acct.signed() ? openWallet() : openAccount('signup', t('coins.signIn')));
+$('wg-join').onclick = () => openAccount('signup', t('coins.signIn'));
+$('wc-see').onclick = () => { const nx = nextCar(); selectCarId(nx ? nx.id : HERO_SPECS[0].id); };
+// the pause: the balance (with what this drive has earned so far)
+function renderPauseWallet() {
+  const c = fakeAcct ? { balance: fakeAcct.bal, pending: 37, bonus: 1.25 } : liveCoins();
+  $('p-wallet').hidden = !c;
+  if (!c) return;
+  $('p-wallet-bal').textContent = yen(c.balance + c.pending);
+  const bonus = c.bonus > 1 ? ' · ' + t('coins.bonus', { x: String(c.bonus).replace('.', t('acc.locale') === 'pt-BR' ? ',' : '.') }) : '';
+  $('p-wallet-drive').textContent = t('wc.thisDrive', { n: yen(driveEarned + c.pending) }) + bonus;
+}
+
 canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
 canvas.addEventListener('pointerup', () => { show.drag = null; });
@@ -783,6 +894,7 @@ function goTitle() {
   scene.add(idleLights);
   state = 'title';
   showScreen('title');
+  renderWallet();
   rig.snapNext = true;
 }
 
@@ -809,6 +921,7 @@ function pauseGame() {
   $('p-online').hidden = !onlineWant;
   showScreen('pause');
   renderPauseKeys();
+  renderPauseWallet();
   $('pause-info').textContent = t('pause.info', { car: player.spec.name, km: num(Math.round(player.odo / 100) / 10) });
 }
 function resumeGame() {
@@ -899,7 +1012,9 @@ function startDrive() {
   showScreen('drive');
   applySettings();
   hud.lastZone = null;
-  hud.toast(t('toast.go', { car: spec.name }));
+  // (and what the drive is worth: yen when signed in, nothing without an account)
+  driveEarned = 0;
+  hud.toast(t('toast.go', { car: spec.name }) + ' · ' + t(acct.signed() ? 'wc.driveHint' : 'wc.guestHint'), 4);
   driveStarted(spec.id); // (signed in: the server opens a drive to count distance and time)
   // online: join the room picked on the title screen, or tell the room about the new car
   if (onlineWant && !online.want && !online.connected) { online.join(onlineWant, spec.id, onlineCreate); onlineCreate = null; }
@@ -1218,6 +1333,10 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeFriends(); }
     return;
   }
+  if (isWalletOpen()) {
+    if (e.code === 'Escape') { e.preventDefault(); closeWallet(); }
+    return;
+  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -1250,7 +1369,7 @@ function padMenus() {
     else if (input.padPressed(3)) bigMap.center(player);
     return;
   }
-  if (state === 'select' && !settingsOpen && !isAccountOpen() && !isOnlineOpen() && !isFriendsOpen()) {
+  if (state === 'select' && !settingsOpen && !isAccountOpen() && !isOnlineOpen() && !isFriendsOpen() && !isWalletOpen()) {
     if (right || left) { selIndex = (selIndex + (right ? 1 : -1) + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); audio.selectChime(selIndex, right); }
     const lb = input.padPressed(4), rb = input.padPressed(5);
     if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
@@ -1270,6 +1389,7 @@ function padMenus() {
     else if (isAccountOpen()) closeAccount();
     else if (isOnlineOpen()) backOnline();
     else if (isFriendsOpen()) closeFriends();
+    else if (isWalletOpen()) closeWallet();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen && !isFriendsOpen()) resumeGame();
@@ -1491,8 +1611,8 @@ async function boot() {
   initAccount(S, {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
     // signed in / out, the prices loaded or a car bought: the car select shows the new state
-    changed: () => { if (state === 'select') updateSelect(); friendsChanged(); },
-    cars: () => HERO_SPECS.map(s => ({ id: s.id, name: s.name, short: s.short || s.name, color: s.colors && s.colors.main, premium: !!s.premium })),
+    changed: () => { if (state === 'select') updateSelect(); if (state === 'title') renderWallet(); friendsChanged(); },
+    cars: () => HERO_SPECS.map(s => ({ id: s.id, name: s.name, short: s.short || s.name, color: s.colors && s.colors.main, premium: !!s.premium, free: !!s.free })),
     // back from signing in to buy a car: the car select, on that car
     signedIn: () => {
       const i = buyAfterLogin ? HERO_SPECS.findIndex(s => s.id === buyAfterLogin) : -1;
@@ -1500,7 +1620,7 @@ async function boot() {
       if (i >= 0 && state === 'select') { selIndex = i; updateSelect(); }
     },
     // the server paid yen for the last minute of driving
-    earned: n => { if (state === 'drive' && hud) hud.toast(t('coins.earned', { n: yen(n) })); },
+    earned: n => { driveEarned += n; if (state === 'drive' && hud) hud.toast(t('coins.earned', { n: yen(n) })); },
   }).catch(e => console.warn('[account]', e && e.message));
   if (location.hash === '#debug') {
     let fake = performance.now();
@@ -1511,7 +1631,12 @@ async function boot() {
       startDrive: () => startDrive(), goSelect: () => goSelect(), parkAtSlot,
       get show() { return show; },
       selectCar: id => { const i = HERO_SPECS.findIndex(s => s.id === id); if (i >= 0) { selIndex = i; updateSelect(); } return i; },
+      openWallet, pause: () => pauseGame(),
     };
+    // (localhost only: a pretend account for looking at the signed-in screens; never sent anywhere)
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      window.__nc.fakeAccount = a => { fakeAcct = a; if (state === 'title') renderWallet(); if (state === 'select') updateSelect(); };
+    }
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') window.__nc.devUnlock = () => { devOwnAll = true; if (state === 'select') updateSelect(); };
   }
 }

@@ -311,9 +311,7 @@ function render() {
   if (!sb) return;
   const btn = $('btn-account');
   btn.textContent = user ? t('acc.profileBtn') : t('acc.signInBtn');
-  const chip = $('title-user');
-  chip.hidden = !user || !profile;
-  if (profile) $('title-user-name').textContent = profile.username;
+  // (the title's yen card shows the name: main.js renders it on hooks.changed)
   if ($('account').hidden) return;
   if (!user && (view === 'profile')) view = 'login';
   for (const el of $('account').querySelectorAll('[data-view]')) el.hidden = el.dataset.view !== view;
@@ -352,7 +350,7 @@ function renderPilotCard() {
   box.innerHTML = '';
   let have = 0;
   for (const c of cars) {
-    const ok = !c.premium || owned.has(c.id);
+    const ok = c.free || owned.has(c.id);
     if (ok) have++;
     const d = document.createElement('div');
     d.className = 'pf-car' + (ok ? '' : ' off');
@@ -362,7 +360,7 @@ function renderPilotCard() {
     box.appendChild(d);
   }
   $('pf-garage-count').textContent = `${have}/${cars.length}`;
-  const prem = cars.filter(c => c.premium);
+  const prem = cars.filter(c => !c.free);
   $('pf-premium').hidden = !prem.length || !prem.every(c => owned.has(c.id));
   $('pf-coins').textContent = stats ? '¥ ' + coinBalance().toLocaleString(t('acc.locale')) : '—';
   const fav = cars.find(c => c.id === profile.selected_car);

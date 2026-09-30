@@ -56,10 +56,10 @@ export class Hud {
   }
   show(v) { this.el.hidden = !v; }
 
-  toast(msg) {
+  toast(msg, secs = 1.8) {
     this.toastEl.textContent = msg;
     this.toastEl.classList.add('on');
-    this.toastT = 1.8;
+    this.toastT = secs;
   }
 
   // the language changed: the banner on screen shows the new name

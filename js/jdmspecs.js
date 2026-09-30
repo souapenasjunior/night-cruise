@@ -6,16 +6,18 @@ const Q = Math.PI / 2;
 // the premium cars' tailpipe tips (see `exhaust` below)
 const EXHAUST = {
   p_eclipse: [[0.45, 0.3]], p_s2000: [[0.41, 0.29], [-0.4, 0.29]], p_s15: [[0.36, 0.27]], p_rx7: [[-0.5, 0.31]],
-  p_supra2: [[0.47, 0.29], [0.31, 0.29]], p_supra: [[0.52, 0.3]], p_r34: [[0.4, 0.32]],
+  p_supra: [[0.52, 0.3]], p_r34: [[0.4, 0.32]],
 };
 
-// In the order of the car select: weakest first, the dearest premium car last.
+// In the order of the car select: weakest first, the dearest car last. Only the car marked `free` (the
+// Tiara GT '83) is everyone's; every other one is bought with yen (prices: cars.price_coins in the
+// database). `premium`: the files live in the private Storage bucket, not in models/.
 // (livery: every car keeps the paint of its file; there is no colour choice)
 // exhaust: the tailpipe tips, [x, y] in metres (x from the centre line, + = the car's left; y from the
 // ground), measured on rear renders of each model: where the backfire flames come out (flames.js)
 export const JDM_SPECS = [
   {
-    id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico', livery: true,
+    id: 'tiara83', short: "GT '83", name: "Tiara GT '83", brand: 'TIARA', number: '86', cls: 'Clássico', livery: true, free: true,
     colors: { main: '#efefef', accent: '#1b1b1b' },
     stats: { top: 195, accel: 6.2, grip: 0.88, drift: 1.5, mass: 950 },
     sound: { type: 'i4rally', pops: 0.9 },
@@ -38,9 +40,7 @@ export const JDM_SPECS = [
     wheels: {},
     glb: { file: 'models/nsx.json', rotY: 0, length: 4.4, wheel: /^Material\.(011|018|021|023)$/, headMat: /^Material\.013$/, tailMat: /^Material\.009$/, paint: /^Material\.003$/, windowMat: /^Material\.004$/, exhaust: [[0.51, 0.37], [-0.5, 0.37]] },
   },
-  // Premium cars: each one is bought on its own with yen (the in-game money earned by driving; prices in
-  // the database, cars.price_coins) and drivable once the account owns it. All are quicker than the free
-  // cars, and the dearer the better (listed cheapest first). Their
+  // Premium cars: bought like the R32 and the NSX, and quicker than them (the dearer the better). Their
   // files load only when picked on the car select, never with the game. Each keeps its original livery
   // (painted in the texture), so there is no colour choice. The files were prepared (scale, wheels per
   // corner, simplified, WebP) so every wheel/caliper corner is its own mesh: wheel_* / caliper_* nodes.
@@ -49,7 +49,6 @@ export const JDM_SPECS = [
     ['p_s2000', 'S2000', "Suki's S2000", 'HONDA', '20', 'Esportivo', '#e86aa6', '#f4f4f4', 4.13, { top: 252, accel: 8.2, grip: 1.04, drift: 1.05, mass: 1260 }, { type: 'i4vtec', pops: 0.4 }],
     ['p_s15', 'S15', 'Silvia S15 "Mona Lisa"', 'NISSAN', '15', 'Drift', '#e8761c', '#141414', 4.45, { top: 260, accel: 8.5, grip: 1.06, drift: 1.45, mass: 1250 }, { type: 'i4sr', turbo: true, pops: 1.0 }],
     ['p_rx7', 'RX-7', "Julius's RX-7", 'MAZDA', '7', 'Esportivo', '#d4262c', '#141414', 4.3, { top: 268, accel: 8.8, grip: 1.08, drift: 1.3, mass: 1280 }, { type: 'rotary', turbo: true, pops: 1.6 }],
-    ['p_supra2', 'SUPRA SJ', "Slap Jack's Supra", 'TOYOTA', '94', 'Superesportivo', '#e05a1c', '#f2c21c', 4.51, { top: 278, accel: 9.1, grip: 1.1, drift: 1.1, mass: 1500 }, { type: 'i6jz', turbo: true, pops: 0.6 }],
     ['p_supra', 'SUPRA', 'Supra MK IV', 'TOYOTA', '80', 'Superesportivo', '#f07818', '#141414', 4.51, { top: 290, accel: 9.5, grip: 1.13, drift: 1.15, mass: 1510 }, { type: 'i6jz', turbo: true, pops: 0.8 }],
     ['p_r34', 'R34', "Brian's Skyline R34", 'NISSAN', '34', 'Grand tourer', '#9db7d6', '#1b5fa8', 4.6, { top: 305, accel: 9.9, grip: 1.18, drift: 0.9, mass: 1560 }, { type: 'v6', turbo: true, pops: 0.6 }], // (the R32's engine sound: same RB26 family; its own i6rb voice hissed)
   ].map(([id, short, name, brand, number, cls, main, accent, length, stats, sound]) => ({
@@ -129,7 +128,6 @@ export const CREDITS = [
   { title: "Julius's RX7 from 2Fast 2Furious", author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/juliuss-rx7-from-2fast-2furious-df6988a4756c48f5a038327ae750058f' },
   { title: 'Mitsubishi Eclipse From F&F', author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/mitsubishi-eclipse-from-ff-72f24781cf0e4672a39c2603352eebcb' },
   { title: 'Nissan S15 "Mona Lisa" From F&F Tokyo Drift', author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/nissan-s15-mona-lisa-from-ff-tokyo-drift-a258e6e9a0974aa693ea3e55d0931a6e' },
-  { title: "Slap Jack's Supra from 2Fast 2Furious", author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/slap-jacks-supra-from-2fast-2furious-8d1effbeefdc4052814e247ffb5ab5f7' },
   { title: "Suki's S2000 from 2Fast 2Furious", author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/sukis-s2000-from-2fast-2furious-c1469160e8b1448db5b8b760ffd1d33f' },
   { title: 'Toyota Supra from F&F', author: 'DRIVER-FIRE', url: 'https://sketchfab.com/3d-models/toyota-supra-from-ff-460aa5fc92904f36a81bcdf4fc5e166f' },
 ];

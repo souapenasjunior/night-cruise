@@ -81,14 +81,16 @@ ok((await one('select username from public.profiles where id = $1', [b])).userna
 ok((await one('select username from public.profiles where id = $1', [c])).username.startsWith('driver_'), 'invalid name falls back to driver_xxxxxx');
 ok((await one('select username from public.profiles where id = $1', [d])).username.startsWith('driver_'), 'reserved name refused');
 ok(!!(await one('select * from public.player_stats where user_id = $1', [a])), 'stats row created');
-ok((await one('select count(*)::int n from public.car_unlocks where user_id = $1', [a])).n === 3, 'the 3 playable cars unlocked by default');
+ok((await one('select count(*)::int n from public.car_unlocks where user_id = $1', [a])).n === 1, "only the Tiara GT '83 is unlocked by default");
 
 // ------------------------------------------------------------------ anonymous visitor
 console.log('anonymous');
 await as('anon', {}, async tx => {
-  ok((await tx.query('select * from public.cars')).rows.length === 10, 'anon reads the car catalogue (3 free + 7 premium)');
+  ok((await tx.query('select * from public.cars')).rows.length === 9, 'anon reads the car catalogue (1 free + 8 for sale)');
   ok((await tx.query("select price_coins from public.cars where id = 'p_r34'")).rows[0].price_coins === 60000, 'anon reads the car prices (yen)');
-  ok((await tx.query("select 1 from public.cars where price_coins is null")).rows.length === 3, 'the free cars are not for sale');
+  ok((await tx.query("select 1 from public.cars where price_coins is null")).rows.length === 1, 'only the free car is not for sale');
+  ok((await tx.query("select price_coins p from public.cars where id in ('r32', 'nsx') order by price_coins")).rows.map(r => r.p).join() === '8000,12000', 'the R32 and the NSX are the cheapest cars for sale');
+  ok((await tx.query("select 1 from public.cars where id = 'p_supra2'")).rows.length === 0, "Slap Jack's Supra is gone");
 });
 await fails(as('anon', {}, tx => tx.query('select * from public.profiles')), /permission denied/, 'anon cannot read profiles');
 await fails(as('anon', {}, tx => tx.query("select public.set_username('hacker')")), /permission denied/, 'anon cannot call set_username');
@@ -144,9 +146,9 @@ await fails(as(...player(d), tx => tx.query("select public.set_username('<script
 
 // ------------------------------------------------------------------ drives
 console.log('drives');
-const sid = (await as(...player(a), tx => tx.query("select public.start_drive('r32') id"))).rows[0].id;
+const sid = (await as(...player(a), tx => tx.query("select public.start_drive('tiara83') id"))).rows[0].id;
 ok(!!sid, 'start_drive returns a drive id');
-await fails(as(...player(a), tx => tx.query("select public.start_drive('r32')")), /too_frequent/, 'drives cannot be started in a burst');
+await fails(as(...player(a), tx => tx.query("select public.start_drive('tiara83')")), /too_frequent/, 'drives cannot be started in a burst');
 await fails(as(...player(a), tx => tx.query('select * from public.report_drive($1, 100, 3)', [sid])), /too_frequent/, 'a report right after the start is refused');
 await db.query("update public.drive_sessions set last_report_at = now() - interval '60 seconds' where id = $1", [sid]);
 let r = (await as(...player(a), tx => tx.query('select * from public.report_drive($1, 2400, 60)', [sid]))).rows[0];
@@ -185,7 +187,7 @@ await db.query('update public.player_stats set coins = 100000 where user_id = $1
 const left = (await as(...player(c), tx => tx.query("select public.buy_car('p_s15') v"))).rows[0].v;
 ok(Number(left) === 65000 && await owns(c, 'p_s15') && !(await owns(c, 'p_r34')), 'buying one car takes its price (¥35.000) and unlocks only that car');
 await fails(as(...player(c), tx => tx.query("select public.buy_car('p_s15')")), /already_owned/, 'no buying the same car twice');
-await fails(as(...player(c), tx => tx.query("select public.buy_car('r32')")), /not_for_sale/, 'the free cars are not for sale');
+await fails(as(...player(c), tx => tx.query("select public.buy_car('tiara83')")), /not_for_sale/, 'the free car is not for sale');
 await fails(as(...player(c), tx => tx.query("select public.buy_car('nope')")), /not_for_sale/, 'unknown cars are not for sale');
 ok(await coinsOf(c) === 65000, 'refused purchases cost nothing');
 await db.query("update public.drive_sessions set started_at = now() - interval '1 minute'");
