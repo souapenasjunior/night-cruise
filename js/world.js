@@ -272,6 +272,9 @@ uniform sampler2D uSkyline;
 uniform vec3 uZen;
 uniform vec3 uHor;
 uniform vec3 uGlow;
+uniform float uMoon;
+uniform float uSun;
+uniform vec3 uSunDir;
 varying vec3 vDir;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 void main(){
@@ -282,12 +285,26 @@ void main(){
   // stars
   vec2 sp = floor(vec2(atan(d.z, d.x) * 300.0, h * 300.0));
   float st = step(0.9975, hash(sp)) * smoothstep(0.12, 0.5, h);
-  col += vec3(0.7, 0.75, 0.9) * st * 0.7;
+  col += vec3(0.7, 0.75, 0.9) * st * (0.7 - 0.45 * uSun);
   // moon
   vec3 md = normalize(vec3(-0.45, 0.32, -0.83));
   float mdot = dot(d, md);
-  col += vec3(0.95, 0.92, 0.85) * smoothstep(0.99955, 0.9997, mdot) * 1.08;
-  col += vec3(0.3, 0.32, 0.4) * pow(max(mdot, 0.0), 400.0) * 0.6;
+  col += vec3(0.95, 0.92, 0.85) * smoothstep(0.99955, 0.9997, mdot) * 1.08 * uMoon;
+  col += vec3(0.3, 0.32, 0.4) * pow(max(mdot, 0.0), 400.0) * 0.6 * uMoon;
+  // retro sun: a big disc going down, yellow at the top to hot pink at the bottom, cut by horizontal
+  // bands that thicken toward the horizon; a wide warm halo around it
+  if (uSun > 0.0) {
+    float sd = dot(d, uSunDir);
+    float r = 0.16;
+    float ang = acos(clamp(sd, -1.0, 1.0));
+    float sy = (h - uSunDir.y) / r; // -1 bottom .. 1 top of the disc
+    float disc = smoothstep(r, r - 0.004, ang);
+    float band = sy < 0.3 ? step(0.18 + 0.55 * clamp(0.3 - sy, 0.0, 1.3), fract((sy + 2.0) * 6.0)) : 1.0;
+    vec3 sc = mix(vec3(1.0, 0.18, 0.5), vec3(1.0, 0.78, 0.2), smoothstep(-0.9, 0.8, sy));
+    col = mix(col, sc * 0.9, disc * band * uSun);
+    col += vec3(1.0, 0.42, 0.35) * pow(max(sd, 0.0), 30.0) * 0.25 * uSun * (1.0 - disc * band);
+    col += vec3(1.0, 0.3, 0.5) * pow(max(sd, 0.0), 6.0) * 0.18 * uSun * exp(-max(h, 0.0) * 4.0);
+  }
   // distant skyline band
   float az = atan(d.z, d.x) / 6.28318 + 0.5;
   float v = h / 0.085;
@@ -474,9 +491,12 @@ export class World {
     this.skyMat = new THREE.ShaderMaterial({
       uniforms: {
         uSkyline: { value: TX.skylineTexture() },
-        uZen: { value: new THREE.Color('#03050d') },
-        uHor: { value: new THREE.Color(this.net.map.world.kind === 'miami' ? '#241536' : '#1b1730') },
-        uGlow: { value: new THREE.Color(this.net.map.world.kind === 'miami' ? '#55244e' : '#3a2238') },
+        uZen: { value: new THREE.Color(this.net.map.world.look.zen) },
+        uHor: { value: new THREE.Color(this.net.map.world.look.hor) },
+        uGlow: { value: new THREE.Color(this.net.map.world.look.glow) },
+        uMoon: { value: this.net.map.world.look.moon },
+        uSun: { value: this.net.map.world.look.sun },
+        uSunDir: { value: new THREE.Vector3(...(this.net.map.world.look.sunDir || [1, 0.05, 0])).normalize() },
       },
       vertexShader: skyVert, fragmentShader: skyFrag, side: THREE.BackSide, depthWrite: false, fog: false,
     });
@@ -558,8 +578,8 @@ export class World {
     // the moon's path on the ocean: a broken, shimmering band of light out to the horizon
     const moon = [], moonCol = [];
     const R2 = rng(99);
-    for (let k = 0; k < 900; k++) { const d = Math.pow(R2(), 0.7); const x = bx1 + 40 + d * 3200, z = -200 + (R2() - 0.5) * (60 + d * 700); moon.push(x, -1.1, z); const a = 0.25 + 0.5 * (1 - d); moonCol.push(0.7 * a, 0.78 * a, 0.9 * a); }
-    this._addPoints(moon, moonCol, 9);
+    for (let k = 0; k < 900; k++) { const d = Math.pow(R2(), 0.7); const x = bx1 + 40 + d * 3200, z = -200 + (R2() - 0.5) * (60 + d * 700); moon.push(x, -1.1, z); const a = 0.3 + 0.6 * (1 - d); moonCol.push(1.0 * a, 0.42 * a, 0.45 * a); }
+    this._addPoints(moon, moonCol, 11);
     // water: the bay and the ocean, one sheet under everything
     const wn = TX.waterNormalTexture();
     wn.repeat.set(260, 260);
@@ -567,7 +587,7 @@ export class World {
     const wg = new THREE.PlaneGeometry(14000, 14000, 1, 1);
     wg.rotateX(-Math.PI / 2);
     wg.translate(0, -1.2, 0);
-    this.waterMat = new THREE.MeshStandardMaterial({ color: 0x06121a, roughness: 0.08, metalness: 0.9, normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.6 });
+    this.waterMat = new THREE.MeshStandardMaterial({ color: 0x1a0a24, roughness: 0.08, metalness: 0.9, normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.6 });
     this.root.add(new THREE.Mesh(wg, this.waterMat));
   }
 
@@ -720,6 +740,14 @@ export class World {
       this.root.add(m);
     };
     addMerged(concrete, this.mats.concrete, 0, 'parapet:' + r.id);
+    // Miami: a neon LED strip along the top of the loop's parapets, cyan on one side, pink on the other
+    if (this.net.map.world.look.neon && r.kind === 'ring') {
+      for (const sg of [-1, 1]) {
+        const strips = r.walls[sg].map(w => sweepS(r, [[sg * (hw - 0.42), 0.9], [sg * (hw - 0.42), 1.04], [sg * (hw - 0.05), 1.04]], w.s0, w.s1, {}));
+        const col = sg < 0 ? new THREE.Color('#29f0ff') : new THREE.Color('#ff3fae');
+        addMerged(strips, new THREE.MeshBasicMaterial({ color: col.multiplyScalar(2.2), side: THREE.DoubleSide, toneMapped: false }), 0, 'neon');
+      }
+    }
     addMerged(rails, this.mats.rail);
     addMerged(glass, this.mats.soundwall, 3);
     addMerged(frames, this.mats.steel);

@@ -29,7 +29,7 @@ export const MAPS = {
       [-1300, -980, 'Nishi Industrial'], [-1900, 200, 'Nishi Straight'],
     ],
     paName: 'Nishi PA',
-    world: { kind: 'k1' },
+    world: { kind: 'k1', look: { zen: '#03050d', hor: '#1b1730', glow: '#3a2238', fog: 0x1b1730, hemi: 0x5b6aa6, hemiGround: 0x1c140e, moon: 1, sun: 0 } },
   },
 
   // ------------------------------------------------------------------ Miami: mainland, bay, beach
@@ -63,6 +63,9 @@ export const MAPS = {
     paName: 'Miami PA',
     world: {
       kind: 'miami',
+      // neon sunset: a hot pink and orange horizon under a deep indigo sky, a striped retro sun going down
+      // over the ocean (east), pink haze, and neon strips along the highway's parapets
+      look: { zen: '#12082e', hor: '#ff4d86', glow: '#ff8c3a', fog: 0x4a1c52, hemi: 0xc0709a, hemiGround: 0x241038, moon: 0, sun: 1, sunDir: [1, 0.06, 0.12], neon: true },
       // land: the mainland (west of the bay) and the beach island; the beach sand on the island's ocean
       // side; everything else is water (the bay between them, the Atlantic to the east)
       land: [[-6000, -6000, -330, 6000], [860, -2600, 1255, 2600]],

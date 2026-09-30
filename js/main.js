@@ -44,9 +44,11 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x1b1730, 0.002);
+// (the map's colours: fog, sky light; set once the map is known)
 const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 2000);
 camera.position.set(0, 40, 0);
-const hemi = new THREE.HemisphereLight(0x5b6aa6, 0x1c140e, 0.62);
+const hemi = new THREE.HemisphereLight(MAP.world.look.hemi, MAP.world.look.hemiGround, 0.62);
+scene.fog.color.set(MAP.world.look.fog);
 scene.add(hemi);
 const moon = new THREE.DirectionalLight(0xa4b4ff, 0.35);
 moon.position.set(-400, 520, -800);
@@ -237,7 +239,7 @@ function applySettings() {
   const G = S.graphics, P = S.gameplay;
   const rd = G.renderDist;
   scene.fog.density = 1.95 / rd;
-  scene.fog.color.set(0x1b1730);
+  scene.fog.color.set(MAP.world.look.fog);
   camera.far = rd * 1.3 + 300;
   camera.updateProjectionMatrix();
   if (traffic) {
@@ -1120,7 +1122,7 @@ function driveStep(dt) {
   if (flames) flames.update(dt);
   updateLampLights(dt, Math.sin(player.yaw), Math.cos(player.yaw), player.pos.x, player.pos.z);
   hemi.intensity = damp(hemi.intensity, tunnel ? 0.3 : 0.62, 3, dt);
-  hemi.color.set(tunnel ? 0x8a6a40 : 0x5b6aa6);
+  hemi.color.set(tunnel ? 0x8a6a40 : MAP.world.look.hemi);
   tmpVel.set(player.vx, 0, player.vz);
 }
 
