@@ -4,7 +4,8 @@
 //   WS   /api/online/room/<id>       -> the room itself (a Durable Object per room, up to 20 players)
 //   everything else                   -> the static site (assets)
 //
-// Only signed-in players play online. The first message on the socket is { t: 'hello', token, car }
+// Only signed-in players play online. The first message on the socket is { t: 'hello', token, car, neon }
+// (neon: the underglow colour fitted, relayed only if the account owns it)
 // (plus create: true and max: 2-20 from whoever creates a private room, its player limit):
 // the room checks the Supabase access token (signature against the project's public keys, expiry,
 // issuer), reads the player's name from the database with that token, and checks that the car is
@@ -92,6 +93,8 @@ async function asPlayer(env, token, path) {
 }
 const CAR_ID = /^[a-z0-9_]{1,32}$/;
 const ownsCar = async (env, token, car) => CAR_ID.test(car) && !!(await asPlayer(env, token, `car_unlocks?select=car_id&car_id=eq.${car}`) || []).length;
+// the neon underglow colour the player fitted: shown to the others only if the account owns it
+const neonOf = async (env, token, neon) => (typeof neon === 'string' && CAR_ID.test(neon) && (await asPlayer(env, token, `neon_unlocks?select=neon_id&neon_id=eq.${neon}`) || []).length ? neon : null);
 
 // ------------------------------------------------------------------ lobby: which public room to join
 export class Lobby extends DurableObject {
@@ -141,7 +144,7 @@ export class Room extends DurableObject {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
   async roomName() { return this.room || (this.room = await this.ctx.storage.get('room')) || '?'; }
-  pub(p) { return { id: p.id, name: p.name, car: p.car, s: p.state }; }
+  pub(p) { return { id: p.id, name: p.name, car: p.car, neon: p.neon || null, s: p.state }; }
   send(ws, msg) { try { ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg)); } catch (e) { /* closing */ } }
   others(ws, msg) {
     const s = JSON.stringify(msg);
@@ -166,8 +169,9 @@ export class Room extends DurableObject {
     } else if (m.t === 'car' && typeof m.car === 'string' && typeof m.token === 'string') {
       if (!(await ownsCar(this.env, m.token, m.car))) { this.send(ws, { t: 'err', e: 'car' }); return; }
       p.car = m.car;
-      ws.serializeAttachment({ id: p.id, uid: p.uid, name: p.name, car: p.car });
-      this.others(ws, { t: 'car', id: p.id, car: p.car });
+      p.neon = await neonOf(this.env, m.token, m.neon);
+      ws.serializeAttachment({ id: p.id, uid: p.uid, name: p.name, car: p.car, neon: p.neon });
+      this.others(ws, { t: 'car', id: p.id, car: p.car, neon: p.neon });
     }
   }
   async hello(ws, m) {
@@ -190,8 +194,9 @@ export class Room extends DurableObject {
     if (!/^p-/.test(room)) this.max = MAX_PLAYERS;
     if (this.players.size >= this.max) { this.send(ws, { t: 'err', e: 'full' }); ws.close(4009, 'full'); return; }
     const id = crypto.randomUUID().slice(0, 8);
-    const p = { id, uid, name, car: m.car, state: null, win: 0, cnt: 0 };
-    ws.serializeAttachment({ id, uid, name, car: m.car });
+    const neon = await neonOf(this.env, m.token, m.neon);
+    const p = { id, uid, name, car: m.car, neon, state: null, win: 0, cnt: 0 };
+    ws.serializeAttachment({ id, uid, name, car: m.car, neon });
     this.players.set(ws, p);
     this.send(ws, { t: 'welcome', id, room, max: this.max, players: [...this.players.values()].filter(q => q.id !== id).map(q => this.pub(q)) });
     this.others(ws, { t: 'join', p: this.pub(p) });

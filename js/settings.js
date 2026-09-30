@@ -30,13 +30,14 @@ export function defaults() {
     lang: 'auto', // 'auto' (browser language), 'pt' or 'en'
     lastCar: 'kaiju',
     paintIdx: {}, // chosen colour (index into PAINTS) per car id
+    neon: {}, // neon underglow colour id per car id (used only if the account owns that colour)
     savedAt: 0, // when these settings were last saved (ms), to tell which copy is newer when an account syncs them
   };
 }
 
 // The part of the settings that follows a player between devices when signed in. Graphics and display
 // stay per device (a phone must not inherit the PC's "ultra").
-export const SYNCED = ['audio', 'gameplay', 'bindings', 'pad', 'lang', 'lastCar', 'paintIdx'];
+export const SYNCED = ['audio', 'gameplay', 'bindings', 'pad', 'lang', 'lastCar', 'paintIdx', 'neon'];
 export function syncedPart(s) {
   const o = {};
   for (const k of SYNCED) o[k] = JSON.parse(JSON.stringify(s[k]));
@@ -120,6 +121,8 @@ function sanitize(s) {
   if (typeof s.lastCar !== 'string') s.lastCar = d.lastCar;
   if (!s.paintIdx || typeof s.paintIdx !== 'object' || Array.isArray(s.paintIdx)) s.paintIdx = {};
   for (const [id, i] of Object.entries(s.paintIdx)) if (!Number.isInteger(i) || i < 0 || i >= PAINT_COUNT) delete s.paintIdx[id];
+  if (!s.neon || typeof s.neon !== 'object' || Array.isArray(s.neon)) s.neon = {};
+  for (const [id, n] of Object.entries(s.neon)) if (typeof n !== 'string' || !/^[a-z0-9_]{1,32}$/.test(n) || !/^[a-z0-9_]{1,32}$/.test(id)) delete s.neon[id];
   if (!Number.isFinite(s.savedAt) || s.savedAt < 0) s.savedAt = 0;
 }
 

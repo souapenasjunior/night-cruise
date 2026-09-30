@@ -72,7 +72,7 @@ async function onAuth(event, session) {
     if (pendingNotice === 'acc.confirmed') { pendingNotice = null; openAccount('profile', t('acc.confirmed')); }
   }
   if (user) await loadOwned();
-  if (!user) { profile = null; stats = null; drive = null; owned = new Set(); }
+  if (!user) { profile = null; stats = null; drive = null; owned = new Set(); ownedNeons = new Set(); }
   render();
   if (hooks.changed) hooks.changed();
 }
@@ -117,12 +117,40 @@ export const priceOf = id => prices.get(id) || 0;
 export const coinBalance = () => (stats ? Number(stats.coins) || 0 : 0);
 async function loadOwned() {
   if (!user) return;
-  const { data, error } = await sb.from('car_unlocks').select('car_id').eq('user_id', user.id);
-  if (!error) owned = new Set(data.map(r => r.car_id));
+  const [c, n] = await Promise.all([
+    sb.from('car_unlocks').select('car_id').eq('user_id', user.id),
+    sb.from('neon_unlocks').select('neon_id').eq('user_id', user.id),
+  ]);
+  if (!c.error) owned = new Set(c.data.map(r => r.car_id));
+  if (!n.error) ownedNeons = new Set(n.data.map(r => r.neon_id));
 }
 async function loadPrices() {
-  const { data, error } = await sb.from('cars').select('id, price_coins').not('price_coins', 'is', null);
-  if (!error) { prices = new Map(data.map(r => [r.id, r.price_coins])); if (hooks.changed) hooks.changed(); }
+  const [c, n] = await Promise.all([
+    sb.from('cars').select('id, price_coins').not('price_coins', 'is', null),
+    sb.from('neons').select('id, price_coins'),
+  ]);
+  if (!c.error) prices = new Map(c.data.map(r => [r.id, r.price_coins]));
+  if (!n.error) neonPrices = new Map(n.data.map(r => [r.id, r.price_coins]));
+  if (hooks.changed) hooks.changed();
+}
+// neon underglow colours: bought once each, fitted to any car (which one goes where: the game's settings)
+let ownedNeons = new Set();
+let neonPrices = new Map();
+export const ownsNeon = id => ownedNeons.has(id);
+export const neonPrice = id => neonPrices.get(id) || 0;
+// buy one neon colour with yen. Returns null when bought, else a message for the player.
+export async function buyNeon(id) {
+  if (!sb || !user) return t('coins.signIn');
+  const { data, error } = await sb.rpc('buy_neon', { p_neon: id });
+  if (error) {
+    if (/not_enough_coins/.test(error.message)) return t('coins.notEnough');
+    if (/already_owned/.test(error.message)) { await loadOwned(); if (hooks.changed) hooks.changed(); return null; }
+    return t('acc.err.generic');
+  }
+  ownedNeons.add(id);
+  if (stats) stats.coins = Number(data);
+  if (hooks.changed) hooks.changed();
+  return null;
 }
 // buy one car with yen. Returns null when bought, else a message for the player.
 export async function buyCar(carId) {

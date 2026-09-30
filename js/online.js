@@ -59,6 +59,7 @@ export class Online {
     this.retry = 0;
     this.max = 20;            // the room's player limit (from the server)
     this.create = null;
+    this.neon = null;         // our car's neon underglow colour (sent with the car)
   }
   get connected() { return !!(this.ws && this.ws.readyState === 1 && this.myId); }
   get count() { return this.remotes.size + (this.myId ? 1 : 0); }
@@ -88,7 +89,7 @@ export class Online {
     const ws = new WebSocket(`${ONLINE_ORIGIN.replace(/^http/, 'ws')}/api/online/room/${id}`);
     this.ws = ws;
     this.hooks.status('connecting', roomLabel(id));
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token, car: this.car, ...(this.create ? { create: true, max: this.create } : {}) }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token, car: this.car, neon: this.neon, ...(this.create ? { create: true, max: this.create } : {}) }));
     ws.onmessage = e => { try { this.onMessage(JSON.parse(e.data)); } catch (err) { /* ignore a bad message */ } };
     ws.onclose = e => {
       if (this.ws !== ws) return; // replaced or left on purpose
@@ -115,12 +116,13 @@ export class Online {
     if (ws) try { ws.close(1000, 'bye'); } catch (e) { /* already closed */ }
     this.clearRemotes();
   }
-  // the car changed (a new one picked from the pause menu)
-  async setCar(carId) {
+  // the car changed (a new one picked from the pause menu), or its neon underglow colour (null: none)
+  async setCar(carId, neon = this.neon) {
     this.car = carId;
+    this.neon = neon || null;
     if (!this.connected) return;
     const token = await this.hooks.token();
-    this.ws.send(JSON.stringify({ t: 'car', car: carId, token }));
+    this.ws.send(JSON.stringify({ t: 'car', car: carId, neon: this.neon, token }));
   }
 
   onMessage(m) {
@@ -142,14 +144,14 @@ export class Online {
       if (r) { r.buf.push({ t: this.clock, s: m.s }); if (r.buf.length > 20) r.buf.shift(); }
     } else if (m.t === 'car') {
       const r = this.remotes.get(m.id);
-      if (r) { r.car = m.car; this.buildModel(r); }
+      if (r) { r.car = m.car; r.neon = m.neon || null; this.buildModel(r); }
     } else if (m.t === 'err') {
       this.hooks.status('error', m.e);
     }
   }
   addRemote(p) {
     if (!p || !p.id || this.remotes.has(p.id)) return;
-    const r = { id: p.id, name: p.name, car: p.car, model: null, tag: nameTag(p.name), buf: [] };
+    const r = { id: p.id, name: p.name, car: p.car, neon: p.neon || null, model: null, tag: nameTag(p.name), buf: [] };
     if (p.s) r.buf.push({ t: this.clock, s: p.s });
     this.remotes.set(p.id, r);
     this.buildModel(r);
@@ -162,7 +164,7 @@ export class Online {
     const ok = await this.hooks.load(spec);
     if (!ok || !this.remotes.has(r.id) || r.car !== want) return;
     if (r.model) { if (r.model.flames) r.model.flames.dispose(); this.scene.remove(r.model.group); r.model.dispose && r.model.dispose(); }
-    r.model = this.hooks.model(spec);
+    r.model = this.hooks.model(spec, r.neon);
     r.model.group.add(r.tag);
     r.tag.position.set(0, 2.1, 0);
     this.scene.add(r.model.group);

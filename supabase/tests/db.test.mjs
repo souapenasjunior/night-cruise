@@ -194,6 +194,21 @@ await db.query("update public.drive_sessions set started_at = now() - interval '
 ok(!!(await as(...player(c), tx => tx.query("select public.start_drive('p_s15') id"))).rows[0].id, 'a bought car can be driven for stats');
 ok(!(await one("select 1 x from pg_proc where proname like 'shop_%'")) && !(await one("select 1 x from pg_tables where tablename in ('orders', 'products')")), 'no real-money shop left in the database');
 
+// ------------------------------------------------------------------ neon underglow
+console.log('neon');
+await as('anon', {}, async tx => {
+  ok((await tx.query('select id from public.neons order by sort_order')).rows.map(r => r.id).join() === 'blue,cyan,pink,green,purple', 'anon reads the 5 neon colours');
+});
+await fails(as('anon', {}, tx => tx.query("select public.buy_neon('pink')")), /permission denied/, 'visitors cannot buy neon');
+await db.query('update public.player_stats set coins = 5000 where user_id = $1', [d]);
+ok(Number((await as(...player(d), tx => tx.query("select public.buy_neon('pink') v"))).rows[0].v) === 1000, 'buying a neon colour takes its price (¥4.000)');
+await fails(as(...player(d), tx => tx.query("select public.buy_neon('pink')")), /already_owned/, 'no buying the same colour twice');
+await fails(as(...player(d), tx => tx.query("select public.buy_neon('blue')")), /not_enough_coins/, 'a colour costs yen the player must have');
+await fails(as(...player(d), tx => tx.query("select public.buy_neon('gold')")), /not_for_sale/, 'unknown colours are not for sale');
+await as(...player(d), async tx => { ok((await tx.query('select neon_id from public.neon_unlocks')).rows.map(r => r.neon_id).join() === 'pink', 'a player sees their own neon colours'); });
+await as(...player(a), async tx => { ok((await tx.query('select 1 from public.neon_unlocks')).rows.length === 0, "and nobody else's"); });
+await fails(as(...player(d), tx => tx.query("insert into public.neon_unlocks (user_id, neon_id) values ($1, 'blue')", [d])), /permission denied/, 'neon cannot be unlocked directly');
+
 // ------------------------------------------------------------------ premium files (Storage)
 console.log('premium files');
 ok((await one("select public from storage.buckets where id = 'premium'")).public === false, 'the premium bucket is private');
