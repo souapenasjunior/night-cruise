@@ -7,13 +7,13 @@ import { clamp, lerp } from './util.js';
 export const ENGINES = {
   v8:        { cyl: 8,  uneven: 0.38, res: [92, 360],   rad: [0.993, 0.976], mix: [1, 0.45], noise: 0.32, decay: 0.0036, diesel: 0,   drive: 1.8, idle: 720,  red: 6800,  lp: 2400, gear: 5 },
   v8big:     { cyl: 8,  uneven: 0.45, res: [78, 300],   rad: [0.994, 0.978], mix: [1, 0.4],  noise: 0.34, decay: 0.0042, diesel: 0,   drive: 2.0, idle: 680,  red: 6200,  lp: 2000, gear: 5 },
-  i4turbo:   { cyl: 4,  uneven: 0.05, res: [185, 780],  rad: [0.99, 0.972],  mix: [1, 0.65], noise: 0.36, decay: 0.0026, diesel: 0,   drive: 1.5, idle: 900,  red: 7600,  lp: 4200, gear: 6 },
-  i4rally:   { cyl: 4,  uneven: 0.08, res: [165, 690],  rad: [0.991, 0.972], mix: [1, 0.7],  noise: 0.42, decay: 0.0028, diesel: 0,   drive: 1.9, idle: 1000, red: 8000,  lp: 3800, gear: 6 },
+  i4turbo:   { cyl: 4,  uneven: 0.05, res: [185, 780],  rad: [0.99, 0.972],  mix: [1, 0.65], noise: 0.36, decay: 0.0026, diesel: 0,   drive: 1.5, idle: 900,  red: 6800,  lp: 4200, gear: 6 },
+  i4rally:   { cyl: 4,  uneven: 0.08, res: [165, 690],  rad: [0.991, 0.972], mix: [1, 0.7],  noise: 0.42, decay: 0.0028, diesel: 0,   drive: 1.9, idle: 1000, red: 7200,  lp: 3800, gear: 6 },
   boxer:     { cyl: 4,  uneven: 0.32, res: [140, 560],  rad: [0.992, 0.974], mix: [1, 0.55], noise: 0.4,  decay: 0.0032, diesel: 0,   drive: 1.7, idle: 850,  red: 7200,  lp: 3000, gear: 5 },
   v6:        { cyl: 6,  uneven: 0.12, res: [128, 520],  rad: [0.992, 0.974], mix: [1, 0.5],  noise: 0.3,  decay: 0.003,  diesel: 0,   drive: 1.5, idle: 750,  red: 6500,  lp: 3200, gear: 6 },
-  flat6:     { cyl: 6,  uneven: 0.06, res: [240, 980],  rad: [0.99, 0.97],   mix: [1, 0.75], noise: 0.28, decay: 0.0022, diesel: 0,   drive: 1.6, idle: 950,  red: 8800,  lp: 5200, gear: 6 },
+  flat6:     { cyl: 6,  uneven: 0.06, res: [240, 980],  rad: [0.99, 0.97],   mix: [1, 0.75], noise: 0.28, decay: 0.0022, diesel: 0,   drive: 1.6, idle: 950,  red: 7600,  lp: 5200, gear: 6 },
   diesel6:   { cyl: 6,  uneven: 0.05, res: [62, 250],   rad: [0.994, 0.98],  mix: [1, 0.55], noise: 0.5,  decay: 0.005,  diesel: 0.7, drive: 1.4, idle: 620,  red: 3000,  lp: 1500, gear: 8 },
-  v10:       { cyl: 10, uneven: 0.02, res: [420, 1700], rad: [0.988, 0.965], mix: [1, 0.85], noise: 0.18, decay: 0.0017, diesel: 0,   drive: 1.3, idle: 1300, red: 12800, lp: 7500, gear: 7 },
+  v10:       { cyl: 10, uneven: 0.02, res: [420, 1700], rad: [0.988, 0.965], mix: [1, 0.85], noise: 0.18, decay: 0.0017, diesel: 0,   drive: 1.3, idle: 1300, red: 8600, lp: 7500, gear: 7 },
   // premium pack engines
   // Nissan RB26DETT (R34): smooth straight six with a raspy, metallic top end, revs to 8000
   // (less combustion noise and a lower ceiling than before: the top end hissed)
@@ -22,11 +22,11 @@ export const ENGINES = {
   i6jz:      { cyl: 6,  uneven: 0.03, res: [118, 510],  rad: [0.992, 0.975], mix: [1, 0.6],  noise: 0.3,  decay: 0.0028, diesel: 0,   drive: 1.85, idle: 750, red: 7000,  lp: 3600, gear: 6 },
   // Mazda 13B twin rotor (RX-7): two rotors fire once per shaft turn each (the rate of a four-stroke
   // four), with sharp exhaust pulses: a bright, buzzing rasp, lumpy idle, 9000 rpm
-  rotary:    { cyl: 4,  uneven: 0.22, res: [230, 960],  rad: [0.989, 0.968], mix: [1, 0.85], noise: 0.5,  decay: 0.0016, diesel: 0,   drive: 2.2, idle: 1000, red: 9000,  lp: 5800, gear: 5 },
+  rotary:    { cyl: 4,  uneven: 0.22, res: [230, 960],  rad: [0.989, 0.968], mix: [1, 0.85], noise: 0.5,  decay: 0.0016, diesel: 0,   drive: 2.2, idle: 1000, red: 8200,  lp: 5800, gear: 5 },
   // Honda F20C (S2000): naturally aspirated four that screams to 9000
-  i4vtec:    { cyl: 4,  uneven: 0.04, res: [205, 860],  rad: [0.99, 0.97],   mix: [1, 0.75], noise: 0.3,  decay: 0.0022, diesel: 0,   drive: 1.7, idle: 950,  red: 9000,  lp: 5600, gear: 6 },
+  i4vtec:    { cyl: 4,  uneven: 0.04, res: [205, 860],  rad: [0.99, 0.97],   mix: [1, 0.75], noise: 0.3,  decay: 0.0022, diesel: 0,   drive: 1.7, idle: 950,  red: 7800,  lp: 5600, gear: 6 },
   // Nissan SR20DET (S15): raspy turbo four
-  i4sr:      { cyl: 4,  uneven: 0.06, res: [175, 740],  rad: [0.99, 0.972],  mix: [1, 0.68], noise: 0.4,  decay: 0.0025, diesel: 0,   drive: 1.7, idle: 850,  red: 7500,  lp: 4400, gear: 6 },
+  i4sr:      { cyl: 4,  uneven: 0.06, res: [175, 740],  rad: [0.99, 0.972],  mix: [1, 0.68], noise: 0.4,  decay: 0.0025, diesel: 0,   drive: 1.7, idle: 850,  red: 6900,  lp: 4400, gear: 6 },
 };
 const GEAR_TOPS = { 5: [0.3, 0.46, 0.63, 0.81, 1.0], 6: [0.26, 0.4, 0.54, 0.68, 0.84, 1.0], 7: [0.24, 0.35, 0.47, 0.58, 0.7, 0.84, 1.0], 8: [0.14, 0.22, 0.31, 0.41, 0.52, 0.65, 0.8, 1.0] };
 
@@ -142,7 +142,10 @@ export class AudioSys {
     this.eBody.gain.value = 5;
     this.eOut = ctx.createGain();
     this.eOut.gain.value = 0;
-    this.eFilter.connect(this.eBody).connect(this.eOut).connect(this.engineBus);
+    this.eFilter2 = ctx.createBiquadFilter();
+    this.eFilter2.type = 'lowpass';
+    this.eFilter2.Q.value = 0.5;
+    this.eFilter.connect(this.eFilter2).connect(this.eBody).connect(this.eOut).connect(this.engineBus);
     // fallback engine (used until / unless the worklet loads)
     this.fb = [];
     const shaper = ctx.createWaveShaper();
@@ -319,8 +322,9 @@ export class AudioSys {
     this.rpm = this.eng.idle;
     if (!this.ctx) return;
     const e = this.eng, diesel = this.car.type === 'diesel6';
-    this.eFilter.frequency.value = e.lp;
-    this.eBody.gain.value = e.cyl >= 8 ? 6 : diesel ? 7 : 3;
+    this.eFilter.frequency.value = Math.min(3000, e.lp * 0.6);
+    this.eFilter2.frequency.value = Math.min(3900, e.lp * 0.8);
+    this.eBody.gain.value = e.cyl >= 8 ? 7 : diesel ? 8 : 5;
     // horns: trucks get an air horn chord, small cars a thin beep
     const horn = this.car.horn || (diesel ? 'air' : e.cyl <= 4 ? 'small' : 'car');
     const H = { air: [185, 233, 900], car: [415, 523, 1000], small: [520, 660, 1400] }[horn];
@@ -375,7 +379,6 @@ export class AudioSys {
       if (this.shiftT <= 0 && this.gearHold <= 0) {
         if (g < tops.length - 1 && p.brake < 0.3 && rpmIn(g) > e.red * up) {
           g++; this.shiftT = e.cyl >= 10 ? 0.06 : car.type === 'diesel6' ? 0.35 : 0.14; this.gearHold = 0.6;
-          if (p.throttle > 0.5) this._shiftPop();
         } else if (g > 0 && rpmIn(g - 1) < e.red * down) { g--; this.shiftT = 0.1; this.gearHold = 0.45; }
       }
       this.gear = g;
@@ -395,16 +398,19 @@ export class AudioSys {
       const P = this.wEngine.parameters;
       P.get('rpm').setTargetAtTime(this.rpm, t, 0.015);
       P.get('load').setTargetAtTime(this.throttleLP, t, 0.03);
-      P.get('gain').setTargetAtTime((0.45 + rn * 1.4) * tunnelBoost, t, 0.04);
+      P.get('gain').setTargetAtTime((0.6 + rn * 0.7) * tunnelBoost, t, 0.04);
     } else {
       const fire = (this.rpm / 60) * (e.cyl / 2);
       for (const [o, mul] of this.fb) o.frequency.setTargetAtTime(fire * mul * 0.5, t, 0.02);
     }
     this.eOut.gain.setTargetAtTime(0.22 + this.throttleLP * 0.18, t, 0.05);
-    this.eFilter.frequency.setTargetAtTime(e.lp * (0.55 + 0.45 * this.throttleLP + 0.25 * rn), t, 0.05);
+    // (capped: above ~3 kHz the synthetic pulses only add a whine)
+    const lpf = Math.min(3000, e.lp * 0.6) * (0.5 + 0.35 * this.throttleLP + 0.3 * rn);
+    this.eFilter.frequency.setTargetAtTime(lpf, t, 0.05);
+    this.eFilter2.frequency.setTargetAtTime(lpf * 1.3, t, 0.05);
     // intake roar rises with rpm and load
     this.roarF.frequency.setTargetAtTime(200 + this.rpm * 0.12, t, 0.05);
-    this.roarG.gain.setTargetAtTime((0.01 + this.throttleLP * 0.06) * (0.3 + rn), t, 0.06);
+    this.roarG.gain.setTargetAtTime((0.006 + this.throttleLP * 0.03) * (0.3 + rn), t, 0.06);
     // forced induction
     if (car.turbo) {
       const want = clamp(this.throttleLP * (rn * 1.5 - 0.25), 0, 1);
@@ -427,7 +433,8 @@ export class AudioSys {
     // lift-off crackle (V8s, rally, hot hatches)
     const pops = car.pops !== undefined ? car.pops : e.cyl >= 8 ? 0.8 : car.type === 'i4rally' ? 1.4 : car.type === 'diesel6' ? 0 : 0.5;
     if (pops > 0 && this.lastThrottle > 0.6 && p.throttle < 0.1 && rn > 0.55) this.popT = 0.6 + pops * 0.3;
-    if (this.popT > 0) { this.popT -= dt; if (Math.random() < dt * 20 * pops) this._pop(e); }
+    // (no exhaust crackle: the pops read as clicks)
+    void pops;
     // diesel air brake when coming to a stop
     if (car.type === 'diesel6' && this.lastSpeed > 3 && kmh <= 3 && p.brake > 0.2) this._airBrake();
     this.lastSpeed = kmh;

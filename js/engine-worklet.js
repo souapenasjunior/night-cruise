@@ -14,6 +14,8 @@ class EngineProcessor extends AudioWorkletProcessor {
     this.phase = 0;
     this.fi = 0;
     this.env = 0;
+    this.envS = 0; // the pulse, rounded (an instant jump buzzed like a drill)
+    this.fund = 0; // phase of the firing-rate tone
     this.envN = 0;
     this.y = [0, 0, 0, 0];
     this.seed = 12345;
@@ -38,7 +40,9 @@ class EngineProcessor extends AudioWorkletProcessor {
       const re = 1 - a1 * Math.cos(w) - a2 * Math.cos(2 * w), im = a1 * Math.sin(w) + a2 * Math.sin(2 * w);
       return { a1, a2, g: Math.hypot(re, im) };
     });
-    this.decayK = Math.exp(-1 / (p.decay * sampleRate));
+    // (longer, softer pulses: a thump rather than a click)
+    this.decayK = Math.exp(-1 / (p.decay * 1.6 * sampleRate));
+    this.attK = 1 - Math.exp(-1 / (0.0012 * sampleRate));
   }
   process(inputs, outputs, params) {
     const out = outputs[0][0];
@@ -58,17 +62,24 @@ class EngineProcessor extends AudioWorkletProcessor {
         this.envN = this.env;
       }
       const nz = this.rand() * 2 - 1;
-      const x = this.env * (1 - p.noise + p.noise * nz) + p.diesel * this.envN * nz * 0.8;
+      this.envS += (this.env - this.envS) * this.attK;
+      const noise = p.noise * 0.45;
+      const x = this.envS * (1 - noise + noise * nz) + p.diesel * this.envN * nz * 0.5;
       this.env *= this.decayK;
       this.envN *= this.decayK * 0.9;
       const y0 = c[0].g * x + c[0].a1 * y[0] + c[0].a2 * y[1];
       y[1] = y[0]; y[0] = y0;
       const y1 = c[1].g * x + c[1].a1 * y[2] + c[1].a2 * y[3];
       y[3] = y[2]; y[2] = y1;
-      let s = p.mix[0] * y0 + p.mix[1] * y1 + x * 0.15;
+      // the firing rate itself as a soft tone: the engine's body, felt more than heard
+      this.fund += (rpm / 120) * p.cyl / sampleRate;
+      if (this.fund >= 1) this.fund -= 1;
+      const body = Math.sin(this.fund * 2 * Math.PI) * lvl * 0.35;
+      let s = p.mix[0] * y0 + p.mix[1] * y1 * 0.7 + x * 0.05 + body;
       // DC blocker
       this.hp = s - this.hpx + 0.995 * this.hp; this.hpx = s; s = this.hp;
-      out[n] = Math.tanh(s * drive) * gain;
+      // (softer saturation: hard clipping added the fizz)
+      out[n] = Math.tanh(s * drive * 0.7) * gain;
     }
     return true;
   }
