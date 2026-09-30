@@ -483,6 +483,10 @@ export function trafficGeometry(spec) {
   if (!T) throw new Error('GLB traffic not loaded: ' + spec.id);
   const G = spec.glb;
   T.root.updateMatrixWorld(true);
+  // Files whose wheels are their own nodes (the template knows every wheel and its hub): the traffic
+  // uses exactly those wheels, one axle per hub line (tandem axles apart), instead of guessing them
+  // from the geometry (that caught hub caps and arches, and merged a truck's two rear axles)
+  if (G.wheelNode && T.wheels.length >= 4) return namedWheelTraffic(T, G);
   const byMat = new Map();
   T.root.traverse(o => {
     if (!o.isMesh) return;
@@ -558,6 +562,63 @@ export function trafficGeometry(spec) {
     tintBase: tintBase || new THREE.Color(1, 1, 1),
     axles: axles.map(a => ({ y: a.r, z: a.z })),
     wheelR: axles.length ? axles.reduce((s, a) => s + a.r, 0) / axles.length : 0.3,
+  };
+}
+
+// traffic geometry from a template with named wheel nodes (see trafficGeometry)
+function namedWheelTraffic(T, G) {
+  const meshes = [];
+  T.root.traverse(o => { if (o.isMesh) meshes.push(o); });
+  // axles: the wheel hubs grouped by z (both sides of one axle share it)
+  const axles = [];
+  const owner = new Map(); // mesh index -> axle
+  for (const w of T.wheels) {
+    let k = axles.findIndex(a => Math.abs(a.z - w.c.z) < 0.3);
+    if (k < 0) { k = axles.length; axles.push({ z: w.c.z, y: w.c.y, n: 0, xOut: 0 }); }
+    const a = axles[k];
+    a.y = (a.y * a.n + w.c.y) / (a.n + 1); a.n++;
+    a.xOut = Math.max(a.xOut, Math.abs(w.c.x) + w.r * 0.35);
+    for (const i of w.idx) owner.set(i, k);
+  }
+  const groups = new Map(); // material + axle -> geometries
+  meshes.forEach((m, i) => {
+    const k = owner.has(i) ? owner.get(i) : -1;
+    const key = m.material.uuid + ':' + k;
+    if (!groups.has(key)) groups.set(key, { src: m.material, k, geos: [] });
+    const g = floatGeometry(m);
+    // a wheel's pieces are drawn about their hub: moved so the hub sits at the origin
+    if (k >= 0) g.translate(0, -axles[k].y, -axles[k].z);
+    groups.get(key).geos.push(g);
+  });
+  const parts = [];
+  let tintBase = null;
+  const mats = new Map();
+  for (const { src, k, geos } of groups.values()) {
+    const geo = geos.length > 1 ? mergeGeometries(geos, false) : geos[0];
+    if (!geo) continue;
+    geo.computeBoundingSphere();
+    if (!mats.has(src)) {
+      const mat = src.clone();
+      if (!mat.metalnessMap) mat.metalness = Math.min(mat.metalness, 0.25);
+      mat.roughness = Math.max(mat.roughness, 0.35);
+      const tint = test(G.tint, src.name);
+      if (tint) { if (!tintBase) tintBase = mat.color.clone(); mat.color.setRGB(1, 1, 1); }
+      mats.set(src, { mat, tint });
+    }
+    const { mat, tint } = mats.get(src);
+    parts.push({ geo, mat, tint, axle: k });
+  }
+  const pts = (list, dz) => list.map(v => [v.x, v.y, v.z + dz]);
+  const hx = Math.max(0.45, T.W / 2 - 0.32);
+  return {
+    parts,
+    head: T.head.length ? pts(T.head, 0.03) : [[hx, 0.65, T.box.max.z + 0.02], [-hx, 0.65, T.box.max.z + 0.02]],
+    tail: T.tail.length ? pts(T.tail, -0.03) : [[hx, 0.75, T.box.min.z - 0.02], [-hx, 0.75, T.box.min.z - 0.02]],
+    sign: null,
+    halfL: T.L / 2, halfW: Math.min(T.W / 2, Math.max(...axles.map(a => a.xOut)) + 0.12),
+    tintBase: tintBase || new THREE.Color(1, 1, 1),
+    axles: axles.map(a => ({ y: a.y, z: a.z })),
+    wheelR: axles.reduce((s, a) => s + a.y, 0) / axles.length,
   };
 }
 
