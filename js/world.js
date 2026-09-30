@@ -447,6 +447,13 @@ export class World {
       m.bumpMap = t;
       m.bumpScale = 0.6;
     }
+    // the map's road look (Miami: pale concrete, sand parapets, teal piers, white poles, a pink lot)
+    const L = net.map.world.look || {};
+    const tintRoad = (m, o) => { if (!o) return; m.color.set(o.tint); m.emissive = new THREE.Color(o.glow); m.emissiveMap = m.map; };
+    tintRoad(this.mats.ring, L.road); tintRoad(this.mats.link, L.road); tintRoad(this.mats.lot, L.lot); tintRoad(this.mats.gore, L.lot);
+    if (L.parapet) { this.mats.concrete.color.set(L.parapet); this.mats.walk.color.set(L.parapet); }
+    if (L.deck) this.mats.deck.color.set(L.deck);
+    if (L.pillar) this.mats.pillar.color.set(L.pillar);
     this._build();
   }
 
@@ -763,7 +770,7 @@ export class World {
       }
       addMerged(parts, this.mats.concrete, 0, 'median:' + r.id);
       // antiglare fins on top (instanced)
-      this._fins(r, rangesWhere(r, i => !r.inMedianGap(i * r.ds)));
+      if (this.net.map.world.look.fins !== false) this._fins(r, rangesWhere(r, i => !r.inMedianGap(i * r.ds)));
       // amber flashers at the gaps
       // (set on the sloped wall ends, so they sit on the barrier and never over the gap)
       for (const [s0, s1] of r.medianGaps) for (const s of [s0 - 1, s1 + 1]) this._flasher(r, s);
@@ -876,6 +883,7 @@ export class World {
   }
 
   _soundWallAt(r, i) {
+    if (this.net.map.world.look.soundWalls === false) return false;
     const x = r.px[i], z = r.pz[i];
     if (r.kind === 'ring') return (x > 1350 && z > -650 && z < 800) || (x < -1500 && z > 200 && z < 800);
     return Math.abs(x) < 900 && r.py[i] > 12;
@@ -1054,7 +1062,8 @@ export class World {
         if (![0, -CHAMFER - 1, CHAMFER + 1].every(d => r.wallAt(sg, r.wrapS(s + d)))) continue;
         const x0 = r.px[i], z0 = r.pz[i];
         const white = this.net.map.world.kind === 'miami' || r.kind !== 'ring' || x0 > -300 || r.py[i] > 20;
-        const col = white ? LED : SODIUM;
+        const lampCol = this.net.map.world.look.lamp;
+        const col = lampCol ? (this._lampC || (this._lampC = new THREE.Color(lampCol))) : white ? LED : SODIUM;
         const base = this._pt(r, i, sg * (r.hw - 0.2));
         const head = this._pt(r, i, sg * (r.hw - 3.0));
         // a pole must not stand in, or poke up through, another carriageway: skip it when any other
@@ -1078,7 +1087,8 @@ export class World {
     arm.rotateY(Math.PI / 2);
     arm.translate(-1.4, 9.55, 0);
     const poleGeo = mergeGeometries([pv.toNonIndexed(), arm.toNonIndexed()]);
-    const pm = new THREE.InstancedMesh(poleGeo, this.mats.steel, poles.length);
+    const poleMat = this.net.map.world.look.poles ? new THREE.MeshStandardMaterial({ color: this.net.map.world.look.poles, roughness: 0.45, metalness: 0.3 }) : this.mats.steel;
+    const pm = new THREE.InstancedMesh(poleGeo, poleMat, poles.length);
     poles.forEach((P, k) => {
       // arm points toward the road center: local -x should map to -sg*right
       const yaw = P.yaw + (P.sg > 0 ? Math.PI : 0);
@@ -1335,10 +1345,12 @@ export class World {
       for (const sg of [-1, 1]) {
         const P = ring.pointAt(s, sg * (ring.hw + 9 + R() * 8));
         if (this.isWater(P.x, P.z) || this._onBeach(P.x, P.z)) continue;
-        if (R() < 0.75) addPalm(P.x, P.z, 9 + R() * 7);
+        if (R() < 0.75) addPalm(P.x, P.z, Math.max(9 + R() * 7, P.y + 5 + R() * 3));
       }
     }
-    // around the parking area and scattered through the island
+    // around the parking area: a row along each bay's back wall
+    if (net.pa) for (const lot of net.pa.lots) for (let s = 3; s < lot.len; s += 9) { const P = lot.pointAt(s, lot.outer * (lot.hw + 6.5)); addPalm(P.x, P.z, P.y + 6 + R() * 4); }
+    // scattered through the island
     for (let k = 0; k < 500; k++) {
       const x = 880 + R() * 360, z = -2500 + R() * 5000;
       if (R() < 0.5) addPalm(x, z, 8 + R() * 8);
@@ -1459,7 +1471,8 @@ export class World {
         // (Miami Beach: art deco pastels - pink, mint, sky blue, cream, lilac)
         const beachSide = miami && x > 800;
         const tint = industrial ? [0.35, 0.3, 0.25] : beachSide ? [[0.95, 0.62, 0.72], [0.55, 0.88, 0.78], [0.6, 0.8, 0.95], [0.95, 0.9, 0.75], [0.78, 0.66, 0.92]][Math.floor(tintR * 5)] : [[0.5, 0.55, 0.7], [0.6, 0.5, 0.45], [0.45, 0.6, 0.65], [0.7, 0.65, 0.6], [0.4, 0.45, 0.55]][Math.floor(tintR * 5)];
-        inst.push({ x, z, w, d, h, seed, tint });
+        const glass = miami && net.map.world.look.towerGlass && h > 90 ? [[0.35, 0.7, 0.85], [0.3, 0.55, 0.8], [0.45, 0.8, 0.8]][Math.floor(tintR * 3)] : null;
+        inst.push({ x, z, w, d, h, seed, tint: glass || tint });
         if (h > 60 && towerR < 0.35) inst.push({ x, z, w: w * 0.6, d: d * 0.6, h: h + 10 + towerH * 25, seed: towerSeed, tint });
       }
     }
@@ -1485,6 +1498,28 @@ export class World {
     this.root.add(im);
     this.buildings = inst;
 
+    // Miami: neon trims round the rooftops (cyan, pink, violet, mint), on many of the buildings
+    if (net.map.world.look.roofNeon) {
+      const trims = inst.filter((b, k) => b.h > 14 && (k * 7919) % 10 < 6);
+      const tg = new THREE.BoxGeometry(1, 1, 1);
+      tg.translate(0, 0.5, 0);
+      const tmat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+      const tim = new THREE.InstancedMesh(tg, tmat, trims.length * 2);
+      const pal = ['#2ff3ff', '#ff3fae', '#b36bff', '#5dffb4', '#ff9a3d'].map(c => new THREE.Color(c).multiplyScalar(1.8));
+      let n = 0;
+      trims.forEach((b, k) => {
+        const c = pal[k % pal.length];
+        // a band at the roof line and a thinner one lower down the facade
+        for (const [y, hgt, grow] of [[b.h - 0.6, 0.6, 0.5], [b.h * 0.55, 0.3, 0.35]]) {
+          m4.makeScale(b.w + grow, hgt, b.d + grow);
+          m4.setPosition(b.x, y, b.z);
+          tim.setMatrixAt(n, m4); tim.setColorAt(n, c); n++;
+        }
+      });
+      tim.count = n;
+      tim.frustumCulled = false;
+      this.root.add(tim);
+    }
     // aviation lights on tall buildings
     const tall = [];
     for (const b of inst) if (b.h > 95) tall.push(b.x, b.h + 1.5, b.z);

@@ -148,6 +148,17 @@ function fitWrap(g, text, weight, px, family, maxW) {
 // route shield; returns its width
 function shield(g, x, cy, size, dest, bg) {
   const w = dest.shield === 'P' ? size : size * 1.35;
+  // US interstate: a blue shield with a red band on top and the number in white
+  if (/^I-/.test(dest.shield)) {
+    g.fillStyle = WHITE; rrect(g, x, cy - size / 2, w, size, size * 0.2); g.fill();
+    g.fillStyle = '#1f4fb4'; rrect(g, x + size * 0.06, cy - size / 2 + size * 0.06, w - size * 0.12, size - size * 0.12, size * 0.16); g.fill();
+    g.fillStyle = '#c8202a'; g.fillRect(x + size * 0.06, cy - size / 2 + size * 0.06, w - size * 0.12, size * 0.22);
+    g.fillStyle = WHITE; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const num = dest.shield.slice(2);
+    fit(g, num, 800, size * 0.56, EN, w * 0.8);
+    g.fillText(num, x + w / 2, cy + size * 0.12);
+    return w;
+  }
   g.fillStyle = WHITE;
   rrect(g, x, cy - size / 2, w, size, size * 0.14);
   g.fill();
