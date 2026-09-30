@@ -112,7 +112,15 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 /* the tag: the car's class, coloured like a rarity */
 .ctag { display: inline-block; padding: 4px 16px 5px; font: 800 12px/1 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: var(--tc, #37b24d); clip-path: polygon(0 0, 100% 0, 92% 100%, 8% 100%); }
 .c-street { --tc: #2f9e44; } .c-sports { --tc: #ae3ec9; } .c-utility { --tc: #1c7ed6; } .c-service { --tc: #0ca678; } .c-emergency { --tc: #e03131; } .c-heavy { --tc: #f08c00; }
-.gar-keys { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+.gar-keys { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+#mapsel { background: radial-gradient(120% 90% at 70% 10%, rgba(24, 58, 140, 0.55), rgba(6, 12, 34, 0.9) 70%); }
+.maps { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 460px)); gap: 18px; align-content: start; padding: 8px; }
+.mcard { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 8px; padding: 0 0 14px; border: 2px solid #3a6ee8; background: linear-gradient(180deg, #2b63e0, #1a47b8); transition: transform .12s ease, box-shadow .12s ease; overflow: hidden; }
+.mcard img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.mcard .ctag { justify-self: start; margin: 0 14px; }
+.mcard .mnm { margin: 0 14px; font: 900 34px/1 var(--display); text-transform: uppercase; letter-spacing: 0.02em; }
+.mcard .mdesc { margin: 0 14px; color: #d6def2; font-size: 14px; }
+.mcard:hover, .mcard:focus-visible { outline: none; border-color: #fff; box-shadow: 0 0 0 4px #ff1e8c, 0 0 26px rgba(255, 30, 140, 0.55); transform: scale(1.02); }
 @media (max-width: 1400px) { .cards { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 /* online: "connecting" and the HUD badge */
 .conn { display: grid; justify-items: center; gap: 18px; }
@@ -314,7 +322,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 
 <div id="title" class="screen" hidden>
   <h1><span>Night</span><span class="l2">Cruise</span></h1>
-  <p class="tag" data-i18n="title.tag">Anel K1, meia-noite. Sem corrida e sem missão: escolha um carro, entre na via expressa e dirija.</p>
+  <p class="tag" data-i18n="title.tag">Sem corrida e sem missão: escolha um carro, entre na via expressa e dirija.</p>
   <nav id="title-nav">
     <button class="menu-btn primary" id="btn-play" data-i18n="title.play">Jogar</button>
     <button class="menu-btn" id="btn-online" data-i18n="title.online">Online</button>
@@ -324,6 +332,25 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
   </nav>
   <p class="title-note" id="title-note" role="status" aria-live="polite"></p>
   <div class="ver" id="title-ver"></div>
+</div>
+
+<!-- map select (Play and Online): one card per map, the car garage after it -->
+<div id="mapsel" class="screen" hidden>
+  <div class="gar">
+    <header class="gar-head">
+      <h2 data-i18n="maps.title">Escolha o mapa</h2><span class="gar-count" id="maps-count"></span>
+      <span class="gar-online" id="maps-online" hidden><i></i><span data-i18n="sel.online">Online · sala pública</span></span>
+    </header>
+    <div class="maps" id="map-cards">
+      <button class="mcard" data-map="k1">
+        <img src="img/maps/k1.webp" alt="">
+        <span class="ctag c-street" data-i18n="maps.japan">Japão</span>
+        <span class="mnm" data-i18n="maps.k1">Anel K1</span>
+        <span class="mdesc" data-i18n="maps.k1desc">Via expressa elevada à meia-noite: ponte sobre a baía, túnel, curvas no centro e um estacionamento.</span>
+      </button>
+    </div>
+    <footer class="gar-keys"><span class="hint" data-i18n-html="maps.hint"><span><kbd>Enter</kbd> escolher</span><span><kbd>Esc</kbd> voltar</span></span><button class="btn small" id="maps-back" data-i18n="sel.back">Voltar</button></footer>
+  </div>
 </div>
 
 <div id="select" class="screen" hidden>
@@ -540,7 +567,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.28.3';
+  var V = '1.29.0';
   var MODULES = ['account', 'audio', 'cars', 'flames', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

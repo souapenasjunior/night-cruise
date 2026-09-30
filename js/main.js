@@ -301,7 +301,7 @@ function applySettings() {
 }
 
 // ------------------------------------------------------------------ screens
-const screens = ['loading', 'title', 'select', 'pause', 'map'];
+const screens = ['loading', 'title', 'mapsel', 'select', 'pause', 'map'];
 function showScreen(name) {
   for (const s of screens) $(s).hidden = s !== name;
   $('hud').hidden = !(name === 'drive' || name === 'pause');
@@ -336,7 +336,7 @@ document.addEventListener('pointerdown', (e) => {
 }, true);
 document.addEventListener('pointerup', () => { if (audio.holdTick) setTimeout(() => { audio.holdTick = false; }, 80); }, true);
 document.addEventListener('pointercancel', () => { audio.holdTick = false; }, true);
-$('btn-play').onclick = () => { audio.init(); audio.setVolumes(S.audio); onlineWant = false; goSelect(); };
+$('btn-play').onclick = () => { audio.init(); audio.setVolumes(S.audio); openMaps(false); };
 $('btn-settings').onclick = () => { audio.init(); openSettings(); };
 // credits (CC BY 4.0 attribution for the car models)
 function openCredits() {
@@ -416,9 +416,9 @@ function updateSelect() {
   const unit = S.gameplay.units === 'mph' ? 'mph' : 'km/h';
   const top = S.gameplay.units === 'mph' ? Math.round(st.top * 0.621) : st.top;
   $('sel-stats').innerHTML =
-    // (bars span the garage: buses at ~100 km/h to the Sport at 305; 0-100 from ~30 s to ~5 s)
-    statRow(t('stat.top'), (st.top - 60) / 250, `${top} ${unit}`) +
-    statRow(S.gameplay.units === 'mph' ? '0–60 mph' : '0–100 km/h', (st.accel - 1) / 8, `${num(zero100)} s`) +
+    // (bars span the garage: 165 km/h to 360; 0-100 from ~9 s to ~3 s)
+    statRow(t('stat.top'), (st.top - 120) / 250, `${top} ${unit}`) +
+    statRow(S.gameplay.units === 'mph' ? '0–60 mph' : '0–100 km/h', (st.accel - 3) / 9, `${num(zero100)} s`) +
     statRow(t('stat.grip'), (st.grip - 0.6) / 0.6, t(st.grip >= 1.05 ? 'grip.high' : st.grip >= 0.88 ? 'grip.mid' : 'grip.low')) +
     statRow(t('stat.rear'), (st.drift - 0.4) / 1.1, t(st.drift >= 1.2 ? 'rear.loose' : st.drift >= 0.85 ? 'rear.neutral' : 'rear.firm')) +
     statRow(t('stat.mass'), st.mass / 14000, `${num(st.mass, 0)} kg`);
@@ -452,7 +452,7 @@ function goSelect() {
   setTimeout(() => { const c = $('sel-chips').children[selIndex]; if (c) c.focus({ preventScroll: true }); }, 40);
   return true;
 }
-$('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else goTitle(); };
+$('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else openMaps(onlineWant); };
 $('sel-go').onclick = () => startDrive();
 
 // ------------------------------------------------------------------ online
@@ -529,6 +529,7 @@ async function startOnline() {
   if (noCars()) { $('title-note').textContent = t('title.noCars'); return; }
   audio.init(); audio.setVolumes(S.audio);
   if (!isSignedIn()) { onlineAfterSignIn = true; openAccount('login', t('on.needAccount')); return; }
+  if (state !== 'mapsel') { openMaps(true); return; }
   $('conn-text').textContent = t('on.connecting');
   $('connecting').hidden = false;
   const t0 = performance.now();
@@ -545,6 +546,24 @@ async function startOnline() {
   onlineWant = true;
   goSelect();
 }
+// the map select, before the garage (Play and Online); one map so far, the K1 loop
+let mapsOnline = false;
+function openMaps(online) {
+  if (noCars()) { $('title-note').textContent = t('title.noCars'); return; }
+  mapsOnline = online;
+  onlineWant = false;
+  state = 'mapsel';
+  showScreen('mapsel');
+  $('maps-online').hidden = !online;
+  $('maps-count').textContent = t('maps.count', { n: $('map-cards').children.length });
+  setTimeout(() => { const c = $('map-cards').children[0]; if (c) c.focus({ preventScroll: true }); }, 40);
+}
+function chooseMap() {
+  // (only one map: the K1 loop is always the one loaded)
+  if (mapsOnline) startOnline(); else { onlineWant = false; goSelect(); }
+}
+for (const b of document.querySelectorAll('#map-cards .mcard')) b.onclick = chooseMap;
+$('maps-back').onclick = () => goTitle();
 $('btn-online').onclick = startOnline;
 $('p-online').onclick = () => { leaveOnline(); $('p-online').hidden = true; onlineHud(); hud.toast(t('on.left')); resumeGame(); };
 
@@ -989,6 +1008,10 @@ window.addEventListener('keydown', e => {
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
+  } else if (state === 'mapsel') {
+    if (e.code === 'ArrowRight' || e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
+    if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
+    if (e.code === 'Escape') goTitle();
   } else if (state === 'select') {
     if (e.code === 'ArrowRight' || e.code === 'KeyD') { selIndex = (selIndex + 1) % HERO_SPECS.length; updateSelect(); $('sel-chips').children[selIndex].focus(); audio.selectChime(selIndex, true); }
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') { selIndex = (selIndex - 1 + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); $('sel-chips').children[selIndex].focus(); audio.selectChime(selIndex, false); }
@@ -1041,6 +1064,7 @@ function padMenus() {
     else if (!$('credits').hidden) closeCredits();
     else if (isAccountOpen()) closeAccount();
     else if (state === 'pause') resumeGame();
+    else if (state === 'mapsel') goTitle();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
 }
@@ -1183,8 +1207,8 @@ function tick(now) {
   // online: the other players keep moving while we pause (ours is sent only while driving)
   if (online && (state === 'drive' || state === 'pause' || state === 'map')) { online.update(dt, state === 'drive' && !settingsOpen ? player : null); onlineHud(); rosterHud(dt); }
   // (the car select sits over the city: the title's drone flight, or the paused drive behind it)
-  if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map' || state === 'select') {
-    if (state === 'title' || (state === 'select' && !player)) { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
+  if (state === 'drive' || state === 'title' || state === 'mapsel' || state === 'pause' || state === 'map' || state === 'select') {
+    if (state === 'title' || state === 'mapsel' || (state === 'select' && !player)) { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
     if (state !== 'pause' && state !== 'map' && !(state === 'select' && player)) world.update(dt, camera);
     renderPass.scene = scene; renderPass.camera = camera;
     if (bloom.enabled) composer.render(); else renderer.render(scene, camera);
