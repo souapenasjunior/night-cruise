@@ -98,16 +98,25 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .swatch:focus-visible { outline: 2px solid var(--sodium); outline-offset: 2px; }
 .stat b { font: 600 12.5px/1 var(--mono); color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
 #select .strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px clamp(16px, 5vw, 72px) calc(18px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(0deg, rgba(7, 9, 18, 0.92), rgba(7, 9, 18, 0)); display: grid; gap: 14px; }
-#select .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
-.chip { all: unset; cursor: pointer; flex: 0 0 auto; min-width: 64px; padding: 0 14px; box-sizing: border-box; height: 64px; display: grid; place-items: center; border: 1px solid var(--line); background: rgba(12, 16, 32, 0.7); position: relative; transition: border-color .15s, transform .15s; }
-.chip .n { font: 900 24px/1 var(--display); font-style: italic; letter-spacing: 0.02em; white-space: nowrap; text-transform: uppercase; color: #ffffff; }
-.chip .sw { position: absolute; left: 6px; right: 6px; bottom: 6px; height: 3px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28); }
-.chip:hover { border-color: var(--line-2); }
-.chip.sel { border-color: var(--sodium); transform: translateY(-3px); background: rgba(40, 30, 14, 0.6); }
+/* the garage grid: all 21 cars in sight (no scrolling), a tier label per row */
+#select .garage { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; align-items: stretch; }
+#select .tiers { display: grid; grid-template-rows: repeat(3, 1fr); gap: 6px; }
+#select .tiers span { display: flex; align-items: center; justify-content: flex-end; font: 700 11px/1 var(--body); letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); writing-mode: horizontal-tb; min-width: 92px; }
+#select .tiers span::after { content: ''; width: 18px; height: 1px; margin-left: 10px; background: var(--line-2); }
+#select .chips { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: repeat(3, 48px); gap: 6px; }
+.chip { all: unset; cursor: pointer; box-sizing: border-box; min-width: 0; position: relative; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; border: 1px solid var(--line); background: linear-gradient(90deg, rgba(20, 24, 42, 0.86), rgba(10, 13, 24, 0.78)); overflow: hidden; transition: border-color .15s, background .15s, box-shadow .15s; }
+.chip .n { flex: 1; min-width: 0; font: 800 19px/1 var(--display); font-style: italic; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; color: #ffffff; }
+/* the car's colour: a bar down the left edge */
+.chip .sw { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+.chip:hover { border-color: var(--line-2); background: linear-gradient(90deg, rgba(30, 36, 60, 0.9), rgba(14, 18, 32, 0.8)); }
+.chip.sel { border-color: var(--sodium); background: linear-gradient(90deg, rgba(64, 44, 14, 0.92), rgba(24, 18, 10, 0.85)); box-shadow: 0 0 0 1px var(--sodium), 0 6px 22px rgba(255, 170, 40, 0.22); }
 .chip:focus-visible { outline: 2px solid var(--sodium); outline-offset: 2px; }
-.chip .pl { position: absolute; top: 5px; right: 5px; width: 12px; height: 12px; color: var(--sodium); display: none; }
+.chip .pl { width: 12px; height: 12px; flex: none; color: var(--sodium); display: none; }
 .chip.locked .pl { display: block; }
-.chip.locked .n { opacity: 0.55; }
+.chip.locked .n { color: #9aa1b5; }
+.chip.can .pl { color: #7ee2a2; }
+/* (narrower screens: the long names still fit) */
+@media (max-width: 1500px) { .chip { gap: 6px; padding: 0 9px 0 13px; } .chip .n { font-size: 16px; } .chip .pr { font-size: 11px; } #select .tiers span { min-width: 76px; letter-spacing: 0.12em; } }
 /* a locked car in the showroom: a padlock over it */
 #sel-padlock { position: absolute; right: clamp(24px, 22vw, 420px); top: 16%; display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: rgba(8, 10, 20, 0.78); border: 1px solid rgba(255, 176, 60, 0.55); color: var(--sodium); font: 800 18px/1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; pointer-events: none; }
 #sel-padlock svg { width: 26px; height: 26px; }
@@ -386,9 +395,11 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
   .sel-wallet b { grid-row: 1 / span 2; font-size: 20px; }
   #sel-padlock:not([hidden]) { display: none; } /* (the price line in the details says it) */
 }
-.chip .pr { position: absolute; left: 6px; top: 5px; font: 600 10.5px/1 var(--ncp); letter-spacing: 0.04em; color: #ffd27a; }
+/* the chip's state on its right: price (locked), GRÁTIS, or a check (owned) */
+.chip .pr { flex: none; font: 600 12px/1 var(--ncp); letter-spacing: 0.02em; color: #ffd27a; white-space: nowrap; }
 .chip .pr:empty { display: none; }
 .chip.can .pr { color: #7ee2a2; }
+.chip.own .pr, .chip.free .pr { color: #7ee2a2; font-size: 11px; letter-spacing: 0.1em; }
 .lock-bar { max-width: 340px; }
 .lock-bar[hidden] { display: none; }
 /* pause */
@@ -546,7 +557,11 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
   </div>
   <div id="sel-padlock" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span data-i18n="coins.locked">Bloqueado</span></div>
   <div class="strip">
-    <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
+    <!-- the garage: every car at once, three tiers of seven, weakest (top left) to strongest (bottom right) -->
+    <div class="garage">
+      <div class="tiers" aria-hidden="true"><span data-i18n="tier.1">Rua</span><span data-i18n="tier.2">Esportivos</span><span data-i18n="tier.3">Supercarros</span></div>
+      <div class="chips" id="sel-chips" role="listbox" aria-label="Veículos" data-i18n-aria="sel.cars"></div>
+    </div>
     <div class="row">
       <div class="hint" data-i18n-html="sel.hint"><span><kbd>←</kbd> <kbd>→</kbd> trocar</span><span>arraste para girar</span><span><kbd>Enter</kbd> dirigir</span><span><kbd>Esc</kbd> voltar</span></div>
       <div style="display:flex;gap:8px">
@@ -834,7 +849,7 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.26.0';
+  var V = '1.26.1';
   var MODULES = ['account', 'audio', 'cars', 'flames', 'friends', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {

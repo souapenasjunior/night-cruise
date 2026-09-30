@@ -510,6 +510,9 @@ function renderPaints() {
 }
 
 // select
+// the garage grid is seven cars wide: up / down moves a whole tier, wrapping around
+const TIER = 7;
+const tierStep = (i, down) => { const n = HERO_SPECS.length; let j = i + (down ? TIER : -TIER); if (j >= n) j = i % TIER; if (j < 0) j = Math.min(n - 1, (Math.ceil(n / TIER) - 1) * TIER + (i % TIER)); return j; };
 function buildChips() {
   const wrapEl = $('sel-chips');
   wrapEl.innerHTML = '';
@@ -519,7 +522,8 @@ function buildChips() {
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', `${s.name} (${s.cls})`);
     // name in plain white; the stripe shows the paint chosen for that car (set in renderPaints)
-    b.innerHTML = `<span class="n">${s.short || s.number}</span><span class="sw"></span><span class="pr"></span>${!s.free ? '<svg class="pl" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg>' : ''}`;
+    // colour bar, name, then the state on the right (padlock + price, GRÁTIS, or a check)
+    b.innerHTML = `<span class="sw"></span><span class="n">${s.short || s.number}</span>${!s.free ? '<svg class="pl" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg>' : ''}<span class="pr"></span>`;
     b.onclick = () => { const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
     b.ondblclick = () => startDrive();
     wrapEl.appendChild(b);
@@ -546,16 +550,16 @@ function updateSelect() {
     statRow(t('stat.rear'), (st.drift - 0.4) / 1.1, t(st.drift >= 1.2 ? 'rear.loose' : st.drift >= 0.85 ? 'rear.neutral' : 'rear.firm')) +
     statRow(t('stat.mass'), st.mass / 4400, `${st.mass} kg`);
   const bal = acct.bal(), signed = acct.signed();
-  // every locked chip wears its price (green once affordable)
+  // every chip shows its state: price when locked (green once affordable), GRÁTIS, or a check when owned
   [...$('sel-chips').children].forEach((c, i) => {
     const hs = HERO_SPECS[i], lk = locked(hs), p = priceOf(hs.id);
     c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); c.classList.toggle('locked', lk);
     c.classList.toggle('can', lk && signed && p > 0 && bal >= p);
+    c.classList.toggle('free', !!hs.free);
+    c.classList.toggle('own', !hs.free && !lk);
     const pr = c.querySelector('.pr');
-    if (pr) pr.textContent = lk && p ? ncpShort(p) : '';
+    if (pr) pr.textContent = hs.free ? t('wl.free') : lk ? (p ? ncpShort(p) : '') : '✓';
   });
-  const chip = $('sel-chips').children[selIndex];
-  if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   // the balance, always in sight (opens "yen and garage")
   $('sel-wallet').classList.toggle('guest', !signed);
   $('sel-wallet-label').textContent = t(signed ? 'wc.yourYen' : 'wl.guestLabel');
@@ -1365,6 +1369,12 @@ window.addEventListener('keydown', e => {
   } else if (state === 'select') {
     if (e.code === 'ArrowRight' || e.code === 'KeyD') { selIndex = (selIndex + 1) % HERO_SPECS.length; updateSelect(); $('sel-chips').children[selIndex].focus(); audio.selectChime(selIndex, true); }
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') { selIndex = (selIndex - 1 + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); $('sel-chips').children[selIndex].focus(); audio.selectChime(selIndex, false); }
+    // up / down: the tier above or below (same column)
+    if (e.code === 'ArrowDown' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'KeyS') {
+      e.preventDefault();
+      const down = e.code === 'ArrowDown' || e.code === 'KeyS';
+      selIndex = tierStep(selIndex, down); updateSelect(); $('sel-chips').children[selIndex].focus(); audio.selectChime(selIndex, down);
+    }
     if (e.code === 'Enter' && document.activeElement && document.activeElement.classList.contains('chip')) { e.preventDefault(); startDrive(); }
     const dg = /^(Digit|Numpad)([1-7])$/.exec(e.code);
     if (dg) choosePaint(+dg[2] - 1);
@@ -1393,6 +1403,7 @@ function padMenus() {
   }
   if (state === 'select' && !settingsOpen && !isAccountOpen() && !isOnlineOpen() && !isFriendsOpen() && !isWalletOpen()) {
     if (right || left) { selIndex = (selIndex + (right ? 1 : -1) + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); audio.selectChime(selIndex, right); }
+    if (up || down) { selIndex = tierStep(selIndex, down); updateSelect(); audio.selectChime(selIndex, down); }
     const lb = input.padPressed(4), rb = input.padPressed(5);
     if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
     if (a || start) startDrive();
