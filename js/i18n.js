@@ -37,12 +37,13 @@ export function t(key, vars) {
 }
 
 // page text: data-i18n (textContent), data-i18n-html (markup), data-i18n-aria (aria-label),
-// data-i18n-content (meta content)
+// data-i18n-content (meta content), data-i18n-ph (placeholder)
 export function applyDom(root = document) {
   for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of root.querySelectorAll('[data-i18n-html]')) el.innerHTML = t(el.dataset.i18nHtml);
   for (const el of root.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
   for (const el of root.querySelectorAll('[data-i18n-content]')) el.setAttribute('content', t(el.dataset.i18nContent));
+  for (const el of root.querySelectorAll('[data-i18n-ph]')) el.setAttribute('placeholder', t(el.dataset.i18nPh));
 }
 
 // decimal comma in Portuguese
@@ -166,6 +167,19 @@ const DICT = {
     'on.err.net': 'Não foi possível conectar ao online. Tente de novo.',
     'on.players': 'Jogadores na sala', 'on.playersRoom': 'Sala {room} · {n}/{max}',
     'on.colName': 'Jogador', 'on.colCar': 'Carro', 'on.colDist': 'Distância', 'on.colSpeed': 'Velocidade', 'on.you': 'você',
+    'title.friends': 'Amigos', 'fr.title': 'Amigos', 'fr.sub': 'Quem está online e onde está rodando',
+    'fr.namePh': 'Nome do jogador', 'fr.add': 'Adicionar', 'fr.note': 'Amigos veem se você está online e em qual sala está.',
+    'fr.badName': 'O nome tem de 3 a 20 letras, números ou _.', 'fr.err.notFound': 'Não existe jogador com o nome {name}.',
+    'fr.err.self': 'Esse é você.', 'fr.err.tooManyReq': 'Você tem pedidos demais esperando resposta.', 'fr.err.tooMany': 'Sua lista de amigos está cheia (200).',
+    'fr.res.sent': 'Pedido enviado para {name}.', 'fr.res.accepted': 'Você e {name} agora são amigos!',
+    'fr.res.already_friends': 'Vocês já são amigos.', 'fr.res.already_sent': 'Você já pediu, falta {name} aceitar.',
+    'fr.requests': 'Pedidos de amizade', 'fr.wantsYou': 'quer ser seu amigo', 'fr.accept': 'Aceitar', 'fr.decline': 'Recusar',
+    'fr.online': 'Online', 'fr.noneOnline': 'Nenhum amigo online agora.', 'fr.noFriends': 'Você ainda não tem amigos aqui. Adicione pelo nome de jogador.',
+    'fr.join': 'Entrar na sala', 'fr.remove': 'Desfazer amizade', 'fr.removeSure': 'Remover?', 'fr.offline': 'Offline',
+    'fr.seen': 'visto {when}', 'fr.sent': 'Pedidos enviados', 'fr.waiting': 'esperando resposta', 'fr.cancel': 'Cancelar',
+    'fr.never': 'há muito tempo', 'fr.agoMin': 'há {n} min', 'fr.agoH': 'há {n} h', 'fr.agoD': 'há {n} dias',
+    'fr.inRoom': 'Online na sala {room}', 'fr.driving': 'Dirigindo', 'fr.inMenu': 'No menu',
+    'fr.cameOnline': '{name} ficou online', 'fr.newRequest': '{name} quer ser seu amigo (Amigos no menu)', 'fr.accepted': '{name} aceitou seu pedido de amizade',
     'cred.legal': 'Termos e privacidade',
     // account
     'acc.premiumBadge': 'Coleção completa', 'acc.statCoins': 'Ienes', 'acc.garage': 'Garagem', 'acc.favCar': 'Último carro:',
@@ -309,6 +323,19 @@ const DICT = {
     'on.err.net': "Couldn't connect to online. Try again.",
     'on.players': 'Players in the room', 'on.playersRoom': 'Room {room} · {n}/{max}',
     'on.colName': 'Player', 'on.colCar': 'Car', 'on.colDist': 'Distance', 'on.colSpeed': 'Speed', 'on.you': 'you',
+    'title.friends': 'Friends', 'fr.title': 'Friends', 'fr.sub': "Who's online and where they're driving",
+    'fr.namePh': 'Player name', 'fr.add': 'Add', 'fr.note': 'Friends see whether you are online and which room you are in.',
+    'fr.badName': 'Names have 3 to 20 letters, digits or _.', 'fr.err.notFound': 'There is no player called {name}.',
+    'fr.err.self': "That's you.", 'fr.err.tooManyReq': 'You have too many requests waiting for an answer.', 'fr.err.tooMany': 'Your friend list is full (200).',
+    'fr.res.sent': 'Request sent to {name}.', 'fr.res.accepted': 'You and {name} are now friends!',
+    'fr.res.already_friends': 'You are already friends.', 'fr.res.already_sent': 'Already asked: waiting for {name} to accept.',
+    'fr.requests': 'Friend requests', 'fr.wantsYou': 'wants to be your friend', 'fr.accept': 'Accept', 'fr.decline': 'Decline',
+    'fr.online': 'Online', 'fr.noneOnline': 'No friends online right now.', 'fr.noFriends': 'No friends here yet. Add one by player name.',
+    'fr.join': 'Join room', 'fr.remove': 'Unfriend', 'fr.removeSure': 'Remove?', 'fr.offline': 'Offline',
+    'fr.seen': 'seen {when}', 'fr.sent': 'Sent requests', 'fr.waiting': 'waiting for an answer', 'fr.cancel': 'Cancel',
+    'fr.never': 'a long time ago', 'fr.agoMin': '{n} min ago', 'fr.agoH': '{n} h ago', 'fr.agoD': '{n} days ago',
+    'fr.inRoom': 'Online in room {room}', 'fr.driving': 'Driving', 'fr.inMenu': 'In the menus',
+    'fr.cameOnline': '{name} is online', 'fr.newRequest': '{name} wants to be your friend (Friends in the menu)', 'fr.accepted': '{name} accepted your friend request',
     'cred.legal': 'Terms and privacy',
     // account
     'acc.premiumBadge': 'Full collection', 'acc.statCoins': 'Yen', 'acc.garage': 'Garage', 'acc.favCar': 'Last car:',

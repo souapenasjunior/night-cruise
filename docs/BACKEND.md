@@ -179,8 +179,16 @@ Não existe nenhuma compra com dinheiro real: o Mercado Pago foi removido (funç
 ## Arquivos dos carros premium (Storage privado)
 
 - Os modelos dos carros premium **não ficam no site**: estão no bucket privado `premium` do Supabase Storage, uma pasta por carro (`premium/p_r34/p_r34.json` + texturas `.webp`).
-- Só quem tem o carro liberado (`car_unlocks`) consegue ler a pasta (política "premium cars: owners read"). O jogo pede links assinados válidos por 7 dias (`premiumFiles` em `js/account.js`).
-- Quem não tem o carro vê a foto dele (`img/shop/<id>.webp`) na seleção.
+- Qualquer pessoa pode ler a pasta (política "premium cars: everyone reads"), para a seleção mostrar todo carro girando em 3D, até os bloqueados e para visitantes sem conta. Dirigir continua exigindo ter o carro (`start_drive` e a sala online conferem `car_unlocks`). O jogo pede links assinados válidos por 7 dias (`premiumFiles` em `js/account.js`).
+- A foto do carro (`img/shop/<id>.webp`) só aparece se o modelo não carregar.
 - `models/p_*` está no `.gitignore`: os arquivos ficam no seu PC para testes locais (`localhost:8765/#debug` → `__nc.devUnlock()`).
 - Para atualizar um carro depois de reconstruí-lo, rode dentro da pasta com as subpastas de cada carro:
   `npx.cmd supabase storage cp -r p_r34 ss:///premium/p_r34 --linked --experimental --workdir <pasta do jogo>`
+
+## Amigos e quem está online
+
+- **Tabelas:** `friendships` (um par por linha, `pending` até o outro aceitar) e `presence` (o que cada jogador está fazendo agora). Ninguém escreve nelas direto; o jogador só lê as próprias amizades.
+- **Funções:** `friend_request(nome)` (se o outro já tinha pedido, viram amigos na hora), `friend_respond(id, aceitar)`, `friend_remove(id)` (desfaz amizade ou cancela pedido), `my_friends()` (lista com status), `heartbeat(atividade, sala, carro)` e `go_offline()`.
+- **Online:** o jogo manda `heartbeat` a cada ~45 s (e logo que algo muda); some da lista 2 min sem sinal, ou na hora ao fechar a aba / sair da conta. Só amigos aceitos veem atividade, carro e sala (inclusive o código de sala privada, para poderem entrar junto).
+- **Limites:** 30 pedidos pendentes enviados e 200 amigos por conta.
+- Código do jogo: `js/friends.js` (painel "Amigos" no menu inicial e na pausa).

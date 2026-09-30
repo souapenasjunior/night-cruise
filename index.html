@@ -128,6 +128,32 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .lock small:empty { display: none; }
 #sel-go.buy { background: linear-gradient(180deg, #ffc35c, #ff9f1c); color: #1a1206; box-shadow: 0 0 24px rgba(255, 170, 40, 0.35); }
 #sel-go.short { opacity: 0.75; }
+/* friends: add by name, requests, who is online (and where), who is not */
+#friends .panel { width: min(600px, 100%); }
+.fr-body { overflow-y: auto; padding: 16px 22px 18px; display: grid; gap: 10px; align-content: start; }
+.fr-add { display: flex; gap: 8px; }
+.fr-add input { flex: 1; min-width: 0; font: 600 16px/1 var(--body); padding: 9px 12px; background: #0a0d17; color: var(--text); border: 1px solid var(--line); }
+.fr-add input:focus { outline: none; border-color: var(--sodium); }
+.fr-msg { margin: 0; color: #ffd28a; font-size: 13px; }
+.fr-msg.bad { color: #ff8a80; }
+.fr-msg:empty { display: none; }
+#fr-list h3 { margin: 14px 0 6px; display: flex; gap: 8px; align-items: baseline; color: var(--dim); font: 700 11px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
+#fr-list h3 b { color: var(--text); }
+.fr-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); margin-bottom: 6px; }
+.fr-row.on { border-color: rgba(90, 220, 140, 0.35); }
+.fr-row.off { opacity: 0.72; }
+.fr-av { flex: none; width: 34px; height: 34px; display: grid; place-items: center; font: 800 14px/1 var(--display); font-style: normal; text-transform: uppercase; color: #fff; background: linear-gradient(135deg, var(--a1), var(--a2)); }
+.fr-who { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.fr-who b { font: 800 17px/1.1 var(--display); letter-spacing: 0.03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+.fr-who span { color: var(--dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-row.on .fr-who span { color: #9fd6b7; }
+.fr-dot { width: 8px; height: 8px; border-radius: 50%; background: #3fe07a; box-shadow: 0 0 8px #3fe07a; flex: none; }
+.fr-acts { display: flex; gap: 6px; flex: none; }
+.fr-x { min-width: 34px; padding-left: 8px; padding-right: 8px; }
+.fr-x.sure { color: #ff8a80; border-color: #ff8a80; }
+.fr-empty { margin: 0 0 6px; color: var(--dim); font-size: 13px; }
+/* the number of friends online + requests, on the menu button */
+.menu-btn[data-badge]:not([data-badge=""])::after { content: attr(data-badge); display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 10px; padding: 0 5px; border-radius: 10px; background: #3fe07a; color: #06140b; font: 800 12px/1 var(--body); vertical-align: middle; }
 /* online: room picker and the HUD badge */
 #online .panel { width: min(640px, 100%); }
 .on-body { overflow-y: auto; padding: 18px 22px 20px; display: grid; gap: 14px; align-content: start; }
@@ -401,6 +427,7 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
   <nav id="title-nav">
     <button class="menu-btn primary" id="btn-play" data-i18n="title.play">Jogar</button>
     <button class="menu-btn" id="btn-online" data-i18n="title.online">Online</button>
+    <button class="menu-btn" id="btn-friends" data-i18n="title.friends" hidden>Amigos</button>
     <button class="menu-btn" id="btn-settings" data-i18n="title.settings">Configurações</button>
     <button class="menu-btn" id="btn-account" hidden>Entrar</button>
     <button class="menu-btn" id="btn-credits" data-i18n="title.credits">Créditos</button>
@@ -530,6 +557,21 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
   </div>
 </div>
 
+<div id="friends" class="screen scrim" hidden>
+  <div class="panel" role="dialog" aria-labelledby="fr-title">
+    <header><h2 id="fr-title" data-i18n="fr.title">Amigos</h2><span class="chipinfo" data-i18n="fr.sub">Quem está online e onde está rodando</span></header>
+    <div class="fr-body">
+      <form id="fr-add" class="fr-add" novalidate>
+        <input id="fr-name" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Nome do jogador" data-i18n-ph="fr.namePh" aria-label="Nome do jogador" data-i18n-aria="fr.namePh">
+        <button class="btn small go" type="submit" data-i18n="fr.add">Adicionar</button>
+      </form>
+      <p class="fr-msg" id="fr-msg" role="status" aria-live="polite"></p>
+      <div id="fr-list"></div>
+    </div>
+    <footer><span class="chipinfo" data-i18n="fr.note">Amigos veem se você está online e em qual sala está.</span><button class="btn small" id="fr-close" data-i18n="close">Fechar</button></footer>
+  </div>
+</div>
+
 <div id="account" class="screen scrim" hidden>
   <div class="panel" role="dialog" aria-labelledby="acct-title">
     <header><h2 id="acct-title">Conta</h2><span class="chipinfo" id="acct-sub"></span></header>
@@ -650,6 +692,7 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
         <button class="menu-btn" id="p-car" data-i18n="pause.car">Trocar de carro</button>
         <button class="menu-btn" id="p-reset" data-i18n="pause.reset">Voltar para a pista</button>
         <button class="menu-btn" id="p-settings" data-i18n="pause.settings">Configurações</button>
+        <button class="menu-btn" id="p-friends" data-i18n="title.friends" hidden>Amigos</button>
         <button class="menu-btn" id="p-online" data-i18n="pause.leaveOnline" hidden>Sair do online</button>
         <button class="menu-btn" id="p-title" data-i18n="pause.menu">Menu inicial</button>
       </nav>
@@ -685,8 +728,8 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.21.1';
-  var MODULES = ['account', 'audio', 'cars', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
+  var V = '1.22.0';
+  var MODULES = ['account', 'audio', 'cars', 'friends', 'glbcars', 'hud','i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',

@@ -95,6 +95,7 @@ await fails(as('anon', {}, tx => tx.query("select public.set_username('hacker')"
 await fails(as('anon', {}, tx => tx.query('select public.delete_my_account()')), /permission denied/, 'anon cannot call delete_my_account');
 await as('anon', {}, async tx => {
   ok((await tx.query("select public.username_available('Kaiju_Driver') v")).rows[0].v === false, 'username_available: taken');
+  ok((await tx.query("select public.username_available('KAIJU_DRIVER') v")).rows[0].v === false, 'username_available: taken in any case');
   ok((await tx.query("select public.username_available('fresh_name') v")).rows[0].v === true, 'username_available: free');
   ok((await tx.query("select public.username_available('a b') v")).rows[0].v === false, 'username_available: invalid');
 });
@@ -202,6 +203,46 @@ await as('anon', {}, async tx => { ok((await tx.query("select 1 from storage.obj
 await db.query("update public.drive_sessions set started_at = now() - interval '1 minute' where user_id = $1", [a]);
 await fails(as(...player(a), tx => tx.query("select public.start_drive('p_r34')")), /car_locked/, 'reading the files does not let anyone drive a car they do not own');
 
+// ------------------------------------------------------------------ friends
+console.log('friends');
+const call = (u, sql, p) => as(...player(u), tx => tx.query(sql, p));
+const friendsOf = async u => (await call(u, 'select * from public.my_friends()')).rows;
+const dName = (await one('select username from public.profiles where id = $1', [d])).username;
+ok((await call(a, "select public.friend_request('night_owl') v")).rows[0].v === 'sent', 'a request by username (any case) is sent');
+ok((await call(a, "select public.friend_request('Night_Owl') v")).rows[0].v === 'already_sent', 'asking twice changes nothing');
+let fa = await friendsOf(a), fc = await friendsOf(c);
+ok(fa.length === 1 && fa[0].status === 'outgoing' && fa[0].username === 'Night_Owl', 'the sender sees it as sent');
+ok(fc.length === 1 && fc[0].status === 'incoming' && fc[0].id === a, 'the other player sees it as a request');
+await fails(call(a, 'select public.friend_respond($1, true)', [c]), /request_not_found/, 'the sender cannot accept their own request');
+await fails(call(a, "select public.friend_request('Kaiju_Driver')"), /cannot_add_self/, 'no adding yourself');
+await fails(call(a, "select public.friend_request('nobody_here')"), /user_not_found/, 'unknown names are refused');
+await fails(call(a, "select public.friend_request('x''; drop table x;--')"), /user_not_found/, 'odd input is refused');
+await call(c, 'select public.heartbeat($1, $2, $3)', ['drive', 'p-ABC123', 'r32']);
+ok(!(await friendsOf(a))[0].online && (await friendsOf(a))[0].room === null, 'before accepting, nothing about where they are is shown');
+await call(c, 'select public.friend_respond($1, true)', [a]);
+fa = await friendsOf(a);
+ok(fa[0].status === 'friend' && fa[0].online === true && fa[0].activity === 'drive' && fa[0].room === 'p-ABC123' && fa[0].car === 'r32', 'friends see each other online: driving, room and car');
+await db.query("update public.presence set seen_at = now() - interval '5 minutes' where user_id = $1", [c]);
+fa = await friendsOf(a);
+ok(fa[0].online === false && fa[0].room === null && !!fa[0].last_seen, 'no heartbeat for 2 minutes: offline (last seen kept)');
+await call(c, 'select public.heartbeat($1, $2, $3)', ['hack', 'evil room', 'nope']);
+ok(JSON.stringify(await one('select activity, room, car from public.presence where user_id = $1', [c])) === JSON.stringify({ activity: 'menu', room: null, car: null }), 'heartbeat cleans what it does not accept');
+await call(c, 'select public.go_offline()');
+ok((await friendsOf(a))[0].online === false, 'leaving the game shows offline at once');
+ok((await call(d, 'select * from public.my_friends()')).rows.length === 0, 'a stranger sees nothing of them');
+await fails(call(d, "insert into public.friendships (a, b, requested_by) values ($1, $2, $1)", [a < d ? a : d, a < d ? d : a]), /permission denied/, 'friendships cannot be written directly');
+await fails(call(d, 'select * from public.presence'), /permission denied/, 'presence cannot be read directly');
+await fails(as('anon', {}, tx => tx.query('select * from public.my_friends()')), /permission denied/, 'visitors have no friends list');
+// a request both ways becomes a friendship; declining removes a request
+await call(d, 'select public.friend_request($1)', ['Kaiju_Driver']);
+ok((await call(a, 'select public.friend_request($1) v', [dName])).rows[0].v === 'accepted', 'asking someone who already asked you makes you friends');
+await call(d, 'select public.friend_remove($1)', [a]);
+ok(!(await friendsOf(a)).some(f => f.id === d), 'unfriending removes it for both');
+await call(d, "select public.friend_request('Night_Owl')");
+await call(c, 'select public.friend_respond($1, false)', [d]);
+ok((await friendsOf(c)).every(f => f.id !== d), 'a declined request is gone');
+await call(b, "select public.friend_request('Kaiju_Driver')");
+
 // ------------------------------------------------------------------ account deletion
 console.log('account deletion');
 await fails(as(...player(b), tx => tx.query('select public.delete_my_account()')), /reauthentication_needed/, 'deletion needs a recent password');
@@ -210,6 +251,7 @@ await as(...player(b, { amr: [{ method: 'password', timestamp: now() - 30 }] }),
 ok(!(await one('select 1 x from auth.users where id = $1', [b])), 'account deleted');
 ok(!(await one('select 1 x from public.profiles where id = $1', [b])) && !(await one('select 1 x from public.player_stats where user_id = $1', [b])), 'and all of its data with it');
 ok(!!(await one('select 1 x from auth.users where id = $1', [a])), 'other accounts untouched');
+ok(!(await friendsOf(a)).some(f => f.id === b), "a deleted account leaves its friends' lists");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

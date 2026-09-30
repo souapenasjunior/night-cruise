@@ -63,8 +63,8 @@ export class Online {
   get connected() { return !!(this.ws && this.ws.readyState === 1 && this.myId); }
   get count() { return this.remotes.size + (this.myId ? 1 : 0); }
 
-  // room: 'auto' (a public room with space), or a private code (6 letters/digits); create: the player
-  // limit of a private room we are creating (2-20)
+  // room: 'auto' (a public room with space), a private code (6 letters/digits), or a room id as friends
+  // see it ('k1-03', 'p-ABC123'); create: the player limit of a private room we are creating (2-20)
   async join(room, carId, create = null) {
     this.leave();
     this.car = carId;
@@ -74,7 +74,8 @@ export class Online {
       const r = await fetch(`${ONLINE_ORIGIN}/api/online/join`).then(x => x.json()).catch(() => null);
       if (!r || !r.room) { this.hooks.status('error', 'net'); return false; }
       id = r.room;
-    } else id = 'p-' + normaliseCode(room);
+    } else if (/^k1-\d{2}$/.test(room)) id = room;
+    else id = 'p-' + normaliseCode(String(room).replace(/^p-/, ''));
     this.want = id;
     this.retry = 0;
     return this.connect();

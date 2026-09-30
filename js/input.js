@@ -7,17 +7,36 @@ export const ACTION_LABELS = {};
 for (const a of ['accel', 'brake', 'left', 'right', 'horn', 'lights', 'lookLeft', 'lookRight', 'camera', 'lookback', 'reset', 'map', 'pause']) {
   Object.defineProperty(ACTION_LABELS, a, { get: () => t('act.' + a), enumerable: true });
 }
-// standard-mapping button names
+// standard-mapping button names: Xbox style, or PlayStation's when a DualShock 4 / DualSense is connected
 export const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →', 'Guide'];
+const PS_NAMES = ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Share', 'Options', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →', 'PS'];
+// 'xbox', 'ps4' or 'ps5': which names to show (the last controller used)
+let padStyle = 'xbox';
+export const getPadStyle = () => padStyle;
+// Sony's USB vendor id is 054c; the DualSense is product 0ce6 / 0df2 (Edge), the DualShock 4 05c4 / 09cc
+export function padStyleOf(id) {
+  const s = String(id || '').toLowerCase();
+  if (/xbox|045e|xinput/.test(s)) return 'xbox'; // ("Xbox Wireless Controller")
+  if (/dualsense|0ce6|0df2/.test(s)) return 'ps5';
+  if (/054c|dualshock|playstation|sony|wireless controller/.test(s)) return 'ps4';
+  return 'xbox';
+}
+const names = () => {
+  if (padStyle === 'xbox') return PAD_NAMES;
+  const n = PS_NAMES.slice();
+  if (padStyle === 'ps5') n[8] = 'Create';
+  return n;
+};
 // the fixed controls (not remappable): driving on the triggers, the left stick and the d-pad's sides
 export const PAD_FIXED_LABELS = {
-  accel: 'RT', brake: 'LT',
+  get accel() { return names()[7]; },
+  get brake() { return names()[6]; },
   get left() { return t('pad.stick') + ' / D-pad ←'; },
   get right() { return t('pad.stick') + ' / D-pad →'; },
 };
 // focus in a field that takes typing (a range slider is not one: arrows still steer the menus)
 export const isTyping = el => !!el && (el.isContentEditable || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button', 'submit'].includes(el.type)));
-export const padName = b => (b === 16 ? t('pad.guide') : PAD_NAMES[b]) || t('pad.button', { n: b });
+export const padName = b => (b === 16 && padStyle === 'xbox' ? t('pad.guide') : names()[b]) || t('pad.button', { n: b });
 
 export function keyName(code) {
   if (!code) return '—';
@@ -74,7 +93,11 @@ export class Input {
       for (const p of pads) if (p && p.connected && p.mapping === 'standard') { pad = p; break; }
     } catch (e) { pad = null; }
     // a newly seen pad starts with its current button state, so held buttons are not "presses"
-    if (pad && (!this.pad || this.pad.index !== pad.index)) this.padPrev = pad.buttons.map(b => b.pressed);
+    if (pad && (!this.pad || this.pad.index !== pad.index)) {
+      this.padPrev = pad.buttons.map(b => b.pressed);
+      const style = padStyleOf(pad.id);
+      if (style !== padStyle) { padStyle = style; if (this.onPadStyle) this.onPadStyle(style); }
+    }
     this.pad = pad;
     // remapping: the next button pressed (not one of the fixed driving controls) is the answer
     if (this.padCapture && pad) {

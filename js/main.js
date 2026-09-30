@@ -21,6 +21,7 @@ import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
 import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken, myName } from './account.js';
 import { Online, newPrivateCode, normaliseCode, isCode, roomLabel } from './online.js';
+import { initFriends, openFriends, closeFriends, isFriendsOpen, friendsChanged } from './friends.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -445,7 +446,7 @@ $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
 // credits and the account panel sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('online').hidden ? $('online') : null; }
+function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('online').hidden ? $('online') : !$('friends').hidden ? $('friends') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -596,7 +597,7 @@ function makeOnline() {
     load: spec => (glbReady(spec.id) ? Promise.resolve(true) : loadCar(spec)),
     model: spec => new CarModel(spec, { hq: false, paint: paintOf(spec) }),
     status: (kind, info) => {
-      if (kind === 'joined') hud.toast(t(isCode(onlineWant) ? 'on.joinedPrivate' : 'on.joined', { room: info.room, n: info.count }));
+      if (kind === 'joined') hud.toast(t(isCode(onlineWant) || /^p-/.test(onlineWant) ? 'on.joinedPrivate' : 'on.joined', { room: info.room, n: info.count }));
       else if (kind === 'player') hud.toast(t(info.joined ? 'on.playerIn' : 'on.playerOut', { name: info.name }));
       else if (kind === 'reconnecting') hud.toast(t('on.reconnecting'));
       else if (kind === 'error') {
@@ -680,6 +681,32 @@ function openPrivate() {
 }
 function setPrivMax(n) { privMax = clamp(n, 2, 20); $('on-max').textContent = privMax; }
 $('btn-online').onclick = openOnline;
+
+// ------------------------------------------------------------------ friends (js/friends.js)
+const driving = () => state === 'drive' || state === 'pause' || state === 'map';
+function makeFriends() {
+  initFriends({
+    // what friends see: in the menus or driving (which car), and the online room
+    presence: () => ({ activity: driving() ? 'drive' : 'menu', room: onlineWant && online.connected ? online.room : null, car: driving() && player ? player.spec.id : null }),
+    carName: id => { const s = HERO_SPECS.find(x => x.id === id); return s ? s.name : id; },
+    roomLabel,
+    join: joinFriendRoom,
+    toast: msg => hud.toast(msg),
+    changed: () => {},
+    closed: () => { const f = focusables()[0]; if (f) f.focus(); },
+  });
+}
+// a friend's room: while driving, straight in with the current car; from the menus, pick a car first
+function joinFriendRoom(room) {
+  if (driving() && player) {
+    leaveOnline();
+    onlineWant = room;
+    online.join(room, player.spec.id);
+    if (state === 'pause') resumeGame();
+  } else playOnline(room);
+}
+$('btn-friends').onclick = openFriends;
+$('p-friends').onclick = openFriends;
 $('on-close').onclick = closeOnline;
 $('on-login').onclick = () => { $('online').hidden = true; openAccount('login', t('on.needAccount')); };
 $('on-auto').onclick = () => playOnline('auto');
@@ -913,6 +940,11 @@ function openSettings() {
   renderOpts();
   setTimeout(() => { const t = $('set-tabs').querySelector('.on'); if (t) t.focus(); }, 30);
 }
+// a PlayStation or Xbox controller plugged in: the button names on screen follow it
+input.onPadStyle = () => {
+  if (settingsOpen && currentTab === 'controls' && !input.padCapture && !input.capture) renderOpts();
+  if (state === 'pause') renderPauseKeys();
+};
 function closeSettings() {
   settingsOpen = false;
   input.capture = input.padCapture = null; // (a remap left waiting)
@@ -1167,6 +1199,10 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); backOnline(); }
     return;
   }
+  if (isFriendsOpen()) {
+    if (e.code === 'Escape') { e.preventDefault(); closeFriends(); }
+    return;
+  }
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
     if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
@@ -1199,7 +1235,7 @@ function padMenus() {
     else if (input.padPressed(3)) bigMap.center(player);
     return;
   }
-  if (state === 'select' && !settingsOpen && !isAccountOpen() && !isOnlineOpen()) {
+  if (state === 'select' && !settingsOpen && !isAccountOpen() && !isOnlineOpen() && !isFriendsOpen()) {
     if (right || left) { selIndex = (selIndex + (right ? 1 : -1) + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); audio.selectChime(selIndex, right); }
     const lb = input.padPressed(4), rb = input.padPressed(5);
     if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
@@ -1218,9 +1254,10 @@ function padMenus() {
     else if (!$('credits').hidden) closeCredits();
     else if (isAccountOpen()) closeAccount();
     else if (isOnlineOpen()) backOnline();
+    else if (isFriendsOpen()) closeFriends();
     else if (state === 'pause') resumeGame();
   }
-  if (start && state === 'pause' && !settingsOpen) resumeGame();
+  if (start && state === 'pause' && !settingsOpen && !isFriendsOpen()) resumeGame();
 }
 
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'drive') pauseGame(); });
@@ -1430,6 +1467,7 @@ async function boot() {
   for (const g of warm) scene.remove(g);
   await step(100, 'Pronto.');
   makeOnline();
+  makeFriends();
   state = 'title';
   showScreen('title');
   lastTime = performance.now();
@@ -1437,7 +1475,7 @@ async function boot() {
   initAccount(S, {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
     // signed in / out, the prices loaded or a car bought: the car select shows the new state
-    changed: () => { if (state === 'select') updateSelect(); },
+    changed: () => { if (state === 'select') updateSelect(); friendsChanged(); },
     cars: () => HERO_SPECS.map(s => ({ id: s.id, name: s.name, short: s.short || s.name, color: s.colors && s.colors.main, premium: !!s.premium })),
     // back from signing in to buy a car: the car select, on that car
     signedIn: () => {

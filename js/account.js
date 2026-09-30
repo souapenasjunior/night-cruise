@@ -101,6 +101,17 @@ export async function accessToken() {
   return data && data.session ? data.session.access_token : null;
 }
 export const myName = () => (profile ? profile.username : '');
+// the database functions as the signed-in player (friends.js), or null signed out
+export const backend = () => (user && sb ? sb : null);
+// for a request sent while the page closes (keepalive fetch): the last known access token
+export const exitRequest = (fn, body) => {
+  if (!user || !token) return;
+  fetch(BACKEND.url + '/rest/v1/rpc/' + fn, {
+    method: 'POST', keepalive: true,
+    headers: { apikey: BACKEND.anonKey, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).catch(() => {});
+};
 export const ownsCar = id => owned.has(id);
 export const priceOf = id => prices.get(id) || 0;
 export const coinBalance = () => (stats ? Number(stats.coins) || 0 : 0);
@@ -237,11 +248,7 @@ async function report() {
 function flushOnExit() {
   const d = drive;
   if (!d || !user || !token || d.time < 1 || performance.now() - d.sentAt < 6000) return;
-  fetch(BACKEND.url + '/rest/v1/rpc/report_drive', {
-    method: 'POST', keepalive: true,
-    headers: { apikey: BACKEND.anonKey, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_session: d.id, p_distance_m: Math.round(d.dist), p_seconds: Math.round(d.time) }),
-  }).catch(() => {});
+  exitRequest('report_drive', { p_session: d.id, p_distance_m: Math.round(d.dist), p_seconds: Math.round(d.time) });
 }
 
 // ------------------------------------------------------------------ captcha (Cloudflare Turnstile)
@@ -487,6 +494,7 @@ function bindUi() {
 
   $('pf-logout').onclick = async () => {
     driveStopped();
+    await sb.rpc('go_offline').then(() => {}, () => {}); // (friends see it at once)
     await sb.auth.signOut({ scope: 'local' });
     show('login');
     say(t('acc.signedOut'));
