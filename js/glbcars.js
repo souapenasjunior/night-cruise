@@ -167,7 +167,8 @@ function prepare(scene, spec) {
   scene.traverse(o => { if (o.isMesh && (test(G.hide, o.name) || test(G.hideMat, matName(o)))) drop.push(o); });
   for (const o of drop) o.parent.remove(o);
   let box = new THREE.Box3().setFromObject(inner);
-  const s = G.length / (box.max.z - box.min.z);
+  // (no G.length: the file is already in metres)
+  const s = G.length ? G.length / (box.max.z - box.min.z) : 1;
   inner.scale.setScalar(s);
   root.updateMatrixWorld(true);
   // wheels: meshes by material / node name, grouped into four corners
@@ -186,7 +187,11 @@ function prepare(scene, spec) {
     if (!isWheel && !isCaliper) return;
     const b = new THREE.Box3().setFromObject(m);
     const c = b.getCenter(new THREE.Vector3());
-    const key = (c.x > cx0 ? 'L' : 'R') + (c.z > cz0 ? 'F' : 'B');
+    // (named wheel nodes: one corner each, so the second rear axle of a truck rolls about its own hub)
+    // (a node with several materials loads as a group of meshes: the group's name is the wheel's)
+    const wn = m.parent && G.wheelNode && G.wheelNode.test(m.parent.name) ? m.parent.name : m.name;
+    const named = isWheel && G.wheelNode ? wn : '';
+    const key = (c.x > cx0 ? 'L' : 'R') + (c.z > cz0 ? 'F' : 'B') + named;
     if (!corners.has(key)) corners.set(key, { key, wheel: [], caliper: [], box: new THREE.Box3() });
     const k = corners.get(key);
     (isWheel ? k.wheel : k.caliper).push(i);
@@ -529,12 +534,21 @@ export function trafficGeometry(spec) {
     if (!Number.isFinite(best) || Math.abs(best - end) > 0.45) best = end;
     return best + (front ? 0.02 : -0.02);
   };
-  const hx = G.lampX || Math.max(0.45, T.W / 2 - 0.32);
-  const hz = face(hx, G.headY, true), tz = face(hx, G.tailY, false);
+  // the lamp glows: where the car's own head / tail lamps are (lampSplit), else at G.headY / G.tailY
+  let head, tail;
+  if (G.headY === undefined && T.head.length && T.tail.length) {
+    const pts = (list, front) => list.map(v => [v.x, v.y, v.z + (front ? 0.03 : -0.03)]);
+    head = pts(T.head, true); tail = pts(T.tail, false);
+  } else {
+    const hx = G.lampX || Math.max(0.45, T.W / 2 - 0.32);
+    const hz = face(hx, G.headY, true), tz = face(hx, G.tailY, false);
+    head = [[hx, G.headY, hz], [-hx, G.headY, hz]];
+    tail = [[hx, G.tailY, tz], [-hx, G.tailY, tz]];
+  }
   return {
     parts,
-    head: [[hx, G.headY, hz], [-hx, G.headY, hz]],
-    tail: [[hx, G.tailY, tz], [-hx, G.tailY, tz]],
+    head,
+    tail,
     sign: null,
     // width from the tyres' outer faces (+ a little body): the bounding box can be widened by mirrors or stray parts
     halfL: T.L / 2, halfW: axles.length ? Math.min(T.W / 2, Math.max(...axles.map(a => a.xOut)) + 0.12) : T.W / 2,

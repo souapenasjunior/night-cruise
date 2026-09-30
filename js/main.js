@@ -14,13 +14,13 @@ import { Traffic } from './traffic.js';
 import { Hud } from './hud.js';
 import { BigMap } from './map.js';
 import { AudioSys } from './audio.js';
-import { Input, ACTION_LABELS, PAD_FIXED_LABELS, padName, keyName } from './input.js';
+import { Input, ACTION_LABELS, padNameAs, padFixedAs, keyName } from './input.js';
 import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
-import { clamp, lerp, damp, wrap, RIDE } from './util.js';
+import { clamp, lerp, damp, wrap } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
 import { initAccount, isAccountOpen, openAccount, closeAccount, isSignedIn, accessToken, myName } from './account.js';
-import { Online, roomLabel } from './online.js';
+import { Online, roomLabel, ONLINE_ORIGIN } from './online.js';
 import { ExhaustFlames } from './flames.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
@@ -120,8 +120,10 @@ const rig = {
       // 0 chase, 1 close, 2 far. The camera is attached to the car (in its smoothed heading frame):
       // no world-space position lag (it used to leave it metres behind at speed) and no speed-driven motion.
       const PRESET = [[5.2, 0.34, 1.35], [3.9, 0.3, 1.0], [8.2, 0.42, 2.3]][camMode];
-      const d = (PRESET[0] + p.halfL * PRESET[1]) * G.camDist * (side ? 1.1 : 1);
-      const h = PRESET[2] + H * 0.55;
+      // (tall vehicles, buses and trucks: further back and higher, to see over the roof)
+      const big = Math.max(0, H - 1.6);
+      const d = (PRESET[0] + p.halfL * PRESET[1] + big * 2.4) * G.camDist * (side ? 1.1 : 1);
+      const h = PRESET[2] + H * 0.55 + big * 0.9;
       this.camY = snap || lookback || side ? p.pos.y + h : damp(this.camY, p.pos.y + h, 10, dt);
       pos.set(p.pos.x - fx * d, this.camY, p.pos.z - fz * d);
       this.pos.copy(pos);
@@ -197,76 +199,6 @@ function renderMirror() {
   renderer.autoClear = true;
 }
 
-// ------------------------------------------------------------------ showroom
-const show = { scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(32, 1, 0.1, 120), models: new Map(), current: null, yaw: 0.7, spin: 0.25, drag: null, t: 0 };
-{
-  const s = show.scene;
-  s.background = new THREE.Color('#090c18');
-  s.fog = new THREE.Fog(0x090c18, 16, 34);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(14, 72), new THREE.MeshStandardMaterial({ color: 0x0f1320, roughness: 0.3, metalness: 0.6 }));
-  floor.rotation.x = -Math.PI / 2;
-  s.add(floor);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(3.9, 3.96, 128), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb23f').multiplyScalar(1.6) }));
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.01;
-  s.add(ring);
-  const ring2 = new THREE.Mesh(new THREE.RingGeometry(4.6, 4.62, 128), new THREE.MeshBasicMaterial({ color: 0x3a4466 }));
-  ring2.rotation.x = -Math.PI / 2;
-  ring2.position.y = 0.01;
-  s.add(ring2);
-  s.add(new THREE.HemisphereLight(0x8a9ad0, 0x101018, 0.35));
-  const key = new THREE.SpotLight(0xffffff, 110, 40, 0.55, 0.8, 1.6);
-  key.position.set(4, 9, 7);
-  s.add(key);
-  const rimA = new THREE.PointLight(0xffa640, 22, 18, 1.8); rimA.position.set(-6, 3.2, -5); s.add(rimA);
-  const rimB = new THREE.PointLight(0x40c8ff, 18, 18, 1.8); rimB.position.set(6, 2.8, -6); s.add(rimB);
-  const top = new THREE.DirectionalLight(0xc8d4ff, 0.45); top.position.set(0, 10, 2); s.add(top);
-}
-// a car's model is fetched the first time it is needed (car select, or another player's car online)
-const carLoads = new Map();
-function loadCar(spec) {
-  if (!carLoads.has(spec.id)) {
-    carLoads.set(spec.id, loadGlbCars([spec]).then(() => true, e => { carLoads.delete(spec.id); console.warn('[car]', spec.id, e && e.message); return false; }));
-  }
-  return carLoads.get(spec.id);
-}
-function showModel(spec) {
-  if (!glbReady(spec.id)) {
-    if (show.current) { show.scene.remove(show.current.group); show.current = null; }
-    $('sel-loading').hidden = false;
-    $('sel-loading').textContent = t('shop.loading');
-    loadCar(spec).then(ok => {
-      if (state !== 'select' || HERO_SPECS[selIndex] !== spec) return;
-      if (ok) updateSelect();
-      else $('sel-loading').textContent = t('shop.loadFail');
-    });
-    return;
-  }
-  $('sel-loading').hidden = true;
-  let m = show.models.get(spec.id);
-  if (!m) { m = new CarModel(spec, { hq: true }); m.setLights({ head: true }); show.models.set(spec.id, m); }
-  if (m.setPaint) m.setPaint(paintOf(spec));
-  if (show.current) show.scene.remove(show.current.group);
-  show.current = m;
-  show.scene.add(m.group);
-}
-function updateShowroom(dt) {
-  show.t += dt;
-  if (!show.drag) show.yaw += dt * show.spin;
-  const m = show.current;
-  // (no model while one is loading; the room stays framed the same)
-  if (m) {
-    m.group.rotation.y = show.yaw;
-    m.group.position.y = RIDE; // (like on the road)
-    m.setLights({ head: true });
-  }
-  const L = m ? m.L : 4.5;
-  const d = 5.8 + L * 0.95;
-  const narrow = innerWidth < 760;
-  show.cam.position.set(narrow ? 0 : -1.3, 2.3 + L * 0.1, d);
-  show.cam.lookAt(narrow ? 0 : -1.9, 0.6 + (narrow ? -0.5 : 0), 0);
-}
-
 // ------------------------------------------------------------------ lamp lights (nearest street lamps get a real light)
 // n lamps lit at once, plus two spare lights so a lamp can fade in while another fades out
 function setLampCount(n) {
@@ -330,8 +262,6 @@ function resize() {
   bloom.resolution.set(w / 2, h / 2);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  show.cam.aspect = w / h;
-  show.cam.updateProjectionMatrix();
   if (traffic) traffic.setGlowScale(renderer, camera);
 }
 window.addEventListener('resize', resize);
@@ -406,7 +336,7 @@ document.addEventListener('pointerdown', (e) => {
 }, true);
 document.addEventListener('pointerup', () => { if (audio.holdTick) setTimeout(() => { audio.holdTick = false; }, 80); }, true);
 document.addEventListener('pointercancel', () => { audio.holdTick = false; }, true);
-$('btn-play').onclick = () => { audio.init(); audio.setVolumes(S.audio); goSelect(); };
+$('btn-play').onclick = () => { audio.init(); audio.setVolumes(S.audio); onlineWant = false; goSelect(); };
 $('btn-settings').onclick = () => { audio.init(); openSettings(); };
 // credits (CC BY 4.0 attribution for the car models)
 function openCredits() {
@@ -416,6 +346,8 @@ function openCredits() {
     const row = document.createElement('div');
     row.className = 'cred';
     const ti = document.createElement('b'); ti.textContent = c.title;
+    // (a pack without an author or link to credit: just its name)
+    if (!c.url) { const a = document.createElement('span'); a.textContent = t('cred.pack'); row.append(ti, a); el.appendChild(row); continue; }
     const a = document.createElement('span'); a.textContent = t('cred.by', { author: c.author });
     const lic = document.createElement('a'); lic.href = 'https://creativecommons.org/licenses/by/4.0/'; lic.target = '_blank'; lic.rel = 'noopener'; lic.textContent = 'CC BY 4.0';
     a.appendChild(lic);
@@ -431,7 +363,7 @@ $('btn-credits').onclick = openCredits;
 $('cred-close').onclick = closeCredits;
 
 // credits and the account panel sit over the title screen: menu navigation stays inside them while open
-function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : !$('online').hidden ? $('online') : null; }
+function overlayOpen() { return !$('credits').hidden ? $('credits') : isAccountOpen() ? $('account') : null; }
 
 // version tag (title and pause)
 $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
@@ -443,59 +375,31 @@ $('title-ver').textContent = $('pause-ver').textContent = versionLabel();
   if (miss.length) console.warn('Night Cruise: modules loaded without ?v (add them to MODULES in index.html):', miss);
 }
 
-// select: body colour (5 per car; the first is the model's original paint)
-const paintIdx = spec => Math.min((S.paintIdx && S.paintIdx[spec.id]) || 0, PAINTS.length - 1);
-// (a car with a livery keeps its original paint: null)
-const paintOf = spec => (spec.livery ? null : PAINTS[paintIdx(spec)].hex);
-function choosePaint(i) {
-  const s = HERO_SPECS[selIndex];
-  if (s.livery || i < 0 || i >= PAINTS.length) return;
-  S.paintIdx = S.paintIdx || {};
-  S.paintIdx[s.id] = i;
-  SET.save(S);
-  const m = show.models.get(s.id);
-  if (m && m.setPaint) m.setPaint(paintOf(s));
-  renderPaints();
-  audio.menuBlip(true);
-}
-function renderPaints() {
-  [...$('sel-chips').children].forEach((c, i) => { const sw = c.querySelector('.sw'); if (sw) sw.style.background = paintOf(HERO_SPECS[i]) || HERO_SPECS[i].colors.main; });
-  const s = HERO_SPECS[selIndex], el = $('sel-paints');
-  el.innerHTML = '';
-  el.parentElement.hidden = !!s.livery;
-  if (s.livery) return;
-  const cur = paintIdx(s);
-  PAINTS.forEach(({ name, hex }, i) => {
-    const b = document.createElement('button');
-    b.className = 'swatch' + (i === cur ? ' on' : '');
-    b.style.background = hex;
-    b.setAttribute('role', 'radio');
-    b.setAttribute('aria-checked', i === cur);
-    b.setAttribute('aria-label', name);
-    b.title = name;
-    b.onclick = () => choosePaint(i);
-    el.appendChild(b);
-  });
-}
+// every car keeps its own paint (textured liveries): no colour choice
+const paintOf = spec => (spec.livery ? null : PAINTS[0].hex);
 
-// select
-// the car grid is seven cars wide: up / down moves a whole row, wrapping around
-const TIER = 7;
-const tierStep = (i, down) => { const n = HERO_SPECS.length; let j = i + (down ? TIER : -TIER); if (j >= n) j = i % TIER; if (j < 0) j = Math.min(n - 1, (Math.ceil(n / TIER) - 1) * TIER + (i % TIER)); return j; };
+// select: the garage. Every car on a card (its class as the tag, its picture, its name), seven to a row
+// on wide screens; arrows move between cards, Enter drives.
+const cols = () => { const g = getComputedStyle($('sel-chips')).gridTemplateColumns.split(' ').filter(Boolean).length; return g || 7; };
+const rowStep = (i, down) => { const n = HERO_SPECS.length, c = cols(); let j = i + (down ? c : -c); if (j >= n) j = i % c; if (j < 0) j = Math.min(n - 1, (Math.ceil(n / c) - 1) * c + (i % c)); return j; };
+const carImg = s => `img/cars/${s.id}.webp?v=${VERSION}`;
 function buildChips() {
   const wrapEl = $('sel-chips');
   wrapEl.innerHTML = '';
   HERO_SPECS.forEach((s, i) => {
     const b = document.createElement('button');
-    b.className = 'chip';
+    b.className = 'card c-' + s.clsKey;
     b.setAttribute('role', 'option');
     b.setAttribute('aria-label', `${s.name} (${s.cls})`);
-    // name in plain white; the stripe shows the paint chosen for that car (set in renderPaints)
-    b.innerHTML = `<span class="sw"></span><span class="n">${s.short || s.number}</span>`;
-    b.onclick = () => { const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
+    b.innerHTML = `<span class="tag"></span><img alt="" loading="lazy" decoding="async"><span class="nm"></span>`;
+    b.querySelector('.tag').textContent = s.cls;
+    b.querySelector('img').src = carImg(s);
+    b.querySelector('.nm').textContent = s.name;
+    b.onclick = () => { if (i === selIndex) { startDrive(); return; } const up = i >= selIndex; selIndex = i; updateSelect(); audio.selectChime(i, up); };
     b.ondblclick = () => startDrive();
     wrapEl.appendChild(b);
   });
+  $('sel-count').textContent = t('sel.count', { n: HERO_SPECS.length });
 }
 function statRow(label, frac, value) {
   return `<div class="stat"><span>${label}</span><span class="track"><i style="width:${Math.round(clamp(frac, 0.04, 1) * 100)}%"></i></span><b>${value}</b></div>`;
@@ -503,6 +407,7 @@ function statRow(label, frac, value) {
 function updateSelect() {
   const s = HERO_SPECS[selIndex];
   $('sel-class').textContent = s.cls;
+  $('sel-class').className = 'tag c-' + s.clsKey;
   $('sel-name').textContent = s.name;
   $('sel-brand').textContent = s.brand;
   $('sel-desc').textContent = s.desc;
@@ -511,37 +416,41 @@ function updateSelect() {
   const unit = S.gameplay.units === 'mph' ? 'mph' : 'km/h';
   const top = S.gameplay.units === 'mph' ? Math.round(st.top * 0.621) : st.top;
   $('sel-stats').innerHTML =
-    // (bars span the garage: 195 to 330 km/h, 0-100 from ~9 s to ~2.5 s)
-    statRow(t('stat.top'), (st.top - 180) / 160, `${top} ${unit}`) +
-    statRow(S.gameplay.units === 'mph' ? '0–60 mph' : '0–100 km/h', (st.accel - 3.8) / 11, `${num(zero100)} s`) +
-    statRow(t('stat.grip'), (st.grip - 0.6) / 0.75, t(st.grip >= 1.05 ? 'grip.high' : st.grip >= 0.88 ? 'grip.mid' : 'grip.low')) +
+    // (bars span the garage: buses at ~100 km/h to the Sport at 305; 0-100 from ~30 s to ~5 s)
+    statRow(t('stat.top'), (st.top - 60) / 250, `${top} ${unit}`) +
+    statRow(S.gameplay.units === 'mph' ? '0–60 mph' : '0–100 km/h', (st.accel - 1) / 8, `${num(zero100)} s`) +
+    statRow(t('stat.grip'), (st.grip - 0.6) / 0.6, t(st.grip >= 1.05 ? 'grip.high' : st.grip >= 0.88 ? 'grip.mid' : 'grip.low')) +
     statRow(t('stat.rear'), (st.drift - 0.4) / 1.1, t(st.drift >= 1.2 ? 'rear.loose' : st.drift >= 0.85 ? 'rear.neutral' : 'rear.firm')) +
-    statRow(t('stat.mass'), st.mass / 4400, `${st.mass} kg`);
-  [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); });  showModel(s);
-  renderPaints();
-  fitSelectInfo();
+    statRow(t('stat.mass'), st.mass / 14000, `${num(st.mass, 0)} kg`);
+  [...$('sel-chips').children].forEach((c, i) => { c.classList.toggle('sel', i === selIndex); c.setAttribute('aria-selected', i === selIndex); });
+  const c = $('sel-chips').children[selIndex];
+  if (c) c.scrollIntoView({ block: 'nearest' });
+  // (every model loads with the game, for the traffic: this is only for a slow connection)
+  $('sel-loading').hidden = glbReady(s.id);
+  if (!glbReady(s.id)) loadCar(s).then(() => { if (state === 'select') updateSelect(); });
+  $('sel-online').hidden = !onlineWant;
   audio.setCar({ ...s.sound, top: s.stats.top });
 }
-// the car details must never run into the car grid below: on short screens drop the description, then
-// the stats
-function fitSelectInfo() {
-  const info = document.querySelector('#select .info'), strip = document.querySelector('#select .strip');
-  if (!info || !strip || $('select').hidden) return;
-  info.classList.remove('fit1', 'fit2');
-  const clash = () => info.getBoundingClientRect().bottom > strip.getBoundingClientRect().top - 4;
-  if (clash()) info.classList.add('fit1');
-  if (clash()) info.classList.add('fit2');
+// a car's model: loaded with the game (the traffic uses every one); fetched here if that failed
+const carLoads = new Map();
+function loadCar(spec) {
+  if (!carLoads.has(spec.id)) {
+    carLoads.set(spec.id, loadGlbCars([spec]).then(() => true, e => { carLoads.delete(spec.id); console.warn('[car]', spec.id, e && e.message); return false; }));
+  }
+  return carLoads.get(spec.id);
 }
-window.addEventListener('resize', () => { if (state === 'select') fitSelectInfo(); });
-// no cars in the game yet: the title says so instead of opening an empty car select
+// no cars in the game: the title says so instead of opening an empty car select
 const noCars = () => !HERO_SPECS.length;
 function goSelect() {
   if (noCars()) { $('title-note').textContent = t('title.noCars'); return false; }
-  selIndex = 0;
+  // (the last car driven)
+  const last = HERO_SPECS.findIndex(s => s.id === S.lastCar);
+  selIndex = last >= 0 ? last : 0;
   state = 'select';
   showScreen('select');
   updateSelect();
   setTimeout(() => { const c = $('sel-chips').children[selIndex]; if (c) c.focus({ preventScroll: true }); }, 40);
+  return true;
 }
 $('sel-back').onclick = () => { if (player) { state = 'pause'; showScreen('pause'); renderPauseKeys(); } else goTitle(); };
 $('sel-go').onclick = () => startDrive();
@@ -613,31 +522,31 @@ function rosterHud(dt) {
   const rh = Math.max(12, Math.min(22, Math.floor((sp.top - 14 - top) / n)));
   el.style.setProperty('--rh', rh + 'px');
 }
-function openOnline() {
-  const signed = isSignedIn();
-  $('on-signin').hidden = signed;
-  $('on-choices').hidden = !signed;
-  $('on-msg').textContent = '';
-  $('online').hidden = false;
-  setTimeout(() => (signed ? $('on-auto') : $('on-login')).focus(), 30);
-}
-function closeOnline() { $('online').hidden = true; $('btn-online').focus(); }
-const isOnlineOpen = () => !$('online').hidden;
-function playOnline() {
-  if (noCars()) { $('on-msg').textContent = t('title.noCars'); return; }
-  onlineWant = true;
-  $('online').hidden = true;
+// Online from the title: straight to the car select, "connecting" on screen meanwhile (the room is
+// joined when the drive starts). Signed out: sign in first, then on to the car select.
+let onlineAfterSignIn = false;
+async function startOnline() {
+  if (noCars()) { $('title-note').textContent = t('title.noCars'); return; }
   audio.init(); audio.setVolumes(S.audio);
+  if (!isSignedIn()) { onlineAfterSignIn = true; openAccount('login', t('on.needAccount')); return; }
+  $('conn-text').textContent = t('on.connecting');
+  $('connecting').hidden = false;
+  const t0 = performance.now();
+  // (a first word with the room server, so a dead connection shows here and not mid-drive)
+  const ok = await fetch(ONLINE_ORIGIN + '/api/online/join').then(r => r.ok, () => false);
+  await new Promise(r => setTimeout(r, Math.max(0, 900 - (performance.now() - t0))));
+  if (!ok) {
+    $('conn-text').textContent = t('on.err.net');
+    await new Promise(r => setTimeout(r, 1600));
+    $('connecting').hidden = true;
+    return;
+  }
+  $('connecting').hidden = true;
+  onlineWant = true;
   goSelect();
 }
-$('btn-online').onclick = openOnline;
-$('on-close').onclick = closeOnline;
-$('on-login').onclick = () => { $('online').hidden = true; openAccount('login', t('on.needAccount')); };
-$('on-auto').onclick = playOnline;
+$('btn-online').onclick = startOnline;
 $('p-online').onclick = () => { leaveOnline(); $('p-online').hidden = true; onlineHud(); hud.toast(t('on.left')); resumeGame(); };
-canvas.addEventListener('pointerdown', e => { if (state === 'select') { show.drag = { x: e.clientX, yaw: show.yaw }; canvas.setPointerCapture(e.pointerId); } });
-canvas.addEventListener('pointermove', e => { if (show.drag) show.yaw = show.drag.yaw + (e.clientX - show.drag.x) * 0.01; });
-canvas.addEventListener('pointerup', () => { show.drag = null; });
 
 function goTitle() {
   leaveOnline();
@@ -653,15 +562,15 @@ function goTitle() {
 // the commands, from the bindings actually in force (remapped or removed ones included): keyboard, and
 // the controller when one is connected; an action with nothing bound is left out
 function renderPauseKeys() {
-  const pad = input.hasPad;
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const kbd = list => list.map(t => `<kbd>${esc(t)}</kbd>`).join('');
-  let html = `<thead><tr><th>${t('keys.action')}</th><th>${t('keys.keyboard')}</th>${pad ? `<th>${t('keys.pad')}</th>` : ''}</tr></thead><tbody>`;
+  let html = `<thead><tr><th>${t('keys.action')}</th><th>${t('keys.keyboard')}</th><th>Xbox</th><th>PlayStation</th></tr></thead><tbody>`;
   for (const action of Object.keys(ACTION_LABELS)) {
     const keys = (S.bindings[action] || []).map(keyName);
-    const btn = PAD_FIXED_LABELS[action] ? [PAD_FIXED_LABELS[action]] : (S.pad[action] || []).map(padName);
-    if (!keys.length && !(pad && btn.length)) continue;
-    html += `<tr><td>${esc(ACTION_LABELS[action])}</td><td>${kbd(keys)}</td>${pad ? `<td>${kbd(btn)}</td>` : ''}</tr>`;
+    const as = style => (padFixedAs(action, style) ? [padFixedAs(action, style)] : (S.pad[action] || []).map(b => padNameAs(b, style)));
+    const xb = as('xbox'), ps = as('ps5');
+    if (!keys.length && !xb.length) continue;
+    html += `<tr><td>${esc(ACTION_LABELS[action])}</td><td>${kbd(keys)}</td><td>${kbd(xb)}</td><td>${kbd(ps)}</td></tr>`;
   }
   $('pause-keys').innerHTML = html + '</tbody>';
 }
@@ -926,7 +835,7 @@ const PAD_ACTIONS = Object.keys(SET.DEFAULT_PAD);
 function renderControls(el) {
   const t = document.createElement('table');
   t.className = 'keys';
-  t.innerHTML = `<thead><tr><th>${tx('keys.action')}</th><th>${tx('keys.keyboard')}</th><th>${tx('keys.pad')}</th></tr></thead>`;
+  t.innerHTML = `<thead><tr><th>${tx('keys.action')}</th><th>${tx('keys.keyboard')}</th><th>${tx('keys.pad')} (Xbox)</th><th>PlayStation</th></tr></thead>`;
   const tb = document.createElement('tbody');
   const refocus = sel => { const again = el.querySelector(sel); if (again) again.focus(); };
   const mk = (text, label, fid, onclick, cls = 'keybtn') => {
@@ -973,7 +882,7 @@ function renderControls(el) {
     if (PAD_ACTIONS.includes(action)) {
       const w2 = document.createElement('span'); w2.className = 'binds';
       const cur = S.pad[action][0];
-      const pb = mk(cur !== undefined ? padName(cur) : '—', tx('ctl.padBtn', { name }), `p:${action}`, () => {
+      const pb = mk(cur !== undefined ? padNameAs(cur, 'xbox') : '—', tx('ctl.padBtn', { name }), `p:${action}`, () => {
         pb.classList.add('wait');
         pb.textContent = tx('ctl.pressBtn');
         input.padCapture = btn => {
@@ -995,9 +904,14 @@ function renderControls(el) {
       td3.appendChild(w2);
     } else {
       td3.className = 'padlab';
-      td3.textContent = PAD_FIXED_LABELS[action];
+      td3.textContent = padFixedAs(action, 'xbox');
     }
-    tr.append(td1, td2, td3);
+    // the same button on a PlayStation controller
+    const td4 = document.createElement('td');
+    td4.className = 'padlab ps';
+    const cur4 = PAD_ACTIONS.includes(action) ? S.pad[action][0] : undefined;
+    td4.textContent = PAD_ACTIONS.includes(action) ? (cur4 !== undefined ? padNameAs(cur4, 'ps5') : '—') : padFixedAs(action, 'ps5');
+    tr.append(td1, td2, td3, td4);
     tb.appendChild(tr);
   }
   t.appendChild(tb);
@@ -1070,10 +984,7 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') { e.preventDefault(); closeAccount(); }
     return;
   }
-  if (isOnlineOpen()) {
-    if (e.code === 'Escape') { e.preventDefault(); closeOnline(); }
-    return;
-  }
+  if (!$('connecting').hidden) return;
 
   if (state === 'title') {
     if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
@@ -1085,11 +996,9 @@ window.addEventListener('keydown', e => {
     if (e.code === 'ArrowDown' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'KeyS') {
       e.preventDefault();
       const down = e.code === 'ArrowDown' || e.code === 'KeyS';
-      selIndex = tierStep(selIndex, down); updateSelect(); $('sel-chips').children[selIndex].focus(); audio.selectChime(selIndex, down);
+      selIndex = rowStep(selIndex, down); updateSelect(); $('sel-chips').children[selIndex].focus(); audio.selectChime(selIndex, down);
     }
-    if (e.code === 'Enter' && document.activeElement && document.activeElement.classList.contains('chip')) { e.preventDefault(); startDrive(); }
-    const dg = /^(Digit|Numpad)([1-7])$/.exec(e.code);
-    if (dg) choosePaint(+dg[2] - 1);
+    if (e.code === 'Enter' && document.activeElement && document.activeElement.classList.contains('card')) { e.preventDefault(); startDrive(); }
     if (e.code === 'Escape') $('sel-back').click();
   } else if (state === 'map') {
     if (e.code === 'Escape' || S.bindings.map.includes(e.code)) { e.preventDefault(); closeMap(); }
@@ -1113,11 +1022,10 @@ function padMenus() {
     else if (input.padPressed(3)) bigMap.center(player);
     return;
   }
-  if (state === 'select' && !settingsOpen && !isAccountOpen() && !isOnlineOpen()) {
+  if (!$('connecting').hidden) return;
+  if (state === 'select' && !settingsOpen && !isAccountOpen()) {
     if (right || left) { selIndex = (selIndex + (right ? 1 : -1) + HERO_SPECS.length) % HERO_SPECS.length; updateSelect(); audio.selectChime(selIndex, right); }
-    if (up || down) { selIndex = tierStep(selIndex, down); updateSelect(); audio.selectChime(selIndex, down); }
-    const lb = input.padPressed(4), rb = input.padPressed(5);
-    if (lb || rb) { const s = HERO_SPECS[selIndex], n = PAINTS.length, cur = paintIdx(s); choosePaint((cur + (rb ? 1 : -1) + n) % n); }
+    if (up || down) { selIndex = rowStep(selIndex, down); updateSelect(); audio.selectChime(selIndex, down); }
     if (a || start) startDrive();
     if (b) $('sel-back').click();
     return;
@@ -1132,7 +1040,6 @@ function padMenus() {
     if (settingsOpen) closeSettings();
     else if (!$('credits').hidden) closeCredits();
     else if (isAccountOpen()) closeAccount();
-    else if (isOnlineOpen()) closeOnline();
     else if (state === 'pause') resumeGame();
   }
   if (start && state === 'pause' && !settingsOpen) resumeGame();
@@ -1275,18 +1182,14 @@ function tick(now) {
   if (mute !== audio.muted) audio.mute(mute);
   // online: the other players keep moving while we pause (ours is sent only while driving)
   if (online && (state === 'drive' || state === 'pause' || state === 'map')) { online.update(dt, state === 'drive' && !settingsOpen ? player : null); onlineHud(); rosterHud(dt); }
-  if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map') {
-    if (state === 'title') { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
-    if (state !== 'pause' && state !== 'map') world.update(dt, camera);
+  // (the car select sits over the city: the title's drone flight, or the paused drive behind it)
+  if (state === 'drive' || state === 'title' || state === 'pause' || state === 'map' || state === 'select') {
+    if (state === 'title' || (state === 'select' && !player)) { audio.idle(false); traffic.update(dt, null, camera); updateDrone(dt); updateLampLights(dt, 0, 0, camera.position.x, camera.position.z); }
+    if (state !== 'pause' && state !== 'map' && !(state === 'select' && player)) world.update(dt, camera);
     renderPass.scene = scene; renderPass.camera = camera;
     if (bloom.enabled) composer.render(); else renderer.render(scene, camera);
     if (state === 'drive' && S.gameplay.mirror && player) renderMirror();
     if (state === 'map') bigMap.draw(player, traffic, onlineWant && online ? online.others() : []);
-  } else if (state === 'select') {
-    updateShowroom(dt);
-    audio.idle(false);
-    renderPass.scene = show.scene; renderPass.camera = show.cam;
-    if (bloom.enabled) composer.render(); else renderer.render(show.scene, show.cam);
   }
   input.endFrame();
 }
@@ -1308,7 +1211,8 @@ async function boot() {
   world = new World(scene, net, S.graphics);
   await step(50, t('load.cars'));
   let nCars = 0;
-  const allCars = [...HERO_SPECS, ...TRAFFIC_GLB];
+  // (the traffic is the same cars: each file once)
+  const allCars = [...HERO_SPECS, ...TRAFFIC_GLB.filter(tg => !HERO_SPECS.some(h => h.id === tg.id))];
   await loadGlbCars(allCars, () => { nCars++; bar.style.width = `${50 + (nCars / allCars.length) * 12}%`; });
   await step(62, t('load.lamps'));
   // environment map from the city itself (reflections on paint, glass and asphalt)
@@ -1321,7 +1225,6 @@ async function boot() {
   const env = pmrem.fromCubemap(cubeRT.texture).texture;
   scene.environment = env;
   scene.environmentIntensity = 0.9;
-  show.scene.environment = env;
   cubeRT.dispose();
   await step(78, t('load.traffic'));
   const counts = SET.TRAFFIC_COUNTS.max;
@@ -1350,6 +1253,8 @@ async function boot() {
   // accounts load after the game is up and never hold it back (nothing happens without a configured backend)
   initAccount(S, {
     settingsApplied: () => { applySettings(); setLang(resolveLang(S.lang)); if (settingsOpen) renderOpts(); },
+    // signed in from the Online button: on to the car select
+    signedIn: () => { if (onlineAfterSignIn && state === 'title') { onlineAfterSignIn = false; startOnline(); } },
   }).catch(e => console.warn('[account]', e && e.message));
   if (location.hash === '#debug') {
     let fake = performance.now();
@@ -1358,7 +1263,6 @@ async function boot() {
       get state() { return state; },
       step(n = 1, ms = 16.7) { for (let i = 0; i < n; i++) { fake = Math.max(fake + ms, performance.now()); tick(fake); } },
       startDrive: () => startDrive(), goSelect: () => goSelect(), parkAtSlot,
-      get show() { return show; },
       selectCar: id => { const i = HERO_SPECS.findIndex(s => s.id === id); if (i >= 0) { selIndex = i; updateSelect(); } return i; },
       pause: () => pauseGame(),
     };

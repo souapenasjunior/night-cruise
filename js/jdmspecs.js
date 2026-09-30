@@ -1,20 +1,51 @@
-// The drivable cars and the traffic: realistic glTF models in models/ (credits in CREDITS below and on
-// the credits screen). There are none at the moment: new cars will be added here.
-//
-// A drivable car looks like this (glb: how to read its file — orientation, real length, which meshes are
-// wheels / calipers / lamps; see glbcars.js):
-//   { id: 'r32', short: 'R32', name: 'Skyline GT-R R32', brand: 'NISSAN', number: '32', cls: 'Grand tourer',
-//     livery: true, colors: { main: '#16171b', accent: '#c9ccd2' },
-//     stats: { top: 255, accel: 6.7, grip: 1.0, drift: 0.85, mass: 1430 },   // accel = 37.7 / real 0-100 s
-//     sound: { type: 'v6', turbo: true, pops: 0.5 }, wheels: {},
-//     glb: { file: 'models/r32.json', rotY: 0, length: 4.55, paint: /^paint$/, wheel: /^(tyre|rims)$/,
-//            headMat: /^headlights$/, tailMat: /^rear_lights$/, exhaust: [[0.53, 0.3]] } }
-// (its class and description texts: cls.* and car.<id> in i18n.js)
+// The drivable cars, which are also the traffic: two generic packs (passenger cars and civil service
+// vehicles), prepared from their FBX files (ncmodels/gen: convert.html, build3.mjs) into models/<id>.json
+// + WebP textures: facing +z, metres, tyres on y = 0, every wheel its own node (wheel_*), so they roll.
+// Each keeps its own paint (textured): there is no colour choice. The card pictures of the car select are
+// img/cars/<id>.webp. Names are the packs' own.
 import { t } from './i18n.js';
 
-export const JDM_SPECS = [];
+const PASS = 'Generic Passenger Car Pack', CIVIL = 'Generic Civil Service Vehicles Pack';
+// [id, name, class, pack, stripe colour, stats, sound, traffic: [weight, v min, v max, heavy]]
+// stats: top km/h; accel = 37.7 / 0-100 km/h s (the heavy ones a little livelier than the real thing);
+// grip; drift (how loose the rear is); mass kg
+const CARS = [
+  ['g_compact', 'Compact', 'street', PASS, '#39c6d6', { top: 170, accel: 3.3, grip: 0.88, drift: 0.95, mass: 1000 }, { type: 'i4vtec', pops: 0.2 }, [12, 72, 100]],
+  ['g_hatchback', 'Hatchback', 'street', PASS, '#e8d21c', { top: 185, accel: 3.8, grip: 0.9, drift: 1.0, mass: 1150 }, { type: 'i4sr', pops: 0.3 }, [12, 75, 108]],
+  ['g_sedan', 'Sedan', 'street', PASS, '#b3a33a', { top: 200, accel: 4.0, grip: 0.9, drift: 0.95, mass: 1450 }, { type: 'v6', pops: 0.2 }, [14, 78, 110]],
+  ['g_wagon', 'Wagon', 'street', PASS, '#4f9aa8', { top: 195, accel: 3.8, grip: 0.9, drift: 0.95, mass: 1550 }, { type: 'i4turbo', turbo: true, pops: 0.3 }, [10, 76, 106]],
+  ['g_coupe', 'Coupe', 'sports', PASS, '#2446c8', { top: 235, accel: 5.4, grip: 0.96, drift: 1.35, mass: 1350 }, { type: 'v8', pops: 0.9 }, [6, 80, 115]],
+  ['g_sport', 'Sport', 'sports', PASS, '#d4262c', { top: 305, accel: 8.6, grip: 1.12, drift: 1.05, mass: 1300 }, { type: 'v10', pops: 0.9 }, [3, 85, 120]],
+  ['g_minivan', 'Minivan', 'utility', PASS, '#8a1c24', { top: 180, accel: 3.2, grip: 0.82, drift: 0.8, mass: 1950 }, { type: 'v6', pops: 0.1 }, [10, 72, 100]],
+  ['g_suv', 'SUV', 'utility', PASS, '#2a2c32', { top: 190, accel: 4.2, grip: 0.86, drift: 0.85, mass: 2500 }, { type: 'v8', pops: 0.4 }, [10, 76, 106]],
+  ['g_offroad', 'Offroad', 'utility', PASS, '#3f5a2a', { top: 165, accel: 3.4, grip: 0.82, drift: 0.9, mass: 1900 }, { type: 'v6', pops: 0.3 }, [6, 70, 98]],
+  ['g_pickup', 'Pickup', 'utility', PASS, '#1f7a3f', { top: 185, accel: 4.0, grip: 0.84, drift: 1.2, mass: 2400 }, { type: 'v8big', pops: 0.8 }, [8, 74, 104]],
+  ['g_taxi', 'Taxi', 'service', CIVIL, '#f0b21c', { top: 200, accel: 4.1, grip: 0.9, drift: 1.0, mass: 1800 }, { type: 'v8', pops: 0.3 }, [8, 78, 110]],
+  ['g_postvan', 'Post Van', 'service', CIVIL, '#1f3fa8', { top: 150, accel: 2.8, grip: 0.8, drift: 0.85, mass: 2500 }, { type: 'v6', pops: 0.1 }, [4, 70, 95]],
+  ['g_servicetruck', 'Service Truck', 'service', CIVIL, '#d8d8d8', { top: 170, accel: 3.5, grip: 0.84, drift: 1.0, mass: 3000 }, { type: 'v8big', pops: 0.4 }, [3, 70, 98]],
+  ['g_police', 'Police', 'emergency', CIVIL, '#141518', { top: 240, accel: 5.2, grip: 1.0, drift: 1.1, mass: 1800 }, { type: 'v8', pops: 0.7 }, [3, 80, 115]],
+  ['g_ambulance', 'Ambulance', 'emergency', CIVIL, '#e83a2a', { top: 150, accel: 2.6, grip: 0.78, drift: 0.8, mass: 4500 }, { type: 'diesel6', turbo: true }, [2, 72, 98, true]],
+  ['g_firetruck', 'Fire Truck', 'emergency', CIVIL, '#c81c1c', { top: 125, accel: 2.0, grip: 0.72, drift: 0.75, mass: 14000 }, { type: 'diesel6', turbo: true }, [1, 68, 88, true]],
+  ['g_towtruck', 'Tow Truck', 'heavy', CIVIL, '#f0a01c', { top: 130, accel: 2.2, grip: 0.75, drift: 0.8, mass: 8000 }, { type: 'diesel6', turbo: true }, [2, 68, 90, true]],
+  ['g_garbagetruck', 'Garbage Truck', 'heavy', CIVIL, '#1f5a3a', { top: 105, accel: 1.6, grip: 0.7, drift: 0.7, mass: 13000 }, { type: 'diesel6', turbo: true }, [2, 62, 82, true]],
+  ['g_citybus', 'City Bus', 'heavy', CIVIL, '#e6e6e6', { top: 100, accel: 1.5, grip: 0.7, drift: 0.7, mass: 12000 }, { type: 'diesel6', turbo: true }, [3, 62, 82, true]],
+  ['g_schoolbus', 'School Bus', 'heavy', CIVIL, '#f2c21c', { top: 110, accel: 1.6, grip: 0.7, drift: 0.7, mass: 11000 }, { type: 'diesel6', turbo: true }, [2, 62, 84, true]],
+];
+export const JDM_SPECS = CARS.map(([id, name, cls, brand, main, stats, sound]) => ({
+  id, short: name, name, brand, number: '', cls, livery: true,
+  colors: { main, accent: '#141414' }, stats, sound, wheels: {},
+  glb: {
+    file: `models/${id}.json`, rotY: 0, length: null, paint: /^Body$/, wheelNode: /^wheel_/, windowMat: /^Glass$/,
+    // one lamp material (a lamp texture) for every lamp: head / tail told apart by position
+    lampSplit: true, lampMat: /^Optics$/,
+    // traffic: the body tinted by `colors`, the lamp glows where the head / tail lamps are
+    tint: /^Body$/,
+  },
+}));
+// (the files are already in metres: the real length is the file's own)
+for (const s of JDM_SPECS) s.glb.length = undefined;
 
-// body colours offered for every car without a livery (the first one is the default)
+// body colours (unused while every car keeps its own paint; the car select hides the choice)
 export const PAINTS = [
   { name: 'Branco', hex: '#eceef0' },
   { name: 'Preto', hex: '#141518' },
@@ -25,20 +56,25 @@ export const PAINTS = [
   { name: 'Rosa', hex: '#e86aa6' },
 ];
 for (const s of JDM_SPECS) s.paints = PAINTS.map(p => p.hex);
-// class and description follow the language (texts in i18n.js: cls.*, car.<id>)
-const CLS_KEY = { 'Grand tourer': 'cls.gt', Drift: 'cls.drift', Esportivo: 'cls.sports', Superesportivo: 'cls.super', 'Clássico': 'cls.classic', Muscle: 'cls.muscle' };
+// class (the card's tag) and description follow the language (texts in i18n.js: cls.*, car.<id>)
 for (const s of JDM_SPECS) {
-  const ck = CLS_KEY[s.cls];
+  const ck = 'cls.' + s.cls;
+  s.clsKey = s.cls;
   Object.defineProperty(s, 'cls', { get: () => t(ck), enumerable: true });
   Object.defineProperty(s, 'desc', { get: () => t('car.' + s.id), enumerable: true });
 }
 PAINTS.forEach((p, i) => Object.defineProperty(p, 'name', { get: () => t('paint.' + i), enumerable: true }));
 
-// Ordinary traffic drawn from glTF models (instanced). None at the moment: the roads are empty.
-// An entry: { id, weight, v: [min, max] km/h, colors: ['orig', '#1f2a44', ...], shade?, heavy?,
-//             glb: { file, rotY, length, tint: /material/, headY, tailY } }
-export const TRAFFIC_GLB = [];
+// Traffic: every car above, instanced. The passenger cars come in their own paint and three softer
+// shades of it; the service vehicles keep their liveries.
+export const TRAFFIC_GLB = CARS.map(([id, , , brand, , , , [weight, v0, v1, heavy]]) => {
+  const spec = JDM_SPECS.find(s => s.id === id);
+  return { id, weight, v: [v0, v1], heavy: !!heavy, shade: true, colors: brand === PASS ? ['orig', '#c9d2e6', '#e6cfc4', '#c6d6c2'] : ['orig'], glb: spec.glb };
+});
 // procedural traffic types still in use (none)
 export const TRAFFIC_KEEP = [];
-// CC-BY 4.0 attribution (shown on the credits screen)
-export const CREDITS = [];
+// attribution (shown on the credits screen)
+export const CREDITS = [
+  { title: 'Generic Passenger Car Pack', author: '', url: '' },
+  { title: 'Generic Civil Service Vehicles Pack', author: '', url: '' },
+];

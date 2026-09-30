@@ -21,10 +21,10 @@ export function padStyleOf(id) {
   if (/054c|dualshock|playstation|sony|wireless controller/.test(s)) return 'ps4';
   return 'xbox';
 }
-const names = () => {
-  if (padStyle === 'xbox') return PAD_NAMES;
+const names = (style = padStyle) => {
+  if (style === 'xbox') return PAD_NAMES;
   const n = PS_NAMES.slice();
-  if (padStyle === 'ps5') n[8] = 'Create';
+  if (style === 'ps5') n[8] = 'Create';
   return n;
 };
 // the fixed controls (not remappable): driving on the triggers, the left stick and the d-pad's sides
@@ -37,6 +37,9 @@ export const PAD_FIXED_LABELS = {
 // focus in a field that takes typing (a range slider is not one: arrows still steer the menus)
 export const isTyping = el => !!el && (el.isContentEditable || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button', 'submit'].includes(el.type)));
 export const padName = b => (b === 16 && padStyle === 'xbox' ? t('pad.guide') : names()[b]) || t('pad.button', { n: b });
+// the same button, named as on an Xbox or a PlayStation controller (the controls list shows both)
+export const padNameAs = (b, style) => (b === 16 && style === 'xbox' ? t('pad.guide') : names(style)[b]) || t('pad.button', { n: b });
+export const padFixedAs = (action, style) => ({ accel: names(style)[7], brake: names(style)[6], left: t('pad.stick') + ' / D-pad ←', right: t('pad.stick') + ' / D-pad →' })[action];
 
 export function keyName(code) {
   if (!code) return '—';
