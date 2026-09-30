@@ -95,21 +95,6 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 .swatch:hover { transform: scale(1.08); }
 .swatch.on { border-color: var(--sodium); transform: scale(1.15); }
 .swatch:focus-visible { outline: 2px solid var(--sodium); outline-offset: 2px; }
-/* neon underglow: glowing LED dots; off is a struck-out ring; a colour not bought has a padlock */
-.neonrow { display: grid; gap: 7px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); max-width: 420px; }
-.neon-top { display: flex; align-items: baseline; gap: 14px; }
-.neon-name { font: 700 14px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
-.neon-name em { font-style: normal; color: #ffd27a; margin-left: 8px; }
-.swatch.nd { position: relative; border-color: rgba(255, 255, 255, 0.35); background: radial-gradient(circle at 50% 45%, #fff 0 12%, var(--c) 34%, color-mix(in srgb, var(--c) 35%, #000) 100%); box-shadow: 0 0 10px var(--c), 0 0 22px color-mix(in srgb, var(--c) 55%, transparent); }
-.swatch.nd.off { background: #11141f; box-shadow: none; }
-.swatch.nd.off::after { content: ''; position: absolute; left: 50%; top: 3px; bottom: 3px; width: 2px; background: #6d7489; transform: translateX(-50%) rotate(45deg); }
-.swatch.nd .lk { position: absolute; right: -5px; bottom: -5px; width: 13px; height: 13px; padding: 1px; border-radius: 50%; background: #0b0e18; color: #ffd27a; }
-.swatch.nd.fitted { border-color: #fff; }
-.swatch.nd.on { border-color: var(--sodium); transform: scale(1.18); }
-.neon-buy { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.neon-buy[hidden] { display: none; }
-.neon-buy small { color: #cfd4e2; font-size: 12.5px; }
-.neon-buy .btn.short { opacity: 0.75; background: transparent; color: #ffd27a; border-color: rgba(255, 178, 63, 0.5); }
 .stat b { font: 600 12.5px/1 var(--mono); color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
 #select .strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px clamp(16px, 5vw, 72px) calc(18px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(0deg, rgba(7, 9, 18, 0.92), rgba(7, 9, 18, 0)); display: grid; gap: 14px; }
 #select .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
@@ -381,8 +366,6 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 .wl-car .ybar { grid-column: 1 / -1; }
 .wl-car.own .ybar { display: none; }
 #wl-cars { display: grid; gap: 6px; }
-#wl-cars h3 { margin: 12px 0 2px; color: var(--dim); font: 700 11px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
-.wl-dot { display: inline-block; width: 12px; height: 12px; margin-right: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c), 0 0 16px var(--c); vertical-align: 1px; }
 /* the car select: the balance, always in sight (opens the panel) */
 .sel-wallet { all: unset; cursor: pointer; position: absolute; right: clamp(16px, 5vw, 72px); top: calc(clamp(16px, 4vh, 40px) + env(safe-area-inset-top, 0px)); z-index: 2; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 10px 14px; background: rgba(10, 12, 22, 0.72); border: 1px solid rgba(255, 178, 63, 0.4); }
 .sel-wallet small { grid-column: 1; color: #d9b56a; font: 700 10px/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; }
@@ -545,12 +528,6 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
     <p class="desc" id="sel-desc"></p>
     <div class="stats" id="sel-stats"></div>
     <div class="paints"><span class="plabel" data-i18n="sel.paint">Cor</span><div class="swatches" id="sel-paints" role="radiogroup" aria-label="Cor do carro" data-i18n-aria="sel.paintAria"></div></div>
-    <!-- neon underglow: off + the colours; a colour not bought yet is previewed on the car, with its price -->
-    <div class="neonrow">
-      <div class="neon-top"><span class="plabel" data-i18n="neon.label">Neon</span><span class="neon-name" id="sel-neon-name"></span></div>
-      <div class="swatches neons" id="sel-neons" role="radiogroup" aria-label="Neon" data-i18n-aria="neon.label"></div>
-      <div class="neon-buy" id="sel-neon-buy" hidden><button class="btn small go" id="sel-neon-btn"></button><small id="sel-neon-msg"></small></div>
-    </div>
     <div class="sel-loading" id="sel-loading" hidden data-i18n="shop.loading">Carregando o carro…</div>
     <div class="lock" id="sel-lock" hidden>
       <div class="lock-line"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg><span id="sel-lock-text"></span></div>
@@ -850,8 +827,8 @@ button.on-card:hover, button.on-card:focus-visible { border-color: var(--sodium)
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.25.1';
-  var MODULES = ['account', 'audio', 'cars', 'flames', 'friends', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'neon', 'network', 'online',
+  var V = '1.25.2';
+  var MODULES = ['account', 'audio', 'cars', 'flames', 'friends', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'version', 'world'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',

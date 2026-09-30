@@ -185,14 +185,6 @@ Não existe nenhuma compra com dinheiro real: o Mercado Pago foi removido (funç
 - Para atualizar um carro depois de reconstruí-lo, rode dentro da pasta com as subpastas de cada carro:
   `npx.cmd supabase storage cp -r p_r34 ss:///premium/p_r34 --linked --experimental --workdir <pasta do jogo>`
 
-## Neon (luz embaixo do carro)
-
-- **Tabelas:** `neons` (as 5 cores, com preço: hoje ¥ 4.000 cada; catálogo público) e `neon_unlocks` (quem comprou qual cor; cada jogador lê só as suas).
-- **Compra:** `buy_neon(cor)`, igual a `buy_car`: confere se existe, se ainda não é do jogador e o saldo. Cada cor é comprada uma vez e serve em todos os carros.
-- **Qual cor em qual carro:** configuração do jogo (`S.neon[carro]`, sincronizada com a conta). Só vale se a conta tiver a cor.
-- **Online:** a sala recebe a cor junto com o carro e só repassa para os outros se `neon_unlocks` confirmar que a conta tem a cor.
-- **Mudar preço:** `update public.neons set price_coins = 5000 where id = 'pink';` (as cores e o brilho ficam em `js/neon.js`).
-
 ## Amigos e quem está online
 
 - **Tabelas:** `friendships` (um par por linha, `pending` até o outro aceitar) e `presence` (o que cada jogador está fazendo agora). Ninguém escreve nelas direto; o jogador só lê as próprias amizades.

@@ -19,11 +19,10 @@ import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
 import { clamp, lerp, damp, wrap, RIDE } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
-import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken, myName, ownsNeon, neonPrice, buyNeon } from './account.js';
+import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken, myName } from './account.js';
 import { Online, newPrivateCode, normaliseCode, isCode, roomLabel } from './online.js';
 import { initFriends, openFriends, closeFriends, isFriendsOpen, friendsChanged } from './friends.js';
 import { ExhaustFlames } from './flames.js';
-import { NEONS, neonHex, setNeon } from './neon.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -277,7 +276,7 @@ function updateShowroom(dt) {
   // (no model: a locked premium car's picture, or one still loading; the room stays framed the same)
   if (m) {
     m.group.rotation.y = show.yaw;
-    m.group.position.y = RIDE; // (like on the road: the neon sits between the floor and the tyres)
+    m.group.position.y = RIDE; // (like on the road)
     m.setLights({ head: true });
   }
   const L = m ? m.L : 4.5;
@@ -476,7 +475,6 @@ const acct = {
   signed: () => !!fakeAcct || isSignedIn(),
   bal: () => (fakeAcct ? fakeAcct.bal : coinBalance()),
   owns: id => (fakeAcct ? fakeAcct.owned.includes(id) : ownsCar(id)),
-  ownsNeon: id => (fakeAcct ? (fakeAcct.neons || []).includes(id) : ownsNeon(id)),
   name: () => (fakeAcct ? fakeAcct.name : myName()),
 };
 const locked = spec => !spec.free && !acct.owns(spec.id) && !devOwnAll;
@@ -490,89 +488,6 @@ function choosePaint(i) {
   if (m && m.setPaint) m.setPaint(paintOf(s));
   renderPaints();
   audio.menuBlip(true);
-}
-// ------------------------------------------------------------------ neon underglow (js/neon.js)
-// Each colour is bought once (yen) and fits any car; S.neon[carId] says which one a car wears. On the car
-// select a colour not bought yet can be tried on the car (preview) and bought right there.
-let neonPreview = null, neonPreviewCar = null; // a colour being tried on, not owned
-let neonConfirm = null, neonConfirmTimer = 0;
-const neonOwned = id => devOwnAll || acct.ownsNeon(id);
-// the colour a car wears when driven (only one the account owns)
-function fittedNeon(spec) { const n = S.neon && S.neon[spec.id]; return n && neonHex(n) && neonOwned(n) ? n : null; }
-// what the showroom shows: the colour being tried on, else the fitted one
-function shownNeon(spec) { return neonPreview && neonPreviewCar === spec.id ? neonPreview : fittedNeon(spec); }
-function applyShowNeon() {
-  const s = HERO_SPECS[selIndex], m = show.models.get(s.id);
-  if (m) setNeon(m, neonHex(shownNeon(s)));
-}
-function chooseNeon(id) {
-  const s = HERO_SPECS[selIndex];
-  S.neon = S.neon || {};
-  neonConfirm = null;
-  $('sel-neon-msg').textContent = '';
-  if (!id) { delete S.neon[s.id]; neonPreview = null; SET.save(S); }
-  else if (neonOwned(id)) { S.neon[s.id] = id; neonPreview = null; SET.save(S); }
-  else { neonPreview = id; neonPreviewCar = s.id; } // try it on
-  applyShowNeon();
-  renderNeons();
-  audio.menuBlip(true);
-}
-async function buyNeonFlow() {
-  const s = HERO_SPECS[selIndex], id = neonPreview;
-  if (!id) return;
-  if (!isSignedIn()) { openAccount('login', t('coins.signIn')); return; }
-  const price = neonPrice(id), bal = coinBalance(), name = t('neon.' + id);
-  if (bal < price) { $('sel-neon-msg').textContent = t('coins.notEnoughHint', { missing: yen(price - bal) }); return; }
-  if (neonConfirm !== id) {
-    neonConfirm = id;
-    clearTimeout(neonConfirmTimer);
-    neonConfirmTimer = setTimeout(() => { neonConfirm = null; if (state === 'select') renderNeons(); }, 5000);
-    $('sel-neon-msg').textContent = t('neon.confirmHint', { name });
-    renderNeons();
-    return;
-  }
-  neonConfirm = null;
-  $('sel-neon-msg').textContent = t('acc.wait');
-  const err = await buyNeon(id);
-  if (err) { $('sel-neon-msg').textContent = err; return; }
-  // bought: fitted on this car straight away
-  S.neon = S.neon || {};
-  S.neon[s.id] = id;
-  SET.save(S);
-  neonPreview = null;
-  if (state === 'select') { updateSelect(); $('sel-neon-msg').textContent = t('neon.bought', { name }); }
-}
-$('sel-neon-btn').onclick = () => buyNeonFlow();
-function renderNeons() {
-  const s = HERO_SPECS[selIndex], el = $('sel-neons');
-  if (neonPreviewCar !== s.id) { neonPreview = null; neonConfirm = null; }
-  const shown = shownNeon(s), fitted = fittedNeon(s), signed = acct.signed(), bal = acct.bal();
-  const lockSvg = '<svg class="lk" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7zm2 0h4V5a2 2 0 0 0-4 0z" fill="currentColor"/></svg>';
-  el.innerHTML = '';
-  for (const n of [{ id: null }, ...NEONS]) {
-    const b = document.createElement('button');
-    const owned = !n.id || neonOwned(n.id), name = t('neon.' + (n.id || 'off'));
-    b.className = 'swatch nd' + (n.id ? '' : ' off') + (n.id === shown || (!n.id && !shown) ? ' on' : '') + (n.id && n.id === fitted ? ' fitted' : '');
-    if (n.id) b.style.setProperty('--c', n.hex);
-    b.setAttribute('role', 'radio');
-    b.setAttribute('aria-checked', n.id === shown || (!n.id && !shown));
-    b.setAttribute('aria-label', owned ? name : `${name} · ${yen(neonPrice(n.id))}`);
-    b.title = owned ? name : `${name} · ${yen(neonPrice(n.id))}`;
-    if (!owned) b.innerHTML = lockSvg;
-    b.onclick = () => chooseNeon(n.id);
-    el.appendChild(b);
-  }
-  const trying = !!(neonPreview && !neonOwned(neonPreview));
-  $('sel-neon-name').innerHTML = '';
-  $('sel-neon-name').textContent = t('neon.' + (shown || 'off'));
-  if (trying) { const em = document.createElement('em'); em.textContent = yen(neonPrice(neonPreview)); $('sel-neon-name').appendChild(em); }
-  $('sel-neon-buy').hidden = !trying;
-  if (trying) {
-    const p = neonPrice(neonPreview), btn = $('sel-neon-btn');
-    btn.textContent = !signed ? t('coins.signInBtn') : neonConfirm === neonPreview ? t('coins.confirm', { price: yen(p) }) : bal >= p ? t('neon.buy', { price: yen(p) }) : t('coins.short', { missing: yen(p - bal) });
-    btn.classList.toggle('short', signed && bal < p);
-    if (!$('sel-neon-msg').textContent) $('sel-neon-msg').textContent = t('neon.hint');
-  } else $('sel-neon-msg').textContent = '';
 }
 function renderPaints() {
   [...$('sel-chips').children].forEach((c, i) => { const sw = c.querySelector('.sw'); if (sw) sw.style.background = paintOf(HERO_SPECS[i]) || HERO_SPECS[i].colors.main; });
@@ -659,8 +574,6 @@ function updateSelect() {
   if (!lk || selMsgCar !== s.id) $('sel-msg').textContent = '';
   showModel(s);
   renderPaints();
-  renderNeons();
-  applyShowNeon();
   fitSelectInfo();
   audio.setCar({ ...s.sound, top: s.stats.top });
 }
@@ -709,7 +622,7 @@ function makeOnline() {
     token: accessToken,
     spec: id => HERO_SPECS.find(s => s.id === id),
     load: spec => (glbReady(spec.id) ? Promise.resolve(true) : loadCar(spec)),
-    model: (spec, neon) => { const m = new CarModel(spec, { hq: false, paint: paintOf(spec) }); m.flames = new ExhaustFlames(m, spec); setNeon(m, neonHex(neon)); return m; },
+    model: spec => { const m = new CarModel(spec, { hq: false, paint: paintOf(spec) }); m.flames = new ExhaustFlames(m, spec); return m; },
     status: (kind, info) => {
       if (kind === 'joined') hud.toast(t(isCode(onlineWant) || /^p-/.test(onlineWant) ? 'on.joinedPrivate' : 'on.joined', { room: info.room, n: info.count }));
       else if (kind === 'player') hud.toast(t(info.joined ? 'on.playerIn' : 'on.playerOut', { name: info.name }));
@@ -948,13 +861,6 @@ function openWallet() {
     const bar = !own && signed && p ? `<div class="ybar${bal >= p ? ' full' : ''}"><i style="width:${Math.min(100, (bal / p) * 100)}%"></i></div>` : '';
     html += `<button class="wl-car${own ? ' own' : ''}" data-id="${s.id}"><div class="nm"><b>${esc(s.name)}</b><span>${esc(s.cls)} · ${top} ${unit}${sub}</span></div><div class="st">${st}</div>${bar}</button>`;
   }
-  // neon: the colours, bought once for every car
-  html += `<h3>${t('wl.neon')}</h3>`;
-  for (const n of NEONS) {
-    const own = neonOwned(n.id), p = neonPrice(n.id);
-    const sub = own ? t('wl.neonAll') : !signed || !p ? '' : bal >= p ? `<span style="color:#7ee2a2">${t('wc.canBuy')}</span>` : t('wc.missing', { missing: yen(p - bal) });
-    html += `<button class="wl-car wl-neon${own ? ' own' : ''}" data-neon="${n.id}"><div class="nm"><b><i class="wl-dot" style="--c:${n.hex}"></i>${esc(t('neon.' + n.id))}</b><span>${sub}</span></div><div class="st">${own ? t('wl.owned') : p ? yen(p) : '…'}</div></button>`;
-  }
   $('wl-cars').innerHTML = html;
   $('wallet').hidden = false;
   setTimeout(() => { const b = $('wl-cars').querySelector('.wl-car:not(.own)') || $('wl-close'); b.focus(); }, 30);
@@ -965,12 +871,7 @@ $('wl-cars').onclick = e => {
   const b = e.target.closest('.wl-car');
   if (!b) return;
   closeWallet();
-  if (b.dataset.neon) {
-    // a neon colour: the car select on the car last driven (or the free one), wearing that colour
-    const last = HERO_SPECS.find(s => s.id === S.lastCar && !locked(s)) || HERO_SPECS.find(s => s.free);
-    selectCarId(last.id);
-    chooseNeon(b.dataset.neon);
-  } else selectCarId(b.dataset.id);
+  selectCarId(b.dataset.id);
 };
 $('wc-how').onclick = openWallet;
 $('wg-how').onclick = openWallet;
@@ -1090,8 +991,6 @@ function startDrive() {
   const model = new CarModel(spec, { hq: S.graphics.quality !== 'low', paint: paintOf(spec) });
   if (flames) flames.dispose();
   flames = new ExhaustFlames(model, spec); // (before the car is placed: the tips are measured in its own frame)
-  setNeon(model, neonHex(fittedNeon(spec)));
-  online.neon = fittedNeon(spec);
   player = new Player(net, model, spec, scene);
   scene.remove(idleLights);
   player.odo = spawn ? spawn.odo : 0;
@@ -1125,7 +1024,7 @@ function startDrive() {
   driveStarted(spec.id); // (signed in: the server opens a drive to count distance and time)
   // online: join the room picked on the title screen, or tell the room about the new car
   if (onlineWant && !online.want && !online.connected) { online.join(onlineWant, spec.id, onlineCreate); onlineCreate = null; }
-  else if (online.connected) online.setCar(spec.id, fittedNeon(spec));
+  else if (online.connected) online.setCar(spec.id);
   driveClock = 0; fpsSamples = []; adaptDone = 0;
   lastTime = performance.now();
 }
