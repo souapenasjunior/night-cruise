@@ -1,6 +1,6 @@
 // Player vehicle: arcade physics on the ribbon network, walls, lights and signals.
 import * as THREE from 'three';
-import { clamp, lerp, damp } from './util.js';
+import { clamp, lerp, damp, RIDE } from './util.js';
 import { PARAPET_W, BARRIER_HW } from './network.js';
 
 const G = 9.81;
@@ -293,7 +293,12 @@ export class Player {
     this.y = Math.abs(yT - this.y) > 3 ? yT : damp(this.y, yT, 25, dt);
     this.pos.y = this.y;
     const along = Math.sin(this.yaw) * tx + Math.cos(this.yaw) * tz;
-    this.pitch = Math.atan(r.sl[cur.i] * along);
+    // the deck's slope along the car and across it: the road also leans sideways (cs, per metre to the
+    // right of its direction); without the roll the wheels on the high side sank into the asphalt
+    const sl = r.sl[cur.i] || 0, cs = r.cs[cur.i] || 0;
+    const across = -Math.cos(this.yaw) * tx + Math.sin(this.yaw) * tz; // the car's right along the road
+    this.pitch = Math.atan(sl * along - cs * across);
+    this.roll = -Math.atan(sl * across + cs * along);
     this.lastGood = { rib: r, s: this.s, off, dir: along >= 0 ? 1 : -1 };
     void opts; void px; void pz;
   }
@@ -356,8 +361,8 @@ export class Player {
   _sync(dt) {
     const g = this.model.group;
     g.position.copy(this.pos);
-    g.rotation.set(0, this.yaw, 0, 'YXZ');
-    g.rotation.x = -this.pitch;
+    g.position.y += RIDE;
+    g.rotation.set(-this.pitch, this.yaw, this.roll || 0, 'YXZ');
     this.model.body.rotation.set(this.bodyPitch, 0, this.bodyRoll);
     const steerVis = -this.steer * lerp(0.5, 0.18, clamp(this.speed / 40, 0, 1));
     this.model.updateWheels(dt, this.vf, steerVis);

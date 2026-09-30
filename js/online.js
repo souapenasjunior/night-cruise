@@ -3,6 +3,7 @@
 // draws everyone else's, a quarter of a second behind so their movement can be smoothed between updates.
 // There are no collisions between players, and each player's traffic is their own.
 import * as THREE from 'three';
+import { RIDE } from './util.js';
 
 // the rooms live on the Cloudflare worker, whichever address the page itself was opened from
 export const ONLINE_ORIGIN = 'https://night-cruise.contatoadoniasjunior.workers.dev';
@@ -205,7 +206,7 @@ export class Online {
       let dy = e[3] - s[3];
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
-      g.position.set(s[0] + (e[0] - s[0]) * k, s[1] + (e[1] - s[1]) * k, s[2] + (e[2] - s[2]) * k);
+      g.position.set(s[0] + (e[0] - s[0]) * k, s[1] + (e[1] - s[1]) * k + RIDE, s[2] + (e[2] - s[2]) * k);
       g.rotation.set(0, s[3] + dy * k, 0, 'YXZ');
       g.rotation.x = -(s[4] + (e[4] - s[4]) * k);
       const speed = s[5] + (e[5] - s[5]) * k, steer = s[6] + (e[6] - s[6]) * k, f = e[7];

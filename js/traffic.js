@@ -1,6 +1,6 @@
 // Traffic AI: lane following, IDM spacing, lane changes, exits/merges, encounters, collisions, light glows.
 import * as THREE from 'three';
-import { clamp, lerp, damp, wrap, wrapDelta, pick } from './util.js';
+import { clamp, lerp, damp, wrap, wrapDelta, pick, RIDE } from './util.js';
 import { TRAFFIC_TYPES, buildTrafficGeometry, CarModel, twoTone } from './cars.js';
 import { Streaks } from './world.js';
 import { trafficGeometry } from './glbcars.js';
@@ -729,6 +729,8 @@ export class Traffic {
     const latAngle = Math.atan2((a.latV + a.bump) * a.dir, Math.max(a.v, 2));
     a.yaw = yawRoad - latAngle;
     a.pitch = Math.atan(P.slope * a.dir);
+    // the deck's sideways lean (per metre to the right of the road's direction): the car leans with it
+    a.roll = -Math.atan((a.rib.cs[P.i] || 0) * a.dir);
     a.fx = Math.sin(a.yaw); a.fz = Math.cos(a.yaw);
   }
 
@@ -804,9 +806,9 @@ export class Traffic {
     const lampLocal = (a, arr, k) => arr[k];
     for (const a of this.agents) {
       if (!a.active) continue;
-      e.set(-a.pitch, a.yaw, 0, 'YXZ');
+      e.set(-a.pitch, a.yaw, a.roll || 0, 'YXZ');
       q.setFromEuler(e);
-      v.set(a.x, a.y, a.z);
+      v.set(a.x, a.y + RIDE, a.z);
       m4.compose(v, q, sc);
       const hazard = a.hazardT > 0;
       const left = (a.blink < 0 || hazard) && blinkOn, right = (a.blink > 0 || hazard) && blinkOn;
@@ -851,8 +853,8 @@ export class Traffic {
         sc.set(1, 1, 1);
       } else {
         const g = a.model.group;
-        g.position.set(a.x, a.y, a.z);
-        g.rotation.set(-a.pitch, a.yaw, 0, 'YXZ');
+        g.position.set(a.x, a.y + RIDE, a.z);
+        g.rotation.set(-a.pitch, a.yaw, a.roll || 0, 'YXZ');
         a.model.updateWheels(1 / 60, a.v, -clamp(a.latV * 0.08, -0.3, 0.3));
         a.model.setLights({ head: true, brake: a.braking, left, right });
         // detailed cruiser models only up close; far away (a few pixels) the lamp glows alone read as the car

@@ -17,7 +17,7 @@ import { AudioSys } from './audio.js';
 import { Input, ACTION_LABELS, PAD_FIXED_LABELS, padName, keyName } from './input.js';
 import * as SET from './settings.js';
 import { VERSION, versionLabel } from './version.js';
-import { clamp, lerp, damp, wrap } from './util.js';
+import { clamp, lerp, damp, wrap, RIDE } from './util.js';
 import { t, setLang, resolveLang, onLangChange, num } from './i18n.js';
 import { initAccount, isAccountOpen, openAccount, closeAccount, driveStarted, driveTick, driveStopped, ownsCar, isSignedIn, buyCar, priceOf, coinBalance, liveCoins, premiumFiles, accessToken, myName, ownsNeon, neonPrice, buyNeon } from './account.js';
 import { Online, newPrivateCode, normaliseCode, isCode, roomLabel } from './online.js';
@@ -277,6 +277,7 @@ function updateShowroom(dt) {
   // (no model: a locked premium car's picture, or one still loading; the room stays framed the same)
   if (m) {
     m.group.rotation.y = show.yaw;
+    m.group.position.y = RIDE; // (like on the road: the neon sits between the floor and the tyres)
     m.setLights({ head: true });
   }
   const L = m ? m.L : 4.5;

@@ -1,5 +1,8 @@
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
+// every car is drawn this far above the road surface: the lane markings are painted 2 cm up (markings.js)
+// and the tyres must stay on top of them, not sink in (nobody sees the 3 cm)
+export const RIDE = 0.03;
 export const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
 export const smoothstep = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1);
