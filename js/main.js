@@ -285,7 +285,12 @@ function focusables() {
   if (!root || root.hidden) return [];
   return [...root.querySelectorAll('button, input')].filter(e => !e.disabled && e.offsetParent !== null);
 }
+// the title menu lights a button only under the mouse, or the one picked with the keyboard / a pad
+// (body.nav-keys, cleared as soon as the mouse moves): no button looks selected on its own
+addEventListener('keydown', e => { if (/^(Arrow|Tab$)/.test(e.code)) document.body.classList.add('nav-keys'); });
+addEventListener('pointermove', () => document.body.classList.remove('nav-keys'));
 function moveFocus(d) {
+  document.body.classList.add('nav-keys');
   const list = focusables();
   if (!list.length) return;
   const i = list.indexOf(document.activeElement);
