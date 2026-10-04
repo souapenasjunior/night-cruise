@@ -84,6 +84,8 @@ button { font: inherit; color: inherit; }
 #title .menu-btn::before { display: none; }
 #title .menu-btn.primary, #title .menu-btn:hover, #title .menu-btn:focus-visible { color: #fff; }
 #title .title-note { text-align: center; }
+/* the living backdrop (js/titlefx.js), under the menu */
+#title .title-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; color: var(--text); background: rgba(255, 255, 255, 0.03); }
 
 /* ---------- car select: the garage, cards like a car collection (a tag, the picture, the name) */
@@ -580,9 +582,9 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.1.2';
+  var V = '1.1.3';
   var MODULES = ['account', 'audio', 'cars', 'flames', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
-    'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'vehicleaudio', 'version', 'world', 'maps'];
+    'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'vehicleaudio', 'version', 'world', 'maps', 'titlefx'];
   var imports = {
     'three': 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js',
     'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/',

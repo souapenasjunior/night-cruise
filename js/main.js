@@ -23,6 +23,7 @@ import { mapOf } from './maps.js';
 import { initAccount, isAccountOpen, openAccount, closeAccount, isSignedIn, accessToken, myName } from './account.js';
 import { Online, roomLabel, ONLINE_ORIGIN } from './online.js';
 import { ExhaustFlames } from './flames.js';
+import { TitleFx } from './titlefx.js';
 const tx = t; // (where a local `t` or `tr` names an element)
 
 const $ = id => document.getElementById(id);
@@ -270,8 +271,11 @@ function applySettings() {
 
 // ------------------------------------------------------------------ screens
 const screens = ['loading', 'title', 'mapsel', 'select', 'pause', 'map'];
+const titleFx = new TitleFx($('title'));
+titleFx.setMap(MAP.id);
 function showScreen(name) {
   for (const s of screens) $(s).hidden = s !== name;
+  if (name === 'title') titleFx.start(); else titleFx.stop();
   $('hud').hidden = !(name === 'drive' || name === 'pause');
   const f = focusables()[0];
   if (f && name !== 'drive') setTimeout(() => f.focus({ preventScroll: true }), 30);
