@@ -82,7 +82,7 @@ button { font: inherit; color: inherit; }
 #title nav { justify-items: center; gap: 2px; }
 #title .menu-btn { justify-content: center; font-size: clamp(22px, 2.3vw, 28px); letter-spacing: 0.02em; padding: 4px 0; color: #8b8e97; }
 #title .menu-btn::before { display: none; }
-#title .menu-btn.primary, #title .menu-btn:hover, #title .menu-btn:focus-visible { color: #fff; }
+#title .menu-btn:hover, body.nav-keys #title .menu-btn:focus { color: #fff; }
 #title .title-note { text-align: center; }
 /* the living backdrop (js/titlefx.js), under the menu */
 #title .title-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
@@ -582,7 +582,7 @@ kbd { font: 500 11.5px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--
 // loads without ?v). Models in models/ use their own key, MODELS_REV
 // in js/version.js; the audio worklet copies the ?v of audio.js.
 (function () {
-  var V = '1.1.3';
+  var V = '1.1.4';
   var MODULES = ['account', 'audio', 'cars', 'flames', 'glbcars', 'hud', 'i18n', 'input', 'jdmspecs', 'main', 'map', 'markings', 'network', 'online',
     'player', 'settings', 'signage', 'textures', 'traffic', 'util', 'vehicleaudio', 'version', 'world', 'maps', 'titlefx'];
   var imports = {
