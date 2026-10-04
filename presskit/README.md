@@ -9,6 +9,8 @@
 
 Todas as imagens deste kit são capturas reais do jogo (sem retoque de cenário), com título e textos por cima.
 
+**English version:** todo o kit (artes, capturas com as placas em inglês, vídeos e textos) está em [`en/`](en/).
+
 ---
 
 ## Textos prontos
